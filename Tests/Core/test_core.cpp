@@ -362,3 +362,290 @@ TEST_CASE("Core init and shutdown", "[Core]") {
     NF::coreShutdown();
     REQUIRE_FALSE(NF::isCoreInitialized());
 }
+
+// ── Linear Allocator ─────────────────────────────────────────────
+
+TEST_CASE("LinearAllocator basic allocation", "[Core][Memory]") {
+    NF::LinearAllocator alloc(1024);
+    REQUIRE(alloc.capacity() == 1024);
+    REQUIRE(alloc.used() == 0);
+
+    void* p1 = alloc.allocate(64);
+    REQUIRE(p1 != nullptr);
+    REQUIRE(alloc.used() >= 64);
+    REQUIRE(alloc.allocationCount() == 1);
+
+    void* p2 = alloc.allocate(128);
+    REQUIRE(p2 != nullptr);
+    REQUIRE(p1 != p2);
+    REQUIRE(alloc.allocationCount() == 2);
+}
+
+TEST_CASE("LinearAllocator reset", "[Core][Memory]") {
+    NF::LinearAllocator alloc(256);
+    alloc.allocate(100);
+    alloc.allocate(100);
+    REQUIRE(alloc.allocationCount() == 2);
+
+    alloc.reset();
+    REQUIRE(alloc.used() == 0);
+    REQUIRE(alloc.allocationCount() == 0);
+    REQUIRE(alloc.remaining() == 256);
+}
+
+TEST_CASE("LinearAllocator overflow returns null", "[Core][Memory]") {
+    NF::LinearAllocator alloc(64);
+    void* p1 = alloc.allocate(32);
+    REQUIRE(p1 != nullptr);
+
+    void* p2 = alloc.allocate(64); // exceeds capacity
+    REQUIRE(p2 == nullptr);
+}
+
+TEST_CASE("LinearAllocator create constructs object", "[Core][Memory]") {
+    NF::LinearAllocator alloc(1024);
+    auto* v = alloc.create<NF::Vec3>(1.f, 2.f, 3.f);
+    REQUIRE(v != nullptr);
+    REQUIRE(v->x == 1.f);
+    REQUIRE(v->y == 2.f);
+    REQUIRE(v->z == 3.f);
+}
+
+// ── Pool Allocator ───────────────────────────────────────────────
+
+TEST_CASE("PoolAllocator basic allocation", "[Core][Memory]") {
+    NF::PoolAllocator pool(sizeof(NF::Vec3), 10);
+    REQUIRE(pool.totalCount() == 10);
+    REQUIRE(pool.freeCount() == 10);
+    REQUIRE(pool.activeCount() == 0);
+
+    void* p1 = pool.allocate();
+    REQUIRE(p1 != nullptr);
+    REQUIRE(pool.activeCount() == 1);
+    REQUIRE(pool.freeCount() == 9);
+}
+
+TEST_CASE("PoolAllocator deallocate recycles", "[Core][Memory]") {
+    NF::PoolAllocator pool(sizeof(int), 5);
+
+    void* p1 = pool.allocate();
+    void* p2 = pool.allocate();
+    REQUIRE(pool.activeCount() == 2);
+
+    pool.deallocate(p1);
+    REQUIRE(pool.activeCount() == 1);
+    REQUIRE(pool.freeCount() == 4);
+
+    void* p3 = pool.allocate();
+    REQUIRE(p3 == p1); // recycled
+}
+
+TEST_CASE("PoolAllocator exhaustion returns null", "[Core][Memory]") {
+    NF::PoolAllocator pool(sizeof(int), 2);
+    pool.allocate();
+    pool.allocate();
+    REQUIRE(pool.freeCount() == 0);
+
+    void* p = pool.allocate();
+    REQUIRE(p == nullptr);
+}
+
+TEST_CASE("PoolAllocator create and destroy", "[Core][Memory]") {
+    NF::PoolAllocator pool(sizeof(NF::Vec3), 4);
+
+    auto* v = pool.create<NF::Vec3>(5.f, 10.f, 15.f);
+    REQUIRE(v != nullptr);
+    REQUIRE(v->x == 5.f);
+
+    pool.destroy(v);
+    REQUIRE(pool.activeCount() == 0);
+}
+
+TEST_CASE("PoolAllocator reset", "[Core][Memory]") {
+    NF::PoolAllocator pool(sizeof(int), 4);
+    pool.allocate();
+    pool.allocate();
+    pool.allocate();
+    REQUIRE(pool.activeCount() == 3);
+
+    pool.reset();
+    REQUIRE(pool.activeCount() == 0);
+    REQUIRE(pool.freeCount() == 4);
+}
+
+// ── Reflection ───────────────────────────────────────────────────
+
+TEST_CASE("TypeDescriptor properties", "[Core][Reflection]") {
+    struct TestStruct {
+        float x;
+        int y;
+        bool z;
+    };
+
+    NF::TypeDescriptor desc("TestStruct", sizeof(TestStruct));
+    desc.addProperty("x", NF::PropertyType::Float, offsetof(TestStruct, x), sizeof(float));
+    desc.addProperty("y", NF::PropertyType::Int32, offsetof(TestStruct, y), sizeof(int));
+    desc.addProperty("z", NF::PropertyType::Bool, offsetof(TestStruct, z), sizeof(bool));
+
+    REQUIRE(desc.name() == "TestStruct");
+    REQUIRE(desc.size() == sizeof(TestStruct));
+    REQUIRE(desc.properties().size() == 3);
+
+    auto* xProp = desc.findProperty("x");
+    REQUIRE(xProp != nullptr);
+    REQUIRE(xProp->type == NF::PropertyType::Float);
+
+    auto* missing = desc.findProperty("w");
+    REQUIRE(missing == nullptr);
+}
+
+TEST_CASE("TypeRegistry registers and finds types", "[Core][Reflection]") {
+    auto& reg = NF::TypeRegistry::instance();
+    auto& desc = reg.registerType("MyType", 32);
+    desc.addProperty("value", NF::PropertyType::Float, 0, sizeof(float));
+
+    auto* found = reg.findType("MyType");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->name() == "MyType");
+    REQUIRE(found->properties().size() == 1);
+
+    auto* notFound = reg.findType("NonExistent");
+    REQUIRE(notFound == nullptr);
+}
+
+// ── JSON Serialization ───────────────────────────────────────────
+
+TEST_CASE("JsonValue primitives", "[Core][Serialization]") {
+    NF::JsonValue null;
+    REQUIRE(null.isNull());
+
+    NF::JsonValue boolVal(true);
+    REQUIRE(boolVal.isBool());
+    REQUIRE(boolVal.asBool() == true);
+
+    NF::JsonValue intVal(42);
+    REQUIRE(intVal.isInt());
+    REQUIRE(intVal.asInt() == 42);
+    REQUIRE_THAT(intVal.asFloat(), WithinAbs(42.f, 1e-5));
+
+    NF::JsonValue floatVal(3.14f);
+    REQUIRE(floatVal.isFloat());
+    REQUIRE_THAT(floatVal.asFloat(), WithinAbs(3.14f, 1e-4));
+
+    NF::JsonValue strVal("hello");
+    REQUIRE(strVal.isString());
+    REQUIRE(strVal.asString() == "hello");
+}
+
+TEST_CASE("JsonValue object operations", "[Core][Serialization]") {
+    auto obj = NF::JsonValue::object();
+    REQUIRE(obj.isObject());
+    REQUIRE(obj.size() == 0);
+
+    obj.set("name", NF::JsonValue("NovaForge"));
+    obj.set("version", NF::JsonValue(1));
+    obj.set("active", NF::JsonValue(true));
+
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj.hasKey("name"));
+    REQUIRE(obj["name"].asString() == "NovaForge");
+    REQUIRE(obj["version"].asInt() == 1);
+    REQUIRE(obj["active"].asBool() == true);
+    REQUIRE_FALSE(obj.hasKey("missing"));
+}
+
+TEST_CASE("JsonValue array operations", "[Core][Serialization]") {
+    auto arr = NF::JsonValue::array();
+    REQUIRE(arr.isArray());
+    REQUIRE(arr.size() == 0);
+
+    arr.push(NF::JsonValue(1));
+    arr.push(NF::JsonValue(2));
+    arr.push(NF::JsonValue(3));
+
+    REQUIRE(arr.size() == 3);
+    REQUIRE(arr[0].asInt() == 1);
+    REQUIRE(arr[1].asInt() == 2);
+    REQUIRE(arr[2].asInt() == 3);
+}
+
+TEST_CASE("JsonValue serialization", "[Core][Serialization]") {
+    auto obj = NF::JsonValue::object();
+    obj.set("name", NF::JsonValue("test"));
+    obj.set("value", NF::JsonValue(42));
+
+    std::string json = obj.toJson();
+    REQUIRE(json.find("\"name\"") != std::string::npos);
+    REQUIRE(json.find("\"test\"") != std::string::npos);
+    REQUIRE(json.find("42") != std::string::npos);
+}
+
+TEST_CASE("JsonParser parse primitives", "[Core][Serialization]") {
+    auto null = NF::JsonParser::parse("null");
+    REQUIRE(null.isNull());
+
+    auto boolTrue = NF::JsonParser::parse("true");
+    REQUIRE(boolTrue.asBool() == true);
+
+    auto boolFalse = NF::JsonParser::parse("false");
+    REQUIRE(boolFalse.asBool() == false);
+
+    auto intVal = NF::JsonParser::parse("42");
+    REQUIRE(intVal.asInt() == 42);
+
+    auto floatVal = NF::JsonParser::parse("3.14");
+    REQUIRE_THAT(floatVal.asFloat(), WithinAbs(3.14f, 1e-2));
+
+    auto strVal = NF::JsonParser::parse("\"hello world\"");
+    REQUIRE(strVal.asString() == "hello world");
+}
+
+TEST_CASE("JsonParser parse object", "[Core][Serialization]") {
+    auto obj = NF::JsonParser::parse(R"({"name": "NovaForge", "version": 1, "active": true})");
+    REQUIRE(obj.isObject());
+    REQUIRE(obj["name"].asString() == "NovaForge");
+    REQUIRE(obj["version"].asInt() == 1);
+    REQUIRE(obj["active"].asBool() == true);
+}
+
+TEST_CASE("JsonParser parse array", "[Core][Serialization]") {
+    auto arr = NF::JsonParser::parse("[1, 2, 3, 4, 5]");
+    REQUIRE(arr.isArray());
+    REQUIRE(arr.size() == 5);
+    REQUIRE(arr[0].asInt() == 1);
+    REQUIRE(arr[4].asInt() == 5);
+}
+
+TEST_CASE("JsonParser parse nested", "[Core][Serialization]") {
+    auto obj = NF::JsonParser::parse(R"({
+        "player": {
+            "name": "Test",
+            "stats": {
+                "hp": 100,
+                "mp": 50
+            }
+        },
+        "items": [1, 2, 3]
+    })");
+    REQUIRE(obj.isObject());
+    REQUIRE(obj["player"]["name"].asString() == "Test");
+    REQUIRE(obj["player"]["stats"]["hp"].asInt() == 100);
+    REQUIRE(obj["player"]["stats"]["mp"].asInt() == 50);
+    REQUIRE(obj["items"].size() == 3);
+}
+
+TEST_CASE("JsonParser parse escape sequences", "[Core][Serialization]") {
+    auto val = NF::JsonParser::parse(R"("hello\nworld\ttab")");
+    REQUIRE(val.asString() == "hello\nworld\ttab");
+}
+
+TEST_CASE("JSON roundtrip", "[Core][Serialization]") {
+    auto original = NF::JsonValue::object();
+    original.set("name", NF::JsonValue("roundtrip"));
+    original.set("count", NF::JsonValue(99));
+
+    std::string json = original.toJson();
+    auto parsed = NF::JsonParser::parse(json);
+    REQUIRE(parsed["name"].asString() == "roundtrip");
+    REQUIRE(parsed["count"].asInt() == 99);
+}

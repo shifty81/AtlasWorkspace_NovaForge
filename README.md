@@ -13,8 +13,8 @@ This repository is the **complete unified monorepo**: the engine core, the game-
 | Phase | Goal | Status |
 |-------|------|--------|
 | **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
-| **Phase 1** — Core Engine | Core, Engine, Input modules with tests | 🔧 In Progress |
-| **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | 📋 Planned |
+| **Phase 1** — Core Engine | Core, Engine, Input modules with tests | ✅ Done |
+| **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | ✅ Done |
 | **Phase 3** — Voxel Runtime | Chunk data, edit API, game loop | 📋 Planned |
 | **Phase 4** — Editor | Docking layout, panels, viewport, editor services | 📋 Planned |
 | **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types | 📋 Planned |

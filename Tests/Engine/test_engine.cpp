@@ -273,3 +273,107 @@ TEST_CASE("AssetHandle load and access data", "[Engine][Asset]") {
     REQUIRE(handle.state() == NF::AssetState::Loaded);
     REQUIRE(*handle.get() == "Hello, NovaForge!");
 }
+
+// ── Scene Graph ──────────────────────────────────────────────────
+
+TEST_CASE("SceneGraph parent-child relationships", "[Engine][SceneGraph]") {
+    NF::SceneGraph graph;
+
+    graph.setParent(2, 1); // entity 2 is child of entity 1
+    graph.setParent(3, 1); // entity 3 is child of entity 1
+
+    REQUIRE(graph.parent(2) == 1);
+    REQUIRE(graph.parent(3) == 1);
+    REQUIRE(graph.parent(1) == NF::INVALID_ENTITY);
+    REQUIRE(graph.isRoot(1));
+    REQUIRE_FALSE(graph.isRoot(2));
+    REQUIRE(graph.childCount(1) == 2);
+}
+
+TEST_CASE("SceneGraph removeFromParent", "[Engine][SceneGraph]") {
+    NF::SceneGraph graph;
+
+    graph.setParent(2, 1);
+    graph.setParent(3, 1);
+    REQUIRE(graph.childCount(1) == 2);
+
+    graph.removeFromParent(2);
+    REQUIRE(graph.childCount(1) == 1);
+    REQUIRE(graph.isRoot(2));
+}
+
+TEST_CASE("SceneGraph reparent", "[Engine][SceneGraph]") {
+    NF::SceneGraph graph;
+
+    graph.setParent(2, 1);
+    REQUIRE(graph.parent(2) == 1);
+
+    graph.setParent(2, 3); // reparent to entity 3
+    REQUIRE(graph.parent(2) == 3);
+    REQUIRE(graph.childCount(1) == 0);
+    REQUIRE(graph.childCount(3) == 1);
+}
+
+TEST_CASE("SceneGraph isDescendantOf", "[Engine][SceneGraph]") {
+    NF::SceneGraph graph;
+
+    graph.setParent(2, 1);
+    graph.setParent(3, 2);
+    graph.setParent(4, 3);
+
+    REQUIRE(graph.isDescendantOf(4, 1));
+    REQUIRE(graph.isDescendantOf(3, 1));
+    REQUIRE(graph.isDescendantOf(4, 2));
+    REQUIRE_FALSE(graph.isDescendantOf(1, 4));
+    REQUIRE_FALSE(graph.isDescendantOf(1, 2));
+}
+
+TEST_CASE("SceneGraph removeEntity reparents children", "[Engine][SceneGraph]") {
+    NF::SceneGraph graph;
+
+    graph.setParent(2, 1);
+    graph.setParent(3, 2);  // 1 -> 2 -> 3
+    graph.setParent(4, 2);  // 1 -> 2 -> 4
+
+    graph.removeEntity(2);
+    // Children 3 and 4 should now be children of 1 (grandparent)
+    REQUIRE(graph.parent(3) == 1);
+    REQUIRE(graph.parent(4) == 1);
+    REQUIRE(graph.childCount(1) == 2);
+}
+
+// ── SystemRegistry ───────────────────────────────────────────────
+
+class TestSystem : public NF::SystemBase {
+public:
+    int updateCount = 0;
+    bool initialized = false;
+    bool shut = false;
+
+    void init(NF::EntityManager& em, NF::ComponentStore& cs) override {
+        SystemBase::init(em, cs);
+        initialized = true;
+    }
+    void update(float dt) override { updateCount++; (void)dt; }
+    void shutdown() override { shut = true; }
+    std::string_view name() const override { return "TestSystem"; }
+};
+
+TEST_CASE("SystemRegistry add and update systems", "[Engine][Systems]") {
+    NF::SystemRegistry registry;
+    NF::EntityManager em;
+    NF::ComponentStore cs;
+
+    auto& sys = registry.addSystem<TestSystem>();
+    REQUIRE(registry.count() == 1);
+
+    registry.initAll(em, cs);
+    REQUIRE(sys.initialized);
+
+    registry.updateAll(0.016f);
+    registry.updateAll(0.016f);
+    REQUIRE(sys.updateCount == 2);
+
+    registry.shutdownAll();
+    REQUIRE(sys.shut);
+}
