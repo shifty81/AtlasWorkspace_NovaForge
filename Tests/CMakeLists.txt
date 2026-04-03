@@ -75,6 +75,13 @@ add_executable(NF_AnimationTests
 target_link_libraries(NF_AnimationTests PRIVATE NF::Animation NF::Core Catch2::Catch2WithMain)
 catch_discover_tests(NF_AnimationTests)
 
+# Networking tests
+add_executable(NF_NetworkingTests
+    Networking/test_networking.cpp
+)
+target_link_libraries(NF_NetworkingTests PRIVATE NF::Networking NF::Engine NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_NetworkingTests)
+
 # Editor tests
 add_executable(NF_EditorTests
     Editor/test_editor.cpp
