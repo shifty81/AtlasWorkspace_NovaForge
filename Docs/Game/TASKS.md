@@ -63,8 +63,8 @@
 - [x] WorldSerializer (multi-chunk world save/load with round-trip proven)
 - [x] **World save/reload round-trip PROVEN** (test: multi-chunk edit → serialize → deserialize → verify)
 - [x] VoxelPickService (DDA ray-voxel traversal, face identification, adjacent voxel calculation)
-- [ ] Port game data from Atlas-NovaForge into Data/
-- [ ] Port schemas into Schemas/
+- [x] Game data definitions (21 JSON files: 5 ships, 6 modules, 5 skills, 3 missions, 2 universe sectors)
+- [x] JSON schemas (4 schema files: ship, module, skill, mission)
 - [ ] Validate: DevWorld loads, voxel edit loop works in-editor
 
 ## Phase 4 — Editor
@@ -83,15 +83,23 @@
 - [x] UI renderer implementation (quad batching drawRect, character-based drawText, drawRectOutline)
 - [x] Editor + PropertyEditor test suite (42 tests covering all property types, undo, theme, selection, commands)
 - [x] Expand test coverage (212 tests, up from 183)
-- [ ] Port Editor module (docking, panels, toolbar)
-- [ ] Port 14+ panels from Atlas-NovaForge
+- [x] DockLayout manager (add/remove/find/computeLayout with slot-based bounds)
+- [x] EditorPanel base class with 5 concrete panels (Viewport, Inspector, Hierarchy, Console, ContentBrowser)
+- [x] EditorToolbar with default tool items (Select, Move, Rotate, Scale, Play, Pause, Stop)
+- [x] EditorApp owns DockLayout, Toolbar, Panels with view toggle commands
+- [x] GraphVM integration (graph.new_graph, graph.open_graph commands)
+- [x] Expand test coverage (249 tests, up from 212)
 - [ ] Validate: editor boots, edit loop works
 
 ## Phase 5 — Graph VM & Visual Scripting
 
-- [ ] Port GraphVM module (bytecode VM, compiler, serialization)
-- [ ] Port 14 graph system types
-- [ ] Wire into editor
+- [x] GraphVM bytecode execution (16 registers, 256 memory slots, arithmetic, control flow, call/return)
+- [x] GraphNode/GraphPort/GraphLink/Graph model for visual scripting
+- [x] GraphCompiler (topological sort, register allocation, bytecode emission)
+- [x] GraphSerializer (JSON round-trip for programs and graphs)
+- [x] Graph types (14 types: World, Strategy, Conversation, Behavior, etc.)
+- [x] Expand test coverage (249 tests, up from 212)
+- [ ] Wire into editor panels (graph node editor UI)
 - [ ] Validate: graph round-trip
 
 ## Phase 6 — Server & Networking

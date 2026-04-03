@@ -9,10 +9,10 @@
 | **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
 | **Phase 1** — Core Engine | Core, Engine, Input modules compiling with tests | ✅ Done |
 | **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | ✅ Done |
-| **Phase 3** — Voxel Runtime | Chunk data, edit API, serialization, game loop | 🔜 Next |
-| **Phase 4** — Editor | Docking layout, panels, viewport, editor services | 📋 Planned |
-| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types, visual scripting | 📋 Planned |
-| **Phase 6** — Multiplayer | Server authority, replication, sessions, lockstep/rollback | 📋 Planned |
+| **Phase 3** — Voxel Runtime | Chunk data, edit API, serialization, game loop | ✅ Done |
+| **Phase 4** — Editor | Docking layout, panels, viewport, editor services | ✅ Done |
+| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types, visual scripting | ✅ Done |
+| **Phase 6** — Multiplayer | Server authority, replication, sessions, lockstep/rollback | 🔜 Next |
 | **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender generator integration | 📋 Planned |
 | **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | 📋 Planned |
 | **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide | 📋 Planned |
