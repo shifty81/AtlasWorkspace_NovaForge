@@ -18,4 +18,8 @@ void coreShutdown() {
     s_coreInitialized = false;
 }
 
+bool isCoreInitialized() {
+    return s_coreInitialized;
+}
+
 } // namespace NF

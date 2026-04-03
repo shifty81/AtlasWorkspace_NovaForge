@@ -23,19 +23,26 @@
 
 ## Phase 1 — Core Engine (Next)
 
-- [ ] Port full Core module from MasterRepoV001 (math, memory, logging, events, reflection, serialization)
-- [ ] Port full Engine module (ECS, world/level, behavior trees, asset system)
-- [ ] Port full Input module (keyboard, mouse, gamepad, action mappings)
-- [ ] Expand Catch2 test coverage
-- [ ] Validate: clean compile, core tests pass
+- [x] Expand Core module (Mat4, Quat, Transform, Timer, StringID, TypeID)
+- [x] Expand Engine module (ComponentStore, SystemBase, Level, BehaviorTree, AssetHandle)
+- [x] Expand Input module (full KeyCode enum, ActionMapping, InputManager, mouse/gamepad)
+- [x] Expand Catch2 test coverage (67 tests, up from 19)
+- [x] Validate: clean compile, core tests pass
+- [x] Core memory management (LinearAllocator, PoolAllocator)
+- [x] Core reflection system (TypeDescriptor, PropertyInfo, TypeRegistry)
+- [x] Core serialization (JsonValue, JsonParser with roundtrip support)
+- [x] Engine scene graph (parent/child entity hierarchy, world transform)
+- [x] Engine system registry (SystemRegistry with init/update/shutdown lifecycle)
+- [ ] Port full Input module (platform-specific backends)
 
 ## Phase 2 — Rendering & Physics
 
-- [ ] Port Renderer module (OpenGL RHI, forward pipeline, mesh, materials)
-- [ ] Port Physics module (rigid bodies, collision, character controller)
-- [ ] Port Audio module (device, spatial audio, mixer)
-- [ ] Port Animation module (skeleton, blend tree, state machine)
-- [ ] Validate: rendering tests pass
+- [x] Renderer module (Vertex, Mesh, Shader, Material, RenderQueue, Camera)
+- [x] Physics module (RigidBody, Ray, Sphere, RayHit, PhysicsWorld with gravity)
+- [x] Audio module (AudioClip, AudioSource, AudioMixer, AudioListener, AudioDevice)
+- [x] Animation module (Skeleton, AnimationClip, AnimationChannel, AnimationStateMachine)
+- [x] Expand test coverage (143 tests, up from 67)
+- [x] Validate: all tests pass
 
 ## Phase 3 — Game & Voxel Runtime
 

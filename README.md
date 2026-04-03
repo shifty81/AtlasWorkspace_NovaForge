@@ -13,8 +13,8 @@ This repository is the **complete unified monorepo**: the engine core, the game-
 | Phase | Goal | Status |
 |-------|------|--------|
 | **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
-| **Phase 1** — Core Engine | Core, Engine, Input modules with tests | 🔜 Next |
-| **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | 📋 Planned |
+| **Phase 1** — Core Engine | Core, Engine, Input modules with tests | ✅ Done |
+| **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | ✅ Done |
 | **Phase 3** — Voxel Runtime | Chunk data, edit API, game loop | 📋 Planned |
 | **Phase 4** — Editor | Docking layout, panels, viewport, editor services | 📋 Planned |
 | **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types | 📋 Planned |
@@ -149,6 +149,28 @@ make help            # Show all targets
 ./Scripts/build_all.sh Release       # Release build
 ./Scripts/build_all.sh Debug --test  # Build + run tests
 ```
+
+### Visual Studio Solution (Windows)
+
+NovaForge supports generating Visual Studio `.sln` files via CMake presets:
+
+```powershell
+# Generate VS 2022 solution
+cmake --preset vs2022
+
+# Or use the convenience script
+.\Scripts\generate_vs_solution.ps1
+
+# Or batch file
+.\Scripts\generate_vs_solution.bat
+```
+
+Open `Builds/vs2022/NovaForge.sln` in Visual Studio. Multi-configuration builds
+(Debug/Release) are supported — select the configuration from the toolbar.
+
+You can also open the project directly using **File → Open → CMake…** and
+selecting the root `CMakeLists.txt`. Visual Studio 2019+ reads `CMakePresets.json`
+natively.
 
 ### CMake Build Options
 

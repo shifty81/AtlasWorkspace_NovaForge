@@ -46,3 +46,31 @@ add_executable(NF_GraphVMTests
 )
 target_link_libraries(NF_GraphVMTests PRIVATE NF::GraphVM NF::Core Catch2::Catch2WithMain)
 catch_discover_tests(NF_GraphVMTests)
+
+# Input tests
+add_executable(NF_InputTests
+    Input/test_input.cpp
+)
+target_link_libraries(NF_InputTests PRIVATE NF::Input NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_InputTests)
+
+# Renderer tests
+add_executable(NF_RendererTests
+    Renderer/test_renderer.cpp
+)
+target_link_libraries(NF_RendererTests PRIVATE NF::Renderer NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_RendererTests)
+
+# Audio tests
+add_executable(NF_AudioTests
+    Audio/test_audio.cpp
+)
+target_link_libraries(NF_AudioTests PRIVATE NF::Audio NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_AudioTests)
+
+# Animation tests
+add_executable(NF_AnimationTests
+    Animation/test_animation.cpp
+)
+target_link_libraries(NF_AnimationTests PRIVATE NF::Animation NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_AnimationTests)
