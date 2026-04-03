@@ -43,7 +43,8 @@ public:
             }
         }
 
-        chunk.dirty = true;
+        chunk.meshDirty = true;
+        chunk.collisionDirty = true;
         return chunk;
     }
 

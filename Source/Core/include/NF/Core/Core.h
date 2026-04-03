@@ -602,6 +602,8 @@ enum class PropertyType : uint8_t {
     Vec3,
     Vec4,
     Quat,
+    Color,
+    Enum,
     Custom
 };
 
@@ -971,6 +973,125 @@ private:
         if (pos < s.size() && s[pos] == '}') ++pos;
         return obj;
     }
+};
+
+// ── Undo/Redo: Command Pattern ───────────────────────────────────
+
+class ICommand {
+public:
+    virtual ~ICommand() = default;
+    virtual void execute() = 0;
+    virtual void undo() = 0;
+    [[nodiscard]] virtual std::string description() const = 0;
+};
+
+class CommandStack {
+public:
+    void execute(std::unique_ptr<ICommand> cmd) {
+        cmd->execute();
+        m_undoStack.push_back(std::move(cmd));
+        m_redoStack.clear();
+        m_dirty = true;
+    }
+
+    bool canUndo() const { return !m_undoStack.empty(); }
+    bool canRedo() const { return !m_redoStack.empty(); }
+
+    bool undo() {
+        if (m_undoStack.empty()) return false;
+        auto cmd = std::move(m_undoStack.back());
+        m_undoStack.pop_back();
+        cmd->undo();
+        m_redoStack.push_back(std::move(cmd));
+        m_dirty = true;
+        return true;
+    }
+
+    bool redo() {
+        if (m_redoStack.empty()) return false;
+        auto cmd = std::move(m_redoStack.back());
+        m_redoStack.pop_back();
+        cmd->execute();
+        m_undoStack.push_back(std::move(cmd));
+        m_dirty = true;
+        return true;
+    }
+
+    void clear() {
+        m_undoStack.clear();
+        m_redoStack.clear();
+        m_dirty = false;
+    }
+
+    [[nodiscard]] size_t undoCount() const { return m_undoStack.size(); }
+    [[nodiscard]] size_t redoCount() const { return m_redoStack.size(); }
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void markClean() { m_dirty = false; }
+
+    [[nodiscard]] std::string undoDescription() const {
+        return m_undoStack.empty() ? "" : m_undoStack.back()->description();
+    }
+    [[nodiscard]] std::string redoDescription() const {
+        return m_redoStack.empty() ? "" : m_redoStack.back()->description();
+    }
+
+private:
+    std::vector<std::unique_ptr<ICommand>> m_undoStack;
+    std::vector<std::unique_ptr<ICommand>> m_redoStack;
+    bool m_dirty = false;
+};
+
+// ── Property Change Command ──────────────────────────────────────
+
+template<typename T>
+class PropertyChangeCommand : public ICommand {
+public:
+    PropertyChangeCommand(T* target, T oldValue, T newValue, std::string desc)
+        : m_target(target), m_oldValue(std::move(oldValue)),
+          m_newValue(std::move(newValue)), m_desc(std::move(desc)) {}
+
+    void execute() override { *m_target = m_newValue; }
+    void undo() override { *m_target = m_oldValue; }
+    [[nodiscard]] std::string description() const override { return m_desc; }
+
+private:
+    T* m_target;
+    T m_oldValue;
+    T m_newValue;
+    std::string m_desc;
+};
+
+// ── Color type (for inspector property editing) ──────────────────
+
+struct Color {
+    float r = 1.f, g = 1.f, b = 1.f, a = 1.f;
+
+    static Color white() { return {1.f, 1.f, 1.f, 1.f}; }
+    static Color black() { return {0.f, 0.f, 0.f, 1.f}; }
+    static Color red()   { return {1.f, 0.f, 0.f, 1.f}; }
+    static Color green() { return {0.f, 1.f, 0.f, 1.f}; }
+    static Color blue()  { return {0.f, 0.f, 1.f, 1.f}; }
+
+    uint32_t toRGBA8() const {
+        auto clamp01 = [](float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); };
+        uint8_t ri = static_cast<uint8_t>(clamp01(r) * 255.f);
+        uint8_t gi = static_cast<uint8_t>(clamp01(g) * 255.f);
+        uint8_t bi = static_cast<uint8_t>(clamp01(b) * 255.f);
+        uint8_t ai = static_cast<uint8_t>(clamp01(a) * 255.f);
+        return (ri << 24) | (gi << 16) | (bi << 8) | ai;
+    }
+
+    static Color fromRGBA8(uint32_t packed) {
+        return {
+            static_cast<float>((packed >> 24) & 0xFF) / 255.f,
+            static_cast<float>((packed >> 16) & 0xFF) / 255.f,
+            static_cast<float>((packed >>  8) & 0xFF) / 255.f,
+            static_cast<float>((packed >>  0) & 0xFF) / 255.f
+        };
+    }
+
+    bool operator==(const Color& o) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
+    bool operator!=(const Color& o) const { return !(*this == o); }
 };
 
 // ── Version ──────────────────────────────────────────────────────

@@ -139,6 +139,90 @@ struct RigidBody {
     }
 };
 
+// ── Collision Shapes (separate from render mesh) ─────────────────
+
+enum class CollisionShapeType : uint8_t {
+    Box,
+    Sphere,
+    Mesh,
+    Compound
+};
+
+class CollisionShape {
+public:
+    virtual ~CollisionShape() = default;
+    [[nodiscard]] virtual CollisionShapeType shapeType() const = 0;
+    [[nodiscard]] virtual AABB boundingBox() const = 0;
+};
+
+class BoxShape : public CollisionShape {
+public:
+    explicit BoxShape(const Vec3& halfExtents) : m_halfExtents(halfExtents) {}
+
+    [[nodiscard]] CollisionShapeType shapeType() const override { return CollisionShapeType::Box; }
+    [[nodiscard]] const Vec3& halfExtents() const { return m_halfExtents; }
+
+    [[nodiscard]] AABB boundingBox() const override {
+        return { {-m_halfExtents.x, -m_halfExtents.y, -m_halfExtents.z},
+                 { m_halfExtents.x,  m_halfExtents.y,  m_halfExtents.z} };
+    }
+
+private:
+    Vec3 m_halfExtents;
+};
+
+class SphereShape : public CollisionShape {
+public:
+    explicit SphereShape(float radius) : m_radius(radius) {}
+
+    [[nodiscard]] CollisionShapeType shapeType() const override { return CollisionShapeType::Sphere; }
+    [[nodiscard]] float radius() const { return m_radius; }
+
+    [[nodiscard]] AABB boundingBox() const override {
+        return { {-m_radius, -m_radius, -m_radius},
+                 { m_radius,  m_radius,  m_radius} };
+    }
+
+private:
+    float m_radius;
+};
+
+class MeshCollisionShape : public CollisionShape {
+public:
+    struct Triangle {
+        Vec3 a, b, c;
+    };
+
+    void addTriangle(const Vec3& a, const Vec3& b, const Vec3& c) {
+        m_triangles.push_back({a, b, c});
+        m_dirty = true;
+    }
+
+    void clear() { m_triangles.clear(); m_dirty = true; }
+
+    [[nodiscard]] CollisionShapeType shapeType() const override { return CollisionShapeType::Mesh; }
+    [[nodiscard]] const std::vector<Triangle>& triangles() const { return m_triangles; }
+    [[nodiscard]] size_t triangleCount() const { return m_triangles.size(); }
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void clearDirty() { m_dirty = false; }
+
+    [[nodiscard]] AABB boundingBox() const override {
+        if (m_triangles.empty()) return {{}, {}};
+        Vec3 lo = m_triangles[0].a, hi = m_triangles[0].a;
+        for (auto& tri : m_triangles) {
+            for (auto* v : {&tri.a, &tri.b, &tri.c}) {
+                lo.x = std::min(lo.x, v->x); lo.y = std::min(lo.y, v->y); lo.z = std::min(lo.z, v->z);
+                hi.x = std::max(hi.x, v->x); hi.y = std::max(hi.y, v->y); hi.z = std::max(hi.z, v->z);
+            }
+        }
+        return {lo, hi};
+    }
+
+private:
+    std::vector<Triangle> m_triangles;
+    bool m_dirty = true;
+};
+
 // ── Collision Contact ────────────────────────────────────────────
 
 struct CollisionContact {
