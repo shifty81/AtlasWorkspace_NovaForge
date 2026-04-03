@@ -104,9 +104,20 @@
 
 ## Phase 6 — Server & Networking
 
-- [ ] Port Networking module (client-server, P2P, lockstep/rollback)
-- [ ] Port 164 game systems from Atlas-NovaForge server
-- [ ] Port game data (102 ships, 159 modules, 137 skills)
+- [x] Packet protocol (17 packet types: Connect, Disconnect, Heartbeat, EntitySpawn/Destroy/Update, WorldChunk, VoxelEdit, ChatMessage, RPC, Ping/Pong, Auth, PlayerInput, StateSnapshot, AckReliable)
+- [x] PacketSerializer (JSON round-trip for all packet types)
+- [x] Connection management (ConnectionState lifecycle, send/receive queues, reliable buffer, latency tracking, timeout detection)
+- [x] ConnectionManager (add/remove/find connections, broadcast, timeout sweep)
+- [x] Replication system (ReplicatedProperty with dirty tracking, ReplicationRule: ServerAuthority/ClientAuthority/PredictedOnClient)
+- [x] ReplicationManager (register/unregister entities, collectDirtySnapshots, applySnapshot)
+- [x] Session management (SessionState: Lobby/Loading/InGame/Paused/Ending, PlayerInfo, maxPlayers, host detection)
+- [x] Lockstep system (InputFrame, input delay, confirmed inputs per frame per connection, advanceFrame)
+- [x] Rollback system (save/load state callbacks, rollbackToFrame, confirmFrame, maxRollbackFrames)
+- [x] RPC system (RPCTarget: Server/Client/AllClients/AllClientsExcept, RPCRegistry with invoke/dispatch)
+- [x] NetworkManager expansion (owns all subsystems, processPacket routing, tick, send/broadcast, statistics)
+- [x] Networking test suite (50 tests covering all subsystems)
+- [x] Expand test coverage (299 tests, up from 249)
+- [x] Multi-config build verified (Debug + Release with Ninja Multi-Config)
 - [ ] Validate: server starts, client connects
 
 ## Phase 7 — AI & Tooling
