@@ -5,6 +5,7 @@
 #include "NF/Renderer/Renderer.h"
 #include "NF/UI/UI.h"
 #include "NF/Game/Game.h"
+#include "NF/GraphVM/GraphVM.h"
 #include <filesystem>
 #include <set>
 #include <deque>
@@ -394,108 +395,6 @@ private:
     size_t m_maxEntries = 10;
 };
 
-// ── Editor application ───────────────────────────────────────────
-
-class EditorApp {
-public:
-    bool init(int width, int height) {
-        m_renderer.init(width, height);
-        m_ui.init();
-
-        // Register core editor commands
-        m_commands.registerCommand("file.new", [this]() {
-            NF_LOG_INFO("Editor", "New world");
-            m_currentWorldPath.clear();
-            m_commandStack.clear();
-        }, "New World", "Ctrl+N");
-
-        m_commands.registerCommand("file.open", [this]() {
-            NF_LOG_INFO("Editor", "Open world");
-        }, "Open World", "Ctrl+O");
-
-        m_commands.registerCommand("file.save", [this]() {
-            NF_LOG_INFO("Editor", "Save world");
-            if (!m_currentWorldPath.empty()) {
-                m_commandStack.markClean();
-            }
-        }, "Save", "Ctrl+S");
-
-        m_commands.registerCommand("file.save_as", [this]() {
-            NF_LOG_INFO("Editor", "Save world as...");
-        }, "Save As", "Ctrl+Shift+S");
-
-        m_commands.registerCommand("edit.undo", [this]() {
-            if (m_commandStack.canUndo()) {
-                std::string desc = m_commandStack.undoDescription();
-                m_commandStack.undo();
-                NF_LOG_INFO("Editor", "Undo: " + desc);
-            }
-        }, "Undo", "Ctrl+Z");
-        m_commands.setEnabledCheck("edit.undo", [this]() { return m_commandStack.canUndo(); });
-
-        m_commands.registerCommand("edit.redo", [this]() {
-            if (m_commandStack.canRedo()) {
-                std::string desc = m_commandStack.redoDescription();
-                m_commandStack.redo();
-                NF_LOG_INFO("Editor", "Redo: " + desc);
-            }
-        }, "Redo", "Ctrl+Y");
-        m_commands.setEnabledCheck("edit.redo", [this]() { return m_commandStack.canRedo(); });
-
-        m_commands.registerCommand("edit.select_all", [this]() {
-            NF_LOG_INFO("Editor", "Select all");
-        }, "Select All", "Ctrl+A");
-
-        m_commands.registerCommand("edit.deselect", [this]() {
-            m_selection.clearSelection();
-        }, "Deselect All", "Ctrl+D");
-
-        m_commands.registerCommand("view.reset_layout", [this]() {
-            NF_LOG_INFO("Editor", "Reset panel layout");
-        }, "Reset Layout", "");
-
-        NF_LOG_INFO("Editor", "NovaForge Editor initialized");
-        return true;
-    }
-
-    void shutdown() {
-        m_ui.shutdown();
-        m_renderer.shutdown();
-        NF_LOG_INFO("Editor", "NovaForge Editor shutdown");
-    }
-
-    void update() {}
-    void render() {}
-
-    // Accessors for editor services
-    EditorCommandRegistry& commands() { return m_commands; }
-    CommandStack& commandStack() { return m_commandStack; }
-    SelectionService& selection() { return m_selection; }
-    ContentBrowser& contentBrowser() { return m_contentBrowser; }
-    RecentFilesList& recentFiles() { return m_recentFiles; }
-    LaunchService& launchService() { return m_launchService; }
-
-    [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
-    void setCurrentWorldPath(const std::string& path) {
-        m_currentWorldPath = path;
-        m_recentFiles.addFile(path);
-    }
-
-    [[nodiscard]] bool isDirty() const { return m_commandStack.isDirty(); }
-
-private:
-    Renderer m_renderer;
-    UIRenderer m_ui;
-    EditorCommandRegistry m_commands;
-    CommandStack m_commandStack;
-    SelectionService m_selection;
-    ContentBrowser m_contentBrowser;
-    RecentFilesList m_recentFiles;
-    LaunchService m_launchService;
-    std::vector<DockPanel> m_panels;
-    std::string m_currentWorldPath;
-};
-
 // ── Editor Theme ─────────────────────────────────────────────────
 
 struct EditorTheme {
@@ -576,6 +475,498 @@ struct EditorTheme {
         t.propertyValue       = 0x1E1E1EFF;
         return t;
     }
+};
+
+// ── DockLayout ───────────────────────────────────────────────────
+
+class DockLayout {
+public:
+    void addPanel(const std::string& name, DockSlot slot) {
+        DockPanel panel;
+        panel.name = name;
+        panel.slot = slot;
+        panel.visible = true;
+        m_panels.push_back(std::move(panel));
+        NF_LOG_INFO("Editor", "DockLayout: added panel '" + name + "'");
+    }
+
+    void removePanel(const std::string& name) {
+        auto it = std::find_if(m_panels.begin(), m_panels.end(),
+            [&](const DockPanel& p) { return p.name == name; });
+        if (it != m_panels.end()) {
+            m_panels.erase(it);
+            NF_LOG_INFO("Editor", "DockLayout: removed panel '" + name + "'");
+        }
+    }
+
+    [[nodiscard]] DockPanel* findPanel(const std::string& name) {
+        auto it = std::find_if(m_panels.begin(), m_panels.end(),
+            [&](const DockPanel& p) { return p.name == name; });
+        return (it != m_panels.end()) ? &(*it) : nullptr;
+    }
+
+    void setPanelVisible(const std::string& name, bool visible) {
+        if (auto* p = findPanel(name)) {
+            p->visible = visible;
+        }
+    }
+
+    void computeLayout(float width, float height, float toolbarHeight, float statusBarHeight) {
+        float usableHeight = height - toolbarHeight - statusBarHeight;
+
+        float leftWidth = 0.f;
+        float rightWidth = 0.f;
+        float topHeight = 0.f;
+        float bottomHeight = 0.f;
+
+        for (auto& p : m_panels) {
+            if (!p.visible) continue;
+            switch (p.slot) {
+                case DockSlot::Left:   leftWidth   = kDefaultLeftWidth;   break;
+                case DockSlot::Right:  rightWidth  = kDefaultRightWidth;  break;
+                case DockSlot::Top:    topHeight   = kDefaultTopHeight;   break;
+                case DockSlot::Bottom: bottomHeight = kDefaultBottomHeight; break;
+                default: break;
+            }
+        }
+
+        float centerX = leftWidth;
+        float centerW = width - leftWidth - rightWidth;
+
+        for (auto& p : m_panels) {
+            if (!p.visible) continue;
+            switch (p.slot) {
+                case DockSlot::Left:
+                    p.bounds = { 0.f, toolbarHeight, leftWidth, usableHeight };
+                    break;
+                case DockSlot::Right:
+                    p.bounds = { width - rightWidth, toolbarHeight, rightWidth, usableHeight };
+                    break;
+                case DockSlot::Bottom:
+                    p.bounds = { centerX, height - statusBarHeight - bottomHeight, centerW, bottomHeight };
+                    break;
+                case DockSlot::Top:
+                    p.bounds = { centerX, toolbarHeight, centerW, topHeight };
+                    break;
+                case DockSlot::Center:
+                    p.bounds = { centerX, toolbarHeight + topHeight, centerW,
+                                 usableHeight - topHeight - bottomHeight };
+                    break;
+            }
+        }
+    }
+
+    [[nodiscard]] size_t panelCount() const { return m_panels.size(); }
+    [[nodiscard]] const std::vector<DockPanel>& panels() const { return m_panels; }
+
+    static constexpr float kDefaultLeftWidth   = 250.f;
+    static constexpr float kDefaultRightWidth  = 300.f;
+    static constexpr float kDefaultTopHeight   = 200.f;
+    static constexpr float kDefaultBottomHeight = 200.f;
+
+private:
+    std::vector<DockPanel> m_panels;
+};
+
+// ── EditorPanel (abstract) ───────────────────────────────────────
+
+class EditorPanel {
+public:
+    virtual ~EditorPanel() = default;
+
+    [[nodiscard]] virtual const std::string& name() const = 0;
+    [[nodiscard]] virtual DockSlot slot() const = 0;
+    virtual void update(float dt) = 0;
+    virtual void render(const UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) = 0;
+
+    [[nodiscard]] bool isVisible() const { return m_visible; }
+    void setVisible(bool v) { m_visible = v; }
+
+private:
+    bool m_visible = true;
+};
+
+// ── ViewportPanel ────────────────────────────────────────────────
+
+enum class RenderMode : uint8_t { Shaded, Wireframe, Unlit };
+enum class ToolMode   : uint8_t { Select, Move, Rotate, Scale, Paint, Erase };
+
+class ViewportPanel : public EditorPanel {
+public:
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Center; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] Vec3 cameraPosition() const { return m_cameraPos; }
+    void setCameraPosition(Vec3 pos) { m_cameraPos = pos; }
+
+    [[nodiscard]] float cameraZoom() const { return m_cameraZoom; }
+    void setCameraZoom(float z) { m_cameraZoom = z; }
+
+    [[nodiscard]] bool gridEnabled() const { return m_gridEnabled; }
+    void setGridEnabled(bool e) { m_gridEnabled = e; }
+
+    [[nodiscard]] RenderMode renderMode() const { return m_renderMode; }
+    void setRenderMode(RenderMode m) { m_renderMode = m; }
+
+    [[nodiscard]] ToolMode toolMode() const { return m_toolMode; }
+    void setToolMode(ToolMode m) { m_toolMode = m; }
+
+private:
+    std::string m_name = "Viewport";
+    Vec3 m_cameraPos{0.f, 0.f, 0.f};
+    float m_cameraZoom = 1.f;
+    bool m_gridEnabled = true;
+    RenderMode m_renderMode = RenderMode::Shaded;
+    ToolMode m_toolMode = ToolMode::Select;
+};
+
+// ── InspectorPanel ───────────────────────────────────────────────
+
+class InspectorPanel : public EditorPanel {
+public:
+    InspectorPanel() = default;
+    InspectorPanel(SelectionService* sel, TypeRegistry* reg)
+        : m_selection(sel), m_typeRegistry(reg) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Right; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] SelectionService* selectionService() const { return m_selection; }
+    void setSelectionService(SelectionService* s) { m_selection = s; }
+
+    [[nodiscard]] TypeRegistry* typeRegistry() const { return m_typeRegistry; }
+    void setTypeRegistry(TypeRegistry* r) { m_typeRegistry = r; }
+
+private:
+    std::string m_name = "Inspector";
+    SelectionService* m_selection = nullptr;
+    TypeRegistry* m_typeRegistry = nullptr;
+};
+
+// ── HierarchyPanel ──────────────────────────────────────────────
+
+class HierarchyPanel : public EditorPanel {
+public:
+    HierarchyPanel() = default;
+    explicit HierarchyPanel(SelectionService* sel) : m_selection(sel) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Left; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] SelectionService* selectionService() const { return m_selection; }
+    void setSelectionService(SelectionService* s) { m_selection = s; }
+
+    [[nodiscard]] const std::string& searchFilter() const { return m_searchFilter; }
+    void setSearchFilter(const std::string& f) { m_searchFilter = f; }
+
+    void setEntityList(const std::vector<EntityID>& ids) { m_entityList = ids; }
+    [[nodiscard]] const std::vector<EntityID>& entityList() const { return m_entityList; }
+
+private:
+    std::string m_name = "Hierarchy";
+    SelectionService* m_selection = nullptr;
+    std::string m_searchFilter;
+    std::vector<EntityID> m_entityList;
+};
+
+// ── ConsolePanel ─────────────────────────────────────────────────
+
+enum class ConsoleMessageLevel : uint8_t { Info, Warning, Error };
+
+struct ConsoleMessage {
+    std::string text;
+    ConsoleMessageLevel level = ConsoleMessageLevel::Info;
+    float timestamp = 0.f;
+};
+
+class ConsolePanel : public EditorPanel {
+public:
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Bottom; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    void addMessage(const std::string& text, ConsoleMessageLevel level, float timestamp) {
+        ConsoleMessage msg;
+        msg.text = text;
+        msg.level = level;
+        msg.timestamp = timestamp;
+        m_messages.push_back(std::move(msg));
+        if (m_messages.size() > kMaxMessages) {
+            m_messages.erase(m_messages.begin());
+        }
+    }
+
+    void clearMessages() { m_messages.clear(); }
+    [[nodiscard]] size_t messageCount() const { return m_messages.size(); }
+    [[nodiscard]] const std::vector<ConsoleMessage>& messages() const { return m_messages; }
+
+    static constexpr size_t kMaxMessages = 1000;
+
+private:
+    std::string m_name = "Console";
+    std::vector<ConsoleMessage> m_messages;
+};
+
+// ── ContentBrowserPanel ──────────────────────────────────────────
+
+enum class ContentViewMode : uint8_t { Grid, List };
+
+class ContentBrowserPanel : public EditorPanel {
+public:
+    ContentBrowserPanel() = default;
+    explicit ContentBrowserPanel(ContentBrowser* browser) : m_browser(browser) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Left; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] ContentBrowser* contentBrowser() const { return m_browser; }
+    void setContentBrowser(ContentBrowser* b) { m_browser = b; }
+
+    [[nodiscard]] ContentViewMode viewMode() const { return m_viewMode; }
+    void setViewMode(ContentViewMode m) { m_viewMode = m; }
+
+private:
+    std::string m_name = "ContentBrowser";
+    ContentBrowser* m_browser = nullptr;
+    ContentViewMode m_viewMode = ContentViewMode::Grid;
+};
+
+// ── EditorToolbar ────────────────────────────────────────────────
+
+struct ToolbarItem {
+    std::string name;
+    std::string icon;
+    std::string tooltip;
+    std::function<void()> action;
+    bool enabled = true;
+    bool isSeparator = false;
+};
+
+class EditorToolbar {
+public:
+    void addItem(const std::string& name, const std::string& icon,
+                 const std::string& tooltip, std::function<void()> action, bool enabled = true) {
+        ToolbarItem item;
+        item.name = name;
+        item.icon = icon;
+        item.tooltip = tooltip;
+        item.action = std::move(action);
+        item.enabled = enabled;
+        item.isSeparator = false;
+        m_items.push_back(std::move(item));
+    }
+
+    void addSeparator() {
+        ToolbarItem sep;
+        sep.isSeparator = true;
+        m_items.push_back(std::move(sep));
+    }
+
+    [[nodiscard]] const std::vector<ToolbarItem>& items() const { return m_items; }
+    [[nodiscard]] size_t itemCount() const { return m_items.size(); }
+
+private:
+    std::vector<ToolbarItem> m_items;
+};
+
+// ── Editor application ───────────────────────────────────────────
+
+class EditorApp {
+public:
+    bool init(int width, int height) {
+        m_renderer.init(width, height);
+        m_ui.init();
+
+        // Register core editor commands
+        m_commands.registerCommand("file.new", [this]() {
+            NF_LOG_INFO("Editor", "New world");
+            m_currentWorldPath.clear();
+            m_commandStack.clear();
+        }, "New World", "Ctrl+N");
+
+        m_commands.registerCommand("file.open", [this]() {
+            NF_LOG_INFO("Editor", "Open world");
+        }, "Open World", "Ctrl+O");
+
+        m_commands.registerCommand("file.save", [this]() {
+            NF_LOG_INFO("Editor", "Save world");
+            if (!m_currentWorldPath.empty()) {
+                m_commandStack.markClean();
+            }
+        }, "Save", "Ctrl+S");
+
+        m_commands.registerCommand("file.save_as", [this]() {
+            NF_LOG_INFO("Editor", "Save world as...");
+        }, "Save As", "Ctrl+Shift+S");
+
+        m_commands.registerCommand("edit.undo", [this]() {
+            if (m_commandStack.canUndo()) {
+                std::string desc = m_commandStack.undoDescription();
+                m_commandStack.undo();
+                NF_LOG_INFO("Editor", "Undo: " + desc);
+            }
+        }, "Undo", "Ctrl+Z");
+        m_commands.setEnabledCheck("edit.undo", [this]() { return m_commandStack.canUndo(); });
+
+        m_commands.registerCommand("edit.redo", [this]() {
+            if (m_commandStack.canRedo()) {
+                std::string desc = m_commandStack.redoDescription();
+                m_commandStack.redo();
+                NF_LOG_INFO("Editor", "Redo: " + desc);
+            }
+        }, "Redo", "Ctrl+Y");
+        m_commands.setEnabledCheck("edit.redo", [this]() { return m_commandStack.canRedo(); });
+
+        m_commands.registerCommand("edit.select_all", [this]() {
+            NF_LOG_INFO("Editor", "Select all");
+        }, "Select All", "Ctrl+A");
+
+        m_commands.registerCommand("edit.deselect", [this]() {
+            m_selection.clearSelection();
+        }, "Deselect All", "Ctrl+D");
+
+        m_commands.registerCommand("view.reset_layout", [this]() {
+            NF_LOG_INFO("Editor", "Reset panel layout");
+        }, "Reset Layout", "");
+
+        // View toggle commands
+        m_commands.registerCommand("view.toggle_inspector", [this]() {
+            togglePanelVisibility("Inspector");
+        }, "Toggle Inspector", "");
+
+        m_commands.registerCommand("view.toggle_hierarchy", [this]() {
+            togglePanelVisibility("Hierarchy");
+        }, "Toggle Hierarchy", "");
+
+        m_commands.registerCommand("view.toggle_console", [this]() {
+            togglePanelVisibility("Console");
+        }, "Toggle Console", "");
+
+        m_commands.registerCommand("view.toggle_content_browser", [this]() {
+            togglePanelVisibility("ContentBrowser");
+        }, "Toggle Content Browser", "");
+
+        // Graph commands
+        m_commands.registerCommand("graph.new_graph", [this]() {
+            NF_LOG_INFO("Editor", "New graph");
+        }, "New Graph", "");
+
+        m_commands.registerCommand("graph.open_graph", [this]() {
+            NF_LOG_INFO("Editor", "Open graph");
+        }, "Open Graph", "");
+
+        // Create default panels
+        {
+            auto viewport = std::make_unique<ViewportPanel>();
+            m_dockLayout.addPanel(viewport->name(), viewport->slot());
+            m_editorPanels.push_back(std::move(viewport));
+        }
+        {
+            auto inspector = std::make_unique<InspectorPanel>(&m_selection, nullptr);
+            m_dockLayout.addPanel(inspector->name(), inspector->slot());
+            m_editorPanels.push_back(std::move(inspector));
+        }
+        {
+            auto hierarchy = std::make_unique<HierarchyPanel>(&m_selection);
+            m_dockLayout.addPanel(hierarchy->name(), hierarchy->slot());
+            m_editorPanels.push_back(std::move(hierarchy));
+        }
+        {
+            auto console = std::make_unique<ConsolePanel>();
+            m_dockLayout.addPanel(console->name(), console->slot());
+            m_editorPanels.push_back(std::move(console));
+        }
+        {
+            auto cb = std::make_unique<ContentBrowserPanel>(&m_contentBrowser);
+            m_dockLayout.addPanel(cb->name(), cb->slot());
+            m_editorPanels.push_back(std::move(cb));
+        }
+
+        // Create default toolbar items
+        m_toolbar.addItem("Select", "select", "Select tool", []() {});
+        m_toolbar.addItem("Move", "move", "Move tool", []() {});
+        m_toolbar.addItem("Rotate", "rotate", "Rotate tool", []() {});
+        m_toolbar.addItem("Scale", "scale", "Scale tool", []() {});
+        m_toolbar.addSeparator();
+        m_toolbar.addItem("Play", "play", "Play", []() {});
+        m_toolbar.addItem("Pause", "pause", "Pause", []() {});
+        m_toolbar.addItem("Stop", "stop", "Stop", []() {});
+
+        NF_LOG_INFO("Editor", "NovaForge Editor initialized");
+        return true;
+    }
+
+    void shutdown() {
+        m_editorPanels.clear();
+        m_ui.shutdown();
+        m_renderer.shutdown();
+        NF_LOG_INFO("Editor", "NovaForge Editor shutdown");
+    }
+
+    void update() {}
+    void render() {}
+
+    // Accessors for editor services
+    EditorCommandRegistry& commands() { return m_commands; }
+    CommandStack& commandStack() { return m_commandStack; }
+    SelectionService& selection() { return m_selection; }
+    ContentBrowser& contentBrowser() { return m_contentBrowser; }
+    RecentFilesList& recentFiles() { return m_recentFiles; }
+    LaunchService& launchService() { return m_launchService; }
+    DockLayout& dockLayout() { return m_dockLayout; }
+    EditorToolbar& toolbar() { return m_toolbar; }
+
+    [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
+    void setCurrentWorldPath(const std::string& path) {
+        m_currentWorldPath = path;
+        m_recentFiles.addFile(path);
+    }
+
+    [[nodiscard]] bool isDirty() const { return m_commandStack.isDirty(); }
+
+    void addPanel(std::unique_ptr<EditorPanel> panel) {
+        m_dockLayout.addPanel(panel->name(), panel->slot());
+        m_editorPanels.push_back(std::move(panel));
+    }
+
+    [[nodiscard]] const std::vector<std::unique_ptr<EditorPanel>>& editorPanels() const {
+        return m_editorPanels;
+    }
+
+    void setGraphVM(GraphVM* vm) { m_graphVM = vm; }
+    [[nodiscard]] GraphVM* graphVM() const { return m_graphVM; }
+
+private:
+    void togglePanelVisibility(const std::string& name) {
+        if (auto* p = m_dockLayout.findPanel(name)) {
+            p->visible = !p->visible;
+            NF_LOG_INFO("Editor", "Toggle panel '" + name + "' visible=" +
+                        (p->visible ? "true" : "false"));
+        }
+    }
+
+    Renderer m_renderer;
+    UIRenderer m_ui;
+    EditorCommandRegistry m_commands;
+    CommandStack m_commandStack;
+    SelectionService m_selection;
+    ContentBrowser m_contentBrowser;
+    RecentFilesList m_recentFiles;
+    LaunchService m_launchService;
+    DockLayout m_dockLayout;
+    EditorToolbar m_toolbar;
+    std::vector<std::unique_ptr<EditorPanel>> m_editorPanels;
+    std::string m_currentWorldPath;
+    GraphVM* m_graphVM = nullptr;
 };
 
 // ── Property Editor ──────────────────────────────────────────────

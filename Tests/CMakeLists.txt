@@ -80,7 +80,7 @@ add_executable(NF_EditorTests
     Editor/test_editor.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE
-    NF::Editor NF::Game NF::Renderer NF::UI NF::Engine NF::Core
+    NF::Editor NF::Game NF::Renderer NF::UI NF::Engine NF::Core NF::GraphVM
     Catch2::Catch2WithMain
 )
 catch_discover_tests(NF_EditorTests)
