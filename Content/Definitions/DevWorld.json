@@ -1,0 +1,40 @@
+{
+  "level": {
+    "name": "DevWorld",
+    "version": "0.1.0",
+    "description": "Fixed sandbox for early testing and editor development"
+  },
+  "world": {
+    "type": "voxel_flat",
+    "size": {
+      "chunks_x": 3,
+      "chunks_y": 1,
+      "chunks_z": 3
+    },
+    "chunk_size": 16,
+    "seed": 42
+  },
+  "spawn": {
+    "position": [24.0, 17.0, 24.0],
+    "rotation": [0.0, 0.0, 0.0]
+  },
+  "terrain": {
+    "generator": "flat_with_hills",
+    "base_height": 8,
+    "hill_frequency": 0.05,
+    "hill_amplitude": 4,
+    "default_voxel_type": "stone"
+  },
+  "lighting": {
+    "ambient": [0.15, 0.15, 0.2],
+    "sun_direction": [-0.5, -1.0, -0.3],
+    "sun_color": [1.0, 0.95, 0.85],
+    "sun_intensity": 1.0
+  },
+  "entities": [
+    {
+      "type": "player_spawn",
+      "position": [24.0, 17.0, 24.0]
+    }
+  ]
+}
