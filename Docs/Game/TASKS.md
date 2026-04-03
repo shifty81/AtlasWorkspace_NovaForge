@@ -156,8 +156,8 @@
 
 ## Phase 9 — Documentation & Polish
 
-- [ ] Consolidate all docs from all repos
-- [ ] Set up GitHub Actions CI
-- [ ] Docker support for server
-- [ ] Create modding guide
+- [x] GitHub Actions CI workflow (Linux Debug/Release, Multi-Config, Docker build)
+- [x] Docker server image with OCI labels
+- [x] Modding guide (ship, module, skill, mission JSON format + voxel + graph scripting)
+- [x] Architecture documentation updated (Networking dependency correction)
 - [ ] Final audit

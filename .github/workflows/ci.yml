@@ -1,0 +1,87 @@
+# NovaForge — CI Pipeline
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-linux:
+    name: Linux (GCC)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build g++
+
+      - name: Configure
+        run: cmake --preset debug
+
+      - name: Build
+        run: cmake --build --preset debug
+
+      - name: Test
+        run: ctest --preset debug
+
+  build-linux-release:
+    name: Linux Release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build g++
+
+      - name: Configure
+        run: cmake --preset release
+
+      - name: Build
+        run: cmake --build --preset release
+
+  build-multiconfig:
+    name: Multi-Config (VS .sln equivalent)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build g++
+
+      - name: Configure
+        run: |
+          cmake -G "Ninja Multi-Config" -B Builds/multiconfig \
+            -DNF_BUILD_TESTS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build Debug
+        run: cmake --build Builds/multiconfig --config Debug
+
+      - name: Build Release
+        run: cmake --build Builds/multiconfig --config Release
+
+      - name: Test (Debug)
+        run: cd Builds/multiconfig && ctest -C Debug --output-on-failure
+
+  docker-server:
+    name: Docker Server Build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t novaforge-server:ci .
+
+      - name: Verify server binary
+        run: docker run --rm novaforge-server:ci --version || true

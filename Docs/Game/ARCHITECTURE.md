@@ -10,7 +10,7 @@ NF::Physics     → NF::Core, NF::Engine                                     │
 NF::Audio       → NF::Core                                                 │
 NF::Animation   → NF::Core, NF::Engine                                     │
 NF::Input       → NF::Core                                                 │
-NF::Networking  → NF::Core                                                 │
+NF::Networking  → NF::Core, NF::Engine                                   │
 NF::GraphVM     → NF::Core                                                 │
 NF::AI          → NF::Core, NF::Engine, NF::GraphVM                        │
 NF::World       → NF::Core, NF::Engine, NF::Game                           │
