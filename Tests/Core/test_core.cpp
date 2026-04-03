@@ -649,3 +649,123 @@ TEST_CASE("JSON roundtrip", "[Core][Serialization]") {
     REQUIRE(parsed["name"].asString() == "roundtrip");
     REQUIRE(parsed["count"].asInt() == 99);
 }
+
+// ── CommandStack ─────────────────────────────────────────────────
+
+TEST_CASE("CommandStack basic undo/redo", "[Core][Command]") {
+    NF::CommandStack stack;
+    int value = 0;
+
+    auto cmd = std::make_unique<NF::PropertyChangeCommand<int>>(&value, 0, 42, "Set to 42");
+    stack.execute(std::move(cmd));
+
+    REQUIRE(value == 42);
+    REQUIRE(stack.undoCount() == 1);
+    REQUIRE(stack.redoCount() == 0);
+    REQUIRE(stack.isDirty());
+    REQUIRE(stack.undoDescription() == "Set to 42");
+
+    // Undo
+    REQUIRE(stack.undo());
+    REQUIRE(value == 0);
+    REQUIRE(stack.undoCount() == 0);
+    REQUIRE(stack.redoCount() == 1);
+
+    // Redo
+    REQUIRE(stack.redo());
+    REQUIRE(value == 42);
+    REQUIRE(stack.undoCount() == 1);
+    REQUIRE(stack.redoCount() == 0);
+}
+
+TEST_CASE("CommandStack new command clears redo", "[Core][Command]") {
+    NF::CommandStack stack;
+    int value = 0;
+
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<int>>(&value, 0, 10, "Set 10"));
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<int>>(&value, 10, 20, "Set 20"));
+    REQUIRE(stack.undoCount() == 2);
+
+    // Undo one
+    stack.undo();
+    REQUIRE(value == 10);
+    REQUIRE(stack.redoCount() == 1);
+
+    // New command should clear redo
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<int>>(&value, 10, 30, "Set 30"));
+    REQUIRE(stack.redoCount() == 0);
+    REQUIRE(value == 30);
+}
+
+TEST_CASE("CommandStack clear", "[Core][Command]") {
+    NF::CommandStack stack;
+    float value = 1.f;
+
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<float>>(&value, 1.f, 2.f, "Change"));
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<float>>(&value, 2.f, 3.f, "Change2"));
+
+    stack.clear();
+    REQUIRE(stack.undoCount() == 0);
+    REQUIRE(stack.redoCount() == 0);
+    REQUIRE_FALSE(stack.canUndo());
+    REQUIRE_FALSE(stack.canRedo());
+}
+
+TEST_CASE("CommandStack empty undo/redo returns false", "[Core][Command]") {
+    NF::CommandStack stack;
+    REQUIRE_FALSE(stack.undo());
+    REQUIRE_FALSE(stack.redo());
+    REQUIRE_FALSE(stack.canUndo());
+    REQUIRE_FALSE(stack.canRedo());
+}
+
+TEST_CASE("CommandStack markClean/isDirty", "[Core][Command]") {
+    NF::CommandStack stack;
+    int val = 0;
+
+    REQUIRE_FALSE(stack.isDirty());
+
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<int>>(&val, 0, 1, "edit"));
+    REQUIRE(stack.isDirty());
+
+    stack.markClean();
+    REQUIRE_FALSE(stack.isDirty());
+
+    stack.execute(std::make_unique<NF::PropertyChangeCommand<int>>(&val, 1, 2, "edit2"));
+    REQUIRE(stack.isDirty());
+}
+
+// ── Color ────────────────────────────────────────────────────────
+
+TEST_CASE("Color RGBA8 round-trip", "[Core][Color]") {
+    NF::Color c{1.f, 0.5f, 0.25f, 1.f};
+    uint32_t packed = c.toRGBA8();
+    NF::Color unpacked = NF::Color::fromRGBA8(packed);
+
+    // Within 1/255 precision
+    REQUIRE(std::abs(unpacked.r - c.r) < 0.01f);
+    REQUIRE(std::abs(unpacked.g - c.g) < 0.01f);
+    REQUIRE(std::abs(unpacked.b - c.b) < 0.01f);
+    REQUIRE(std::abs(unpacked.a - c.a) < 0.01f);
+}
+
+TEST_CASE("Color named constants", "[Core][Color]") {
+    auto white = NF::Color::white();
+    REQUIRE(white.r == 1.f);
+    REQUIRE(white.g == 1.f);
+    REQUIRE(white.b == 1.f);
+
+    auto red = NF::Color::red();
+    REQUIRE(red.r == 1.f);
+    REQUIRE(red.g == 0.f);
+    REQUIRE(red.b == 0.f);
+}
+
+TEST_CASE("Color equality", "[Core][Color]") {
+    NF::Color a{1.f, 0.f, 0.f, 1.f};
+    NF::Color b{1.f, 0.f, 0.f, 1.f};
+    NF::Color c{0.f, 1.f, 0.f, 1.f};
+
+    REQUIRE(a == b);
+    REQUIRE(a != c);
+}

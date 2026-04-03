@@ -180,3 +180,56 @@ TEST_CASE("PhysicsWorld static body doesn't move", "[Physics][World]") {
 
     world.shutdown();
 }
+
+// ── Collision Shapes ─────────────────────────────────────────────
+
+TEST_CASE("BoxShape bounding box", "[Physics][Collision]") {
+    NF::BoxShape box({2.f, 3.f, 4.f});
+
+    REQUIRE(box.shapeType() == NF::CollisionShapeType::Box);
+
+    auto bb = box.boundingBox();
+    REQUIRE_THAT(bb.min.x, WithinAbs(-2.f, 1e-5));
+    REQUIRE_THAT(bb.max.x, WithinAbs(2.f, 1e-5));
+    REQUIRE_THAT(bb.min.y, WithinAbs(-3.f, 1e-5));
+    REQUIRE_THAT(bb.max.y, WithinAbs(3.f, 1e-5));
+
+    REQUIRE_THAT(box.halfExtents().x, WithinAbs(2.f, 1e-5));
+}
+
+TEST_CASE("SphereShape bounding box", "[Physics][Collision]") {
+    NF::SphereShape sphere(5.f);
+
+    REQUIRE(sphere.shapeType() == NF::CollisionShapeType::Sphere);
+    REQUIRE_THAT(sphere.radius(), WithinAbs(5.f, 1e-5));
+
+    auto bb = sphere.boundingBox();
+    REQUIRE_THAT(bb.min.x, WithinAbs(-5.f, 1e-5));
+    REQUIRE_THAT(bb.max.x, WithinAbs(5.f, 1e-5));
+}
+
+TEST_CASE("MeshCollisionShape add triangles and bounding box", "[Physics][Collision]") {
+    NF::MeshCollisionShape mesh;
+
+    REQUIRE(mesh.triangleCount() == 0);
+    REQUIRE(mesh.isDirty());
+
+    mesh.addTriangle({0, 0, 0}, {1, 0, 0}, {0, 1, 0});
+    mesh.addTriangle({0, 0, 0}, {0, 0, 1}, {1, 0, 0});
+
+    REQUIRE(mesh.triangleCount() == 2);
+    REQUIRE(mesh.shapeType() == NF::CollisionShapeType::Mesh);
+
+    auto bb = mesh.boundingBox();
+    REQUIRE_THAT(bb.min.x, WithinAbs(0.f, 1e-5));
+    REQUIRE_THAT(bb.max.x, WithinAbs(1.f, 1e-5));
+    REQUIRE_THAT(bb.max.y, WithinAbs(1.f, 1e-5));
+    REQUIRE_THAT(bb.max.z, WithinAbs(1.f, 1e-5));
+
+    mesh.clearDirty();
+    REQUIRE_FALSE(mesh.isDirty());
+
+    mesh.clear();
+    REQUIRE(mesh.triangleCount() == 0);
+    REQUIRE(mesh.isDirty());
+}
