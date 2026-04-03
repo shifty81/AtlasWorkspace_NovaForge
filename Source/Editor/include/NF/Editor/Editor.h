@@ -5,6 +5,7 @@
 #include "NF/Renderer/Renderer.h"
 #include "NF/UI/UI.h"
 #include "NF/Game/Game.h"
+#include "NF/GraphVM/GraphVM.h"
 #include <filesystem>
 #include <set>
 #include <deque>
@@ -394,108 +395,6 @@ private:
     size_t m_maxEntries = 10;
 };
 
-// ── Editor application ───────────────────────────────────────────
-
-class EditorApp {
-public:
-    bool init(int width, int height) {
-        m_renderer.init(width, height);
-        m_ui.init();
-
-        // Register core editor commands
-        m_commands.registerCommand("file.new", [this]() {
-            NF_LOG_INFO("Editor", "New world");
-            m_currentWorldPath.clear();
-            m_commandStack.clear();
-        }, "New World", "Ctrl+N");
-
-        m_commands.registerCommand("file.open", [this]() {
-            NF_LOG_INFO("Editor", "Open world");
-        }, "Open World", "Ctrl+O");
-
-        m_commands.registerCommand("file.save", [this]() {
-            NF_LOG_INFO("Editor", "Save world");
-            if (!m_currentWorldPath.empty()) {
-                m_commandStack.markClean();
-            }
-        }, "Save", "Ctrl+S");
-
-        m_commands.registerCommand("file.save_as", [this]() {
-            NF_LOG_INFO("Editor", "Save world as...");
-        }, "Save As", "Ctrl+Shift+S");
-
-        m_commands.registerCommand("edit.undo", [this]() {
-            if (m_commandStack.canUndo()) {
-                std::string desc = m_commandStack.undoDescription();
-                m_commandStack.undo();
-                NF_LOG_INFO("Editor", "Undo: " + desc);
-            }
-        }, "Undo", "Ctrl+Z");
-        m_commands.setEnabledCheck("edit.undo", [this]() { return m_commandStack.canUndo(); });
-
-        m_commands.registerCommand("edit.redo", [this]() {
-            if (m_commandStack.canRedo()) {
-                std::string desc = m_commandStack.redoDescription();
-                m_commandStack.redo();
-                NF_LOG_INFO("Editor", "Redo: " + desc);
-            }
-        }, "Redo", "Ctrl+Y");
-        m_commands.setEnabledCheck("edit.redo", [this]() { return m_commandStack.canRedo(); });
-
-        m_commands.registerCommand("edit.select_all", [this]() {
-            NF_LOG_INFO("Editor", "Select all");
-        }, "Select All", "Ctrl+A");
-
-        m_commands.registerCommand("edit.deselect", [this]() {
-            m_selection.clearSelection();
-        }, "Deselect All", "Ctrl+D");
-
-        m_commands.registerCommand("view.reset_layout", [this]() {
-            NF_LOG_INFO("Editor", "Reset panel layout");
-        }, "Reset Layout", "");
-
-        NF_LOG_INFO("Editor", "NovaForge Editor initialized");
-        return true;
-    }
-
-    void shutdown() {
-        m_ui.shutdown();
-        m_renderer.shutdown();
-        NF_LOG_INFO("Editor", "NovaForge Editor shutdown");
-    }
-
-    void update() {}
-    void render() {}
-
-    // Accessors for editor services
-    EditorCommandRegistry& commands() { return m_commands; }
-    CommandStack& commandStack() { return m_commandStack; }
-    SelectionService& selection() { return m_selection; }
-    ContentBrowser& contentBrowser() { return m_contentBrowser; }
-    RecentFilesList& recentFiles() { return m_recentFiles; }
-    LaunchService& launchService() { return m_launchService; }
-
-    [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
-    void setCurrentWorldPath(const std::string& path) {
-        m_currentWorldPath = path;
-        m_recentFiles.addFile(path);
-    }
-
-    [[nodiscard]] bool isDirty() const { return m_commandStack.isDirty(); }
-
-private:
-    Renderer m_renderer;
-    UIRenderer m_ui;
-    EditorCommandRegistry m_commands;
-    CommandStack m_commandStack;
-    SelectionService m_selection;
-    ContentBrowser m_contentBrowser;
-    RecentFilesList m_recentFiles;
-    LaunchService m_launchService;
-    std::vector<DockPanel> m_panels;
-    std::string m_currentWorldPath;
-};
-
 // ── Editor Theme ─────────────────────────────────────────────────
 
 struct EditorTheme {
@@ -576,6 +475,847 @@ struct EditorTheme {
         t.propertyValue       = 0x1E1E1EFF;
         return t;
     }
+};
+
+// ── DockLayout ───────────────────────────────────────────────────
+
+class DockLayout {
+public:
+    void addPanel(const std::string& name, DockSlot slot) {
+        DockPanel panel;
+        panel.name = name;
+        panel.slot = slot;
+        panel.visible = true;
+        m_panels.push_back(std::move(panel));
+        NF_LOG_INFO("Editor", "DockLayout: added panel '" + name + "'");
+    }
+
+    void removePanel(const std::string& name) {
+        auto it = std::find_if(m_panels.begin(), m_panels.end(),
+            [&](const DockPanel& p) { return p.name == name; });
+        if (it != m_panels.end()) {
+            m_panels.erase(it);
+            NF_LOG_INFO("Editor", "DockLayout: removed panel '" + name + "'");
+        }
+    }
+
+    [[nodiscard]] DockPanel* findPanel(const std::string& name) {
+        auto it = std::find_if(m_panels.begin(), m_panels.end(),
+            [&](const DockPanel& p) { return p.name == name; });
+        return (it != m_panels.end()) ? &(*it) : nullptr;
+    }
+
+    void setPanelVisible(const std::string& name, bool visible) {
+        if (auto* p = findPanel(name)) {
+            p->visible = visible;
+        }
+    }
+
+    void computeLayout(float width, float height, float toolbarHeight, float statusBarHeight) {
+        float usableHeight = height - toolbarHeight - statusBarHeight;
+
+        float leftWidth = 0.f;
+        float rightWidth = 0.f;
+        float topHeight = 0.f;
+        float bottomHeight = 0.f;
+
+        for (auto& p : m_panels) {
+            if (!p.visible) continue;
+            switch (p.slot) {
+                case DockSlot::Left:   leftWidth   = kDefaultLeftWidth;   break;
+                case DockSlot::Right:  rightWidth  = kDefaultRightWidth;  break;
+                case DockSlot::Top:    topHeight   = kDefaultTopHeight;   break;
+                case DockSlot::Bottom: bottomHeight = kDefaultBottomHeight; break;
+                default: break;
+            }
+        }
+
+        float centerX = leftWidth;
+        float centerW = width - leftWidth - rightWidth;
+
+        for (auto& p : m_panels) {
+            if (!p.visible) continue;
+            switch (p.slot) {
+                case DockSlot::Left:
+                    p.bounds = { 0.f, toolbarHeight, leftWidth, usableHeight };
+                    break;
+                case DockSlot::Right:
+                    p.bounds = { width - rightWidth, toolbarHeight, rightWidth, usableHeight };
+                    break;
+                case DockSlot::Bottom:
+                    p.bounds = { centerX, height - statusBarHeight - bottomHeight, centerW, bottomHeight };
+                    break;
+                case DockSlot::Top:
+                    p.bounds = { centerX, toolbarHeight, centerW, topHeight };
+                    break;
+                case DockSlot::Center:
+                    p.bounds = { centerX, toolbarHeight + topHeight, centerW,
+                                 usableHeight - topHeight - bottomHeight };
+                    break;
+            }
+        }
+    }
+
+    [[nodiscard]] size_t panelCount() const { return m_panels.size(); }
+    [[nodiscard]] const std::vector<DockPanel>& panels() const { return m_panels; }
+
+    static constexpr float kDefaultLeftWidth   = 250.f;
+    static constexpr float kDefaultRightWidth  = 300.f;
+    static constexpr float kDefaultTopHeight   = 200.f;
+    static constexpr float kDefaultBottomHeight = 200.f;
+
+private:
+    std::vector<DockPanel> m_panels;
+};
+
+// ── EditorPanel (abstract) ───────────────────────────────────────
+
+class EditorPanel {
+public:
+    virtual ~EditorPanel() = default;
+
+    [[nodiscard]] virtual const std::string& name() const = 0;
+    [[nodiscard]] virtual DockSlot slot() const = 0;
+    virtual void update(float dt) = 0;
+    virtual void render(const UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) = 0;
+
+    [[nodiscard]] bool isVisible() const { return m_visible; }
+    void setVisible(bool v) { m_visible = v; }
+
+private:
+    bool m_visible = true;
+};
+
+// ── ViewportPanel ────────────────────────────────────────────────
+
+enum class RenderMode : uint8_t { Shaded, Wireframe, Unlit };
+enum class ToolMode   : uint8_t { Select, Move, Rotate, Scale, Paint, Erase };
+
+class ViewportPanel : public EditorPanel {
+public:
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Center; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] Vec3 cameraPosition() const { return m_cameraPos; }
+    void setCameraPosition(Vec3 pos) { m_cameraPos = pos; }
+
+    [[nodiscard]] float cameraZoom() const { return m_cameraZoom; }
+    void setCameraZoom(float z) { m_cameraZoom = z; }
+
+    [[nodiscard]] bool gridEnabled() const { return m_gridEnabled; }
+    void setGridEnabled(bool e) { m_gridEnabled = e; }
+
+    [[nodiscard]] RenderMode renderMode() const { return m_renderMode; }
+    void setRenderMode(RenderMode m) { m_renderMode = m; }
+
+    [[nodiscard]] ToolMode toolMode() const { return m_toolMode; }
+    void setToolMode(ToolMode m) { m_toolMode = m; }
+
+private:
+    std::string m_name = "Viewport";
+    Vec3 m_cameraPos{0.f, 0.f, 0.f};
+    float m_cameraZoom = 1.f;
+    bool m_gridEnabled = true;
+    RenderMode m_renderMode = RenderMode::Shaded;
+    ToolMode m_toolMode = ToolMode::Select;
+};
+
+// ── InspectorPanel ───────────────────────────────────────────────
+
+class InspectorPanel : public EditorPanel {
+public:
+    InspectorPanel() = default;
+    InspectorPanel(SelectionService* sel, TypeRegistry* reg)
+        : m_selection(sel), m_typeRegistry(reg) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Right; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] SelectionService* selectionService() const { return m_selection; }
+    void setSelectionService(SelectionService* s) { m_selection = s; }
+
+    [[nodiscard]] TypeRegistry* typeRegistry() const { return m_typeRegistry; }
+    void setTypeRegistry(TypeRegistry* r) { m_typeRegistry = r; }
+
+private:
+    std::string m_name = "Inspector";
+    SelectionService* m_selection = nullptr;
+    TypeRegistry* m_typeRegistry = nullptr;
+};
+
+// ── HierarchyPanel ──────────────────────────────────────────────
+
+class HierarchyPanel : public EditorPanel {
+public:
+    HierarchyPanel() = default;
+    explicit HierarchyPanel(SelectionService* sel) : m_selection(sel) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Left; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] SelectionService* selectionService() const { return m_selection; }
+    void setSelectionService(SelectionService* s) { m_selection = s; }
+
+    [[nodiscard]] const std::string& searchFilter() const { return m_searchFilter; }
+    void setSearchFilter(const std::string& f) { m_searchFilter = f; }
+
+    void setEntityList(const std::vector<EntityID>& ids) { m_entityList = ids; }
+    [[nodiscard]] const std::vector<EntityID>& entityList() const { return m_entityList; }
+
+private:
+    std::string m_name = "Hierarchy";
+    SelectionService* m_selection = nullptr;
+    std::string m_searchFilter;
+    std::vector<EntityID> m_entityList;
+};
+
+// ── ConsolePanel ─────────────────────────────────────────────────
+
+enum class ConsoleMessageLevel : uint8_t { Info, Warning, Error };
+
+struct ConsoleMessage {
+    std::string text;
+    ConsoleMessageLevel level = ConsoleMessageLevel::Info;
+    float timestamp = 0.f;
+};
+
+class ConsolePanel : public EditorPanel {
+public:
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Bottom; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    void addMessage(const std::string& text, ConsoleMessageLevel level, float timestamp) {
+        ConsoleMessage msg;
+        msg.text = text;
+        msg.level = level;
+        msg.timestamp = timestamp;
+        m_messages.push_back(std::move(msg));
+        if (m_messages.size() > kMaxMessages) {
+            m_messages.erase(m_messages.begin());
+        }
+    }
+
+    void clearMessages() { m_messages.clear(); }
+    [[nodiscard]] size_t messageCount() const { return m_messages.size(); }
+    [[nodiscard]] const std::vector<ConsoleMessage>& messages() const { return m_messages; }
+
+    static constexpr size_t kMaxMessages = 1000;
+
+private:
+    std::string m_name = "Console";
+    std::vector<ConsoleMessage> m_messages;
+};
+
+// ── ContentBrowserPanel ──────────────────────────────────────────
+
+enum class ContentViewMode : uint8_t { Grid, List };
+
+class ContentBrowserPanel : public EditorPanel {
+public:
+    ContentBrowserPanel() = default;
+    explicit ContentBrowserPanel(ContentBrowser* browser) : m_browser(browser) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Left; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] ContentBrowser* contentBrowser() const { return m_browser; }
+    void setContentBrowser(ContentBrowser* b) { m_browser = b; }
+
+    [[nodiscard]] ContentViewMode viewMode() const { return m_viewMode; }
+    void setViewMode(ContentViewMode m) { m_viewMode = m; }
+
+private:
+    std::string m_name = "ContentBrowser";
+    ContentBrowser* m_browser = nullptr;
+    ContentViewMode m_viewMode = ContentViewMode::Grid;
+};
+
+// ── EditorToolbar ────────────────────────────────────────────────
+
+struct ToolbarItem {
+    std::string name;
+    std::string icon;
+    std::string tooltip;
+    std::function<void()> action;
+    bool enabled = true;
+    bool isSeparator = false;
+};
+
+class EditorToolbar {
+public:
+    void addItem(const std::string& name, const std::string& icon,
+                 const std::string& tooltip, std::function<void()> action, bool enabled = true) {
+        ToolbarItem item;
+        item.name = name;
+        item.icon = icon;
+        item.tooltip = tooltip;
+        item.action = std::move(action);
+        item.enabled = enabled;
+        item.isSeparator = false;
+        m_items.push_back(std::move(item));
+    }
+
+    void addSeparator() {
+        ToolbarItem sep;
+        sep.isSeparator = true;
+        m_items.push_back(std::move(sep));
+    }
+
+    [[nodiscard]] const std::vector<ToolbarItem>& items() const { return m_items; }
+    [[nodiscard]] size_t itemCount() const { return m_items.size(); }
+
+private:
+    std::vector<ToolbarItem> m_items;
+};
+
+// ── Project Indexer ──────────────────────────────────────────────
+
+enum class SourceFileType : uint8_t {
+    Header, Source, Shader, Script, Data, Config, Unknown
+};
+
+struct IndexedFile {
+    std::string path;
+    SourceFileType fileType = SourceFileType::Unknown;
+    std::string moduleName;
+    uint32_t lineCount = 0;
+    uint64_t lastModified = 0;
+    std::vector<std::string> symbols;
+};
+
+class ProjectIndexer {
+public:
+    void indexDirectory(const std::string& rootPath) {
+        namespace fs = std::filesystem;
+        if (!fs::exists(rootPath) || !fs::is_directory(rootPath)) {
+            NF_LOG_WARN("IDE", "Directory not found: " + rootPath);
+            return;
+        }
+        for (auto& entry : fs::recursive_directory_iterator(rootPath)) {
+            if (!entry.is_regular_file()) continue;
+            auto ext = entry.path().extension().string();
+            SourceFileType ft = classifyExtension(ext);
+            auto rel = fs::relative(entry.path(), rootPath).string();
+            std::string mod;
+            auto sep = rel.find_first_of("/\\");
+            if (sep != std::string::npos) mod = rel.substr(0, sep);
+            IndexedFile f;
+            f.path = entry.path().string();
+            f.fileType = ft;
+            f.moduleName = mod;
+            f.lineCount = 0;
+            f.lastModified = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    entry.last_write_time().time_since_epoch()).count());
+            m_files.push_back(std::move(f));
+        }
+        NF_LOG_INFO("IDE", "Indexed " + std::to_string(m_files.size()) + " files from " + rootPath);
+    }
+
+    void indexFile(const std::string& path, SourceFileType type, const std::string& moduleName) {
+        IndexedFile f;
+        f.path = path;
+        f.fileType = type;
+        f.moduleName = moduleName;
+        m_files.push_back(std::move(f));
+    }
+
+    [[nodiscard]] std::vector<const IndexedFile*> findFilesByType(SourceFileType type) const {
+        std::vector<const IndexedFile*> result;
+        for (auto& f : m_files) {
+            if (f.fileType == type) result.push_back(&f);
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<const IndexedFile*> findFilesByModule(const std::string& moduleName) const {
+        std::vector<const IndexedFile*> result;
+        for (auto& f : m_files) {
+            if (f.moduleName == moduleName) result.push_back(&f);
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<const IndexedFile*> findFilesByName(const std::string& nameSubstring) const {
+        std::vector<const IndexedFile*> result;
+        for (auto& f : m_files) {
+            if (f.path.find(nameSubstring) != std::string::npos) result.push_back(&f);
+        }
+        return result;
+    }
+
+    [[nodiscard]] const std::vector<IndexedFile>& allFiles() const { return m_files; }
+    [[nodiscard]] size_t fileCount() const { return m_files.size(); }
+
+    void clear() { m_files.clear(); }
+
+    void addSymbol(const std::string& filePath, const std::string& symbolName) {
+        for (auto& f : m_files) {
+            if (f.path == filePath) {
+                f.symbols.push_back(symbolName);
+                return;
+            }
+        }
+    }
+
+    [[nodiscard]] std::vector<const IndexedFile*> findSymbol(const std::string& symbolName) const {
+        std::vector<const IndexedFile*> result;
+        for (auto& f : m_files) {
+            for (auto& s : f.symbols) {
+                if (s == symbolName) {
+                    result.push_back(&f);
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+private:
+    static SourceFileType classifyExtension(const std::string& ext) {
+        if (ext == ".h" || ext == ".hpp") return SourceFileType::Header;
+        if (ext == ".cpp" || ext == ".cc" || ext == ".cxx") return SourceFileType::Source;
+        if (ext == ".glsl" || ext == ".hlsl") return SourceFileType::Shader;
+        if (ext == ".lua" || ext == ".py") return SourceFileType::Script;
+        if (ext == ".json") return SourceFileType::Data;
+        if (ext == ".cfg" || ext == ".ini") return SourceFileType::Config;
+        return SourceFileType::Unknown;
+    }
+
+    std::vector<IndexedFile> m_files;
+};
+
+// ── Code Navigation ─────────────────────────────────────────────
+
+enum class SymbolKind : uint8_t {
+    Function, Class, Struct, Enum, Variable, Namespace, Macro, Type, Unknown
+};
+
+struct NavigationTarget {
+    std::string filePath;
+    uint32_t line = 0;
+    uint32_t column = 0;
+    std::string symbolName;
+    SymbolKind kind = SymbolKind::Unknown;
+};
+
+struct NavigationEntry {
+    std::string symbol;
+    SymbolKind kind = SymbolKind::Unknown;
+    std::string filePath;
+    uint32_t line = 0;
+};
+
+class CodeNavigator {
+public:
+    void addEntry(NavigationEntry entry) {
+        m_entries.push_back(std::move(entry));
+    }
+
+    [[nodiscard]] std::optional<NavigationTarget> goToDefinition(const std::string& symbolName) const {
+        for (auto& e : m_entries) {
+            if (e.symbol == symbolName) {
+                NavigationTarget t;
+                t.filePath = e.filePath;
+                t.line = e.line;
+                t.column = 0;
+                t.symbolName = e.symbol;
+                t.kind = e.kind;
+                return t;
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::vector<NavigationTarget> findReferences(const std::string& symbolName) const {
+        std::vector<NavigationTarget> result;
+        for (auto& e : m_entries) {
+            if (e.symbol == symbolName) {
+                NavigationTarget t;
+                t.filePath = e.filePath;
+                t.line = e.line;
+                t.column = 0;
+                t.symbolName = e.symbol;
+                t.kind = e.kind;
+                result.push_back(std::move(t));
+            }
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<NavigationTarget> findSymbolsByKind(SymbolKind kind) const {
+        std::vector<NavigationTarget> result;
+        for (auto& e : m_entries) {
+            if (e.kind == kind) {
+                NavigationTarget t;
+                t.filePath = e.filePath;
+                t.line = e.line;
+                t.column = 0;
+                t.symbolName = e.symbol;
+                t.kind = e.kind;
+                result.push_back(std::move(t));
+            }
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<NavigationTarget> searchSymbols(const std::string& query) const {
+        std::vector<NavigationTarget> result;
+        for (auto& e : m_entries) {
+            if (e.symbol.find(query) != std::string::npos) {
+                NavigationTarget t;
+                t.filePath = e.filePath;
+                t.line = e.line;
+                t.column = 0;
+                t.symbolName = e.symbol;
+                t.kind = e.kind;
+                result.push_back(std::move(t));
+            }
+        }
+        return result;
+    }
+
+    [[nodiscard]] size_t entryCount() const { return m_entries.size(); }
+
+    void clear() { m_entries.clear(); }
+
+private:
+    std::vector<NavigationEntry> m_entries;
+};
+
+// ── Breadcrumb Trail ─────────────────────────────────────────────
+
+struct BreadcrumbItem {
+    std::string label;
+    std::string filePath;
+    uint32_t line = 0;
+};
+
+class BreadcrumbTrail {
+public:
+    void push(BreadcrumbItem item) {
+        if (m_trail.size() >= maxDepth) {
+            m_trail.erase(m_trail.begin());
+        }
+        m_trail.push_back(std::move(item));
+    }
+
+    std::optional<BreadcrumbItem> pop() {
+        if (m_trail.empty()) return std::nullopt;
+        auto item = std::move(m_trail.back());
+        m_trail.pop_back();
+        return item;
+    }
+
+    [[nodiscard]] const BreadcrumbItem* current() const {
+        if (m_trail.empty()) return nullptr;
+        return &m_trail.back();
+    }
+
+    [[nodiscard]] const std::vector<BreadcrumbItem>& trail() const { return m_trail; }
+    [[nodiscard]] size_t depth() const { return m_trail.size(); }
+    void clear() { m_trail.clear(); }
+
+private:
+    std::vector<BreadcrumbItem> m_trail;
+    static constexpr size_t maxDepth = 50;
+};
+
+// ── IDE Panel ────────────────────────────────────────────────────
+
+class IDEPanel : public EditorPanel {
+public:
+    IDEPanel(ProjectIndexer* indexer, CodeNavigator* navigator)
+        : m_indexer(indexer), m_navigator(navigator) {}
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Center; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    [[nodiscard]] ProjectIndexer* indexer() const { return m_indexer; }
+    [[nodiscard]] CodeNavigator* navigator() const { return m_navigator; }
+
+    std::string searchQuery;
+    std::vector<NavigationTarget> searchResults;
+
+private:
+    std::string m_name = "IDE";
+    ProjectIndexer* m_indexer = nullptr;
+    CodeNavigator* m_navigator = nullptr;
+};
+
+// ── IDE Service ──────────────────────────────────────────────────
+
+class IDEService {
+public:
+    void init() {
+        m_indexer = ProjectIndexer{};
+        m_navigator = CodeNavigator{};
+        m_breadcrumbs = BreadcrumbTrail{};
+        m_initialized = true;
+        NF_LOG_INFO("IDE", "IDEService initialized");
+    }
+
+    void shutdown() {
+        m_indexer.clear();
+        m_navigator.clear();
+        m_breadcrumbs.clear();
+        m_initialized = false;
+        NF_LOG_INFO("IDE", "IDEService shutdown");
+    }
+
+    [[nodiscard]] ProjectIndexer& indexer() { return m_indexer; }
+    [[nodiscard]] CodeNavigator& navigator() { return m_navigator; }
+    [[nodiscard]] BreadcrumbTrail& breadcrumbs() { return m_breadcrumbs; }
+
+    void navigateTo(const std::string& filePath, uint32_t line, const std::string& symbolName) {
+        BreadcrumbItem item;
+        item.label = symbolName;
+        item.filePath = filePath;
+        item.line = line;
+        m_breadcrumbs.push(std::move(item));
+        NF_LOG_INFO("IDE", "Navigate to " + symbolName + " at " + filePath + ":" + std::to_string(line));
+    }
+
+    bool goBack() {
+        auto item = m_breadcrumbs.pop();
+        if (!item) return false;
+        NF_LOG_INFO("IDE", "Go back to " + item->label);
+        return true;
+    }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+private:
+    ProjectIndexer m_indexer;
+    CodeNavigator m_navigator;
+    BreadcrumbTrail m_breadcrumbs;
+    bool m_initialized = false;
+};
+
+// ── Editor application ───────────────────────────────────────────
+
+class EditorApp {
+public:
+    bool init(int width, int height) {
+        m_renderer.init(width, height);
+        m_ui.init();
+
+        // Register core editor commands
+        m_commands.registerCommand("file.new", [this]() {
+            NF_LOG_INFO("Editor", "New world");
+            m_currentWorldPath.clear();
+            m_commandStack.clear();
+        }, "New World", "Ctrl+N");
+
+        m_commands.registerCommand("file.open", [this]() {
+            NF_LOG_INFO("Editor", "Open world");
+        }, "Open World", "Ctrl+O");
+
+        m_commands.registerCommand("file.save", [this]() {
+            NF_LOG_INFO("Editor", "Save world");
+            if (!m_currentWorldPath.empty()) {
+                m_commandStack.markClean();
+            }
+        }, "Save", "Ctrl+S");
+
+        m_commands.registerCommand("file.save_as", [this]() {
+            NF_LOG_INFO("Editor", "Save world as...");
+        }, "Save As", "Ctrl+Shift+S");
+
+        m_commands.registerCommand("edit.undo", [this]() {
+            if (m_commandStack.canUndo()) {
+                std::string desc = m_commandStack.undoDescription();
+                m_commandStack.undo();
+                NF_LOG_INFO("Editor", "Undo: " + desc);
+            }
+        }, "Undo", "Ctrl+Z");
+        m_commands.setEnabledCheck("edit.undo", [this]() { return m_commandStack.canUndo(); });
+
+        m_commands.registerCommand("edit.redo", [this]() {
+            if (m_commandStack.canRedo()) {
+                std::string desc = m_commandStack.redoDescription();
+                m_commandStack.redo();
+                NF_LOG_INFO("Editor", "Redo: " + desc);
+            }
+        }, "Redo", "Ctrl+Y");
+        m_commands.setEnabledCheck("edit.redo", [this]() { return m_commandStack.canRedo(); });
+
+        m_commands.registerCommand("edit.select_all", [this]() {
+            NF_LOG_INFO("Editor", "Select all");
+        }, "Select All", "Ctrl+A");
+
+        m_commands.registerCommand("edit.deselect", [this]() {
+            m_selection.clearSelection();
+        }, "Deselect All", "Ctrl+D");
+
+        m_commands.registerCommand("view.reset_layout", [this]() {
+            NF_LOG_INFO("Editor", "Reset panel layout");
+        }, "Reset Layout", "");
+
+        // View toggle commands
+        m_commands.registerCommand("view.toggle_inspector", [this]() {
+            togglePanelVisibility("Inspector");
+        }, "Toggle Inspector", "");
+
+        m_commands.registerCommand("view.toggle_hierarchy", [this]() {
+            togglePanelVisibility("Hierarchy");
+        }, "Toggle Hierarchy", "");
+
+        m_commands.registerCommand("view.toggle_console", [this]() {
+            togglePanelVisibility("Console");
+        }, "Toggle Console", "");
+
+        m_commands.registerCommand("view.toggle_content_browser", [this]() {
+            togglePanelVisibility("ContentBrowser");
+        }, "Toggle Content Browser", "");
+
+        // Graph commands
+        m_commands.registerCommand("graph.new_graph", [this]() {
+            NF_LOG_INFO("Editor", "New graph");
+        }, "New Graph", "");
+
+        m_commands.registerCommand("graph.open_graph", [this]() {
+            NF_LOG_INFO("Editor", "Open graph");
+        }, "Open Graph", "");
+
+        // IDE commands
+        m_ideService.init();
+
+        m_commands.registerCommand("ide.go_to_definition", [this]() {
+            NF_LOG_INFO("IDE", "Go to definition");
+        }, "Go To Definition", "F12");
+
+        m_commands.registerCommand("ide.find_references", [this]() {
+            NF_LOG_INFO("IDE", "Find references");
+        }, "Find References", "Shift+F12");
+
+        m_commands.registerCommand("ide.go_back", [this]() {
+            m_ideService.goBack();
+        }, "Go Back", "Alt+Left");
+
+        m_commands.registerCommand("ide.index_project", [this]() {
+            NF_LOG_INFO("IDE", "Index project");
+        }, "Index Project", "");
+
+        // Create default panels
+        {
+            auto viewport = std::make_unique<ViewportPanel>();
+            m_dockLayout.addPanel(viewport->name(), viewport->slot());
+            m_editorPanels.push_back(std::move(viewport));
+        }
+        {
+            auto inspector = std::make_unique<InspectorPanel>(&m_selection, nullptr);
+            m_dockLayout.addPanel(inspector->name(), inspector->slot());
+            m_editorPanels.push_back(std::move(inspector));
+        }
+        {
+            auto hierarchy = std::make_unique<HierarchyPanel>(&m_selection);
+            m_dockLayout.addPanel(hierarchy->name(), hierarchy->slot());
+            m_editorPanels.push_back(std::move(hierarchy));
+        }
+        {
+            auto console = std::make_unique<ConsolePanel>();
+            m_dockLayout.addPanel(console->name(), console->slot());
+            m_editorPanels.push_back(std::move(console));
+        }
+        {
+            auto cb = std::make_unique<ContentBrowserPanel>(&m_contentBrowser);
+            m_dockLayout.addPanel(cb->name(), cb->slot());
+            m_editorPanels.push_back(std::move(cb));
+        }
+
+        // Create default toolbar items
+        m_toolbar.addItem("Select", "select", "Select tool", []() {});
+        m_toolbar.addItem("Move", "move", "Move tool", []() {});
+        m_toolbar.addItem("Rotate", "rotate", "Rotate tool", []() {});
+        m_toolbar.addItem("Scale", "scale", "Scale tool", []() {});
+        m_toolbar.addSeparator();
+        m_toolbar.addItem("Play", "play", "Play", []() {});
+        m_toolbar.addItem("Pause", "pause", "Pause", []() {});
+        m_toolbar.addItem("Stop", "stop", "Stop", []() {});
+
+        NF_LOG_INFO("Editor", "NovaForge Editor initialized");
+        return true;
+    }
+
+    void shutdown() {
+        m_ideService.shutdown();
+        m_editorPanels.clear();
+        m_ui.shutdown();
+        m_renderer.shutdown();
+        NF_LOG_INFO("Editor", "NovaForge Editor shutdown");
+    }
+
+    void update() {}
+    void render() {}
+
+    // Accessors for editor services
+    EditorCommandRegistry& commands() { return m_commands; }
+    CommandStack& commandStack() { return m_commandStack; }
+    SelectionService& selection() { return m_selection; }
+    ContentBrowser& contentBrowser() { return m_contentBrowser; }
+    RecentFilesList& recentFiles() { return m_recentFiles; }
+    LaunchService& launchService() { return m_launchService; }
+    DockLayout& dockLayout() { return m_dockLayout; }
+    EditorToolbar& toolbar() { return m_toolbar; }
+
+    [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
+    void setCurrentWorldPath(const std::string& path) {
+        m_currentWorldPath = path;
+        m_recentFiles.addFile(path);
+    }
+
+    [[nodiscard]] bool isDirty() const { return m_commandStack.isDirty(); }
+
+    void addPanel(std::unique_ptr<EditorPanel> panel) {
+        m_dockLayout.addPanel(panel->name(), panel->slot());
+        m_editorPanels.push_back(std::move(panel));
+    }
+
+    [[nodiscard]] const std::vector<std::unique_ptr<EditorPanel>>& editorPanels() const {
+        return m_editorPanels;
+    }
+
+    void setGraphVM(GraphVM* vm) { m_graphVM = vm; }
+    [[nodiscard]] GraphVM* graphVM() const { return m_graphVM; }
+
+    IDEService& ideService() { return m_ideService; }
+
+private:
+    void togglePanelVisibility(const std::string& name) {
+        if (auto* p = m_dockLayout.findPanel(name)) {
+            p->visible = !p->visible;
+            NF_LOG_INFO("Editor", "Toggle panel '" + name + "' visible=" +
+                        (p->visible ? "true" : "false"));
+        }
+    }
+
+    Renderer m_renderer;
+    UIRenderer m_ui;
+    EditorCommandRegistry m_commands;
+    CommandStack m_commandStack;
+    SelectionService m_selection;
+    ContentBrowser m_contentBrowser;
+    RecentFilesList m_recentFiles;
+    LaunchService m_launchService;
+    DockLayout m_dockLayout;
+    EditorToolbar m_toolbar;
+    std::vector<std::unique_ptr<EditorPanel>> m_editorPanels;
+    std::string m_currentWorldPath;
+    GraphVM* m_graphVM = nullptr;
+    IDEService m_ideService;
 };
 
 // ── Property Editor ──────────────────────────────────────────────

@@ -419,3 +419,498 @@ TEST_CASE("PropertyEditor undo-safe string change", "[Editor][PropertyEditor]") 
     stack.undo();
     REQUIRE(name == "OldName");
 }
+
+// ── DockLayout ───────────────────────────────────────────────────
+
+TEST_CASE("DockLayout add and find panel", "[Editor][DockLayout]") {
+    NF::DockLayout layout;
+    layout.addPanel("Viewport", NF::DockSlot::Center);
+    layout.addPanel("Inspector", NF::DockSlot::Right);
+
+    REQUIRE(layout.panelCount() == 2);
+    REQUIRE(layout.findPanel("Viewport") != nullptr);
+    REQUIRE(layout.findPanel("Viewport")->slot == NF::DockSlot::Center);
+    REQUIRE(layout.findPanel("Inspector") != nullptr);
+    REQUIRE(layout.findPanel("Missing") == nullptr);
+}
+
+TEST_CASE("DockLayout remove panel", "[Editor][DockLayout]") {
+    NF::DockLayout layout;
+    layout.addPanel("A", NF::DockSlot::Left);
+    layout.addPanel("B", NF::DockSlot::Right);
+    layout.removePanel("A");
+
+    REQUIRE(layout.panelCount() == 1);
+    REQUIRE(layout.findPanel("A") == nullptr);
+    REQUIRE(layout.findPanel("B") != nullptr);
+}
+
+TEST_CASE("DockLayout visibility toggle", "[Editor][DockLayout]") {
+    NF::DockLayout layout;
+    layout.addPanel("Console", NF::DockSlot::Bottom);
+
+    REQUIRE(layout.findPanel("Console")->visible == true);
+    layout.setPanelVisible("Console", false);
+    REQUIRE(layout.findPanel("Console")->visible == false);
+    layout.setPanelVisible("Console", true);
+    REQUIRE(layout.findPanel("Console")->visible == true);
+}
+
+TEST_CASE("DockLayout computeLayout positions", "[Editor][DockLayout]") {
+    NF::DockLayout layout;
+    layout.addPanel("Left", NF::DockSlot::Left);
+    layout.addPanel("Right", NF::DockSlot::Right);
+    layout.addPanel("Top", NF::DockSlot::Top);
+    layout.addPanel("Bottom", NF::DockSlot::Bottom);
+    layout.addPanel("Center", NF::DockSlot::Center);
+
+    float w = 1920.f, h = 1080.f, tbH = 40.f, sbH = 30.f;
+    layout.computeLayout(w, h, tbH, sbH);
+
+    auto* left = layout.findPanel("Left");
+    REQUIRE(left->bounds.x == 0.f);
+    REQUIRE(left->bounds.y == tbH);
+    REQUIRE(left->bounds.w == NF::DockLayout::kDefaultLeftWidth);
+
+    auto* right = layout.findPanel("Right");
+    REQUIRE(right->bounds.x == w - NF::DockLayout::kDefaultRightWidth);
+
+    auto* center = layout.findPanel("Center");
+    REQUIRE(center->bounds.x == NF::DockLayout::kDefaultLeftWidth);
+    REQUIRE(center->bounds.w > 0.f);
+}
+
+TEST_CASE("DockLayout hidden panels excluded from layout", "[Editor][DockLayout]") {
+    NF::DockLayout layout;
+    layout.addPanel("Left", NF::DockSlot::Left);
+    layout.addPanel("Center", NF::DockSlot::Center);
+    layout.setPanelVisible("Left", false);
+
+    layout.computeLayout(1920.f, 1080.f, 40.f, 30.f);
+
+    // Center should start at x=0 since left is hidden
+    auto* center = layout.findPanel("Center");
+    REQUIRE(center->bounds.x == 0.f);
+}
+
+TEST_CASE("DockLayout panels accessor", "[Editor][DockLayout]") {
+    NF::DockLayout layout;
+    layout.addPanel("A", NF::DockSlot::Left);
+    layout.addPanel("B", NF::DockSlot::Right);
+
+    auto& panels = layout.panels();
+    REQUIRE(panels.size() == 2);
+    REQUIRE(panels[0].name == "A");
+    REQUIRE(panels[1].name == "B");
+}
+
+// ── EditorPanel / ViewportPanel ──────────────────────────────────
+
+TEST_CASE("ViewportPanel defaults", "[Editor][Panel]") {
+    NF::ViewportPanel vp;
+    REQUIRE(vp.name() == "Viewport");
+    REQUIRE(vp.slot() == NF::DockSlot::Center);
+    REQUIRE(vp.isVisible());
+    REQUIRE(vp.gridEnabled());
+    REQUIRE(vp.renderMode() == NF::RenderMode::Shaded);
+    REQUIRE(vp.toolMode() == NF::ToolMode::Select);
+    REQUIRE(vp.cameraZoom() == 1.f);
+}
+
+TEST_CASE("ViewportPanel setters", "[Editor][Panel]") {
+    NF::ViewportPanel vp;
+    vp.setCameraPosition({10.f, 20.f, 30.f});
+    vp.setCameraZoom(2.5f);
+    vp.setGridEnabled(false);
+    vp.setRenderMode(NF::RenderMode::Wireframe);
+    vp.setToolMode(NF::ToolMode::Rotate);
+    vp.setVisible(false);
+
+    REQUIRE(vp.cameraPosition().x == 10.f);
+    REQUIRE(vp.cameraZoom() == 2.5f);
+    REQUIRE_FALSE(vp.gridEnabled());
+    REQUIRE(vp.renderMode() == NF::RenderMode::Wireframe);
+    REQUIRE(vp.toolMode() == NF::ToolMode::Rotate);
+    REQUIRE_FALSE(vp.isVisible());
+}
+
+// ── InspectorPanel ───────────────────────────────────────────────
+
+TEST_CASE("InspectorPanel stores references", "[Editor][Panel]") {
+    NF::SelectionService sel;
+    NF::TypeRegistry& reg = NF::TypeRegistry::instance();
+    NF::InspectorPanel panel(&sel, &reg);
+
+    REQUIRE(panel.name() == "Inspector");
+    REQUIRE(panel.slot() == NF::DockSlot::Right);
+    REQUIRE(panel.selectionService() == &sel);
+    REQUIRE(panel.typeRegistry() == &reg);
+}
+
+// ── HierarchyPanel ──────────────────────────────────────────────
+
+TEST_CASE("HierarchyPanel search filter and entity list", "[Editor][Panel]") {
+    NF::SelectionService sel;
+    NF::HierarchyPanel panel(&sel);
+
+    REQUIRE(panel.name() == "Hierarchy");
+    REQUIRE(panel.slot() == NF::DockSlot::Left);
+    REQUIRE(panel.selectionService() == &sel);
+    REQUIRE(panel.searchFilter().empty());
+
+    panel.setSearchFilter("Player");
+    REQUIRE(panel.searchFilter() == "Player");
+
+    panel.setEntityList({1, 2, 3});
+    REQUIRE(panel.entityList().size() == 3);
+    REQUIRE(panel.entityList()[0] == 1);
+}
+
+// ── ConsolePanel ─────────────────────────────────────────────────
+
+TEST_CASE("ConsolePanel add messages", "[Editor][Panel]") {
+    NF::ConsolePanel console;
+    REQUIRE(console.name() == "Console");
+    REQUIRE(console.slot() == NF::DockSlot::Bottom);
+    REQUIRE(console.messageCount() == 0);
+
+    console.addMessage("Hello", NF::ConsoleMessageLevel::Info, 1.0f);
+    console.addMessage("Warn!", NF::ConsoleMessageLevel::Warning, 2.0f);
+
+    REQUIRE(console.messageCount() == 2);
+    REQUIRE(console.messages()[0].text == "Hello");
+    REQUIRE(console.messages()[0].level == NF::ConsoleMessageLevel::Info);
+    REQUIRE(console.messages()[1].level == NF::ConsoleMessageLevel::Warning);
+}
+
+TEST_CASE("ConsolePanel clear messages", "[Editor][Panel]") {
+    NF::ConsolePanel console;
+    console.addMessage("test", NF::ConsoleMessageLevel::Error, 0.f);
+    console.clearMessages();
+    REQUIRE(console.messageCount() == 0);
+}
+
+TEST_CASE("ConsolePanel max messages cap", "[Editor][Panel]") {
+    NF::ConsolePanel console;
+    for (size_t i = 0; i < NF::ConsolePanel::kMaxMessages + 50; ++i) {
+        console.addMessage("msg" + std::to_string(i), NF::ConsoleMessageLevel::Info,
+                           static_cast<float>(i));
+    }
+    REQUIRE(console.messageCount() == NF::ConsolePanel::kMaxMessages);
+    // Oldest messages should have been evicted
+    REQUIRE(console.messages()[0].text == "msg50");
+}
+
+// ── ContentBrowserPanel ──────────────────────────────────────────
+
+TEST_CASE("ContentBrowserPanel wraps ContentBrowser", "[Editor][Panel]") {
+    NF::ContentBrowser browser;
+    NF::ContentBrowserPanel panel(&browser);
+
+    REQUIRE(panel.name() == "ContentBrowser");
+    REQUIRE(panel.slot() == NF::DockSlot::Left);
+    REQUIRE(panel.contentBrowser() == &browser);
+    REQUIRE(panel.viewMode() == NF::ContentViewMode::Grid);
+
+    panel.setViewMode(NF::ContentViewMode::List);
+    REQUIRE(panel.viewMode() == NF::ContentViewMode::List);
+}
+
+// ── EditorToolbar ────────────────────────────────────────────────
+
+TEST_CASE("EditorToolbar add items and separators", "[Editor][Toolbar]") {
+    NF::EditorToolbar toolbar;
+    REQUIRE(toolbar.itemCount() == 0);
+
+    toolbar.addItem("Select", "select_icon", "Select tool", []() {});
+    toolbar.addItem("Move", "move_icon", "Move tool", []() {});
+    toolbar.addSeparator();
+    toolbar.addItem("Play", "play_icon", "Play", []() {});
+
+    REQUIRE(toolbar.itemCount() == 4);
+    REQUIRE(toolbar.items()[0].name == "Select");
+    REQUIRE(toolbar.items()[0].tooltip == "Select tool");
+    REQUIRE(toolbar.items()[0].enabled == true);
+    REQUIRE_FALSE(toolbar.items()[0].isSeparator);
+    REQUIRE(toolbar.items()[2].isSeparator);
+    REQUIRE(toolbar.items()[3].name == "Play");
+}
+
+// ── EditorApp expanded ───────────────────────────────────────────
+
+TEST_CASE("EditorApp creates default panels on init", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.dockLayout().panelCount() == 5);
+    REQUIRE(app.dockLayout().findPanel("Viewport") != nullptr);
+    REQUIRE(app.dockLayout().findPanel("Inspector") != nullptr);
+    REQUIRE(app.dockLayout().findPanel("Hierarchy") != nullptr);
+    REQUIRE(app.dockLayout().findPanel("Console") != nullptr);
+    REQUIRE(app.dockLayout().findPanel("ContentBrowser") != nullptr);
+
+    REQUIRE(app.editorPanels().size() == 5);
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp creates default toolbar items", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    // 4 tools + 1 separator + 3 play controls = 8
+    REQUIRE(app.toolbar().itemCount() == 8);
+    REQUIRE(app.toolbar().items()[0].name == "Select");
+    REQUIRE(app.toolbar().items()[4].isSeparator);
+    REQUIRE(app.toolbar().items()[5].name == "Play");
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp view toggle commands", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    // Inspector should be visible by default
+    REQUIRE(app.dockLayout().findPanel("Inspector")->visible == true);
+
+    // Toggle it off
+    app.commands().executeCommand("view.toggle_inspector");
+    REQUIRE(app.dockLayout().findPanel("Inspector")->visible == false);
+
+    // Toggle it back on
+    app.commands().executeCommand("view.toggle_inspector");
+    REQUIRE(app.dockLayout().findPanel("Inspector")->visible == true);
+
+    // Also check other toggle commands exist
+    REQUIRE(app.commands().findCommand("view.toggle_hierarchy") != nullptr);
+    REQUIRE(app.commands().findCommand("view.toggle_console") != nullptr);
+    REQUIRE(app.commands().findCommand("view.toggle_content_browser") != nullptr);
+
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp graph commands registered", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.commands().findCommand("graph.new_graph") != nullptr);
+    REQUIRE(app.commands().findCommand("graph.open_graph") != nullptr);
+    REQUIRE(app.commands().executeCommand("graph.new_graph"));
+    REQUIRE(app.commands().executeCommand("graph.open_graph"));
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp graphVM accessor", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.graphVM() == nullptr);
+    NF::GraphVM vm;
+    app.setGraphVM(&vm);
+    REQUIRE(app.graphVM() == &vm);
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp addPanel", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    size_t before = app.editorPanels().size();
+    auto custom = std::make_unique<NF::ViewportPanel>();
+    app.addPanel(std::move(custom));
+    REQUIRE(app.editorPanels().size() == before + 1);
+    app.shutdown();
+}
+
+// ── IDE Tests ────────────────────────────────────────────────────
+
+TEST_CASE("ProjectIndexer index files", "[Editor][IDE]") {
+    NF::ProjectIndexer indexer;
+    indexer.indexFile("src/Core/Core.h", NF::SourceFileType::Header, "Core");
+    indexer.indexFile("src/Core/Core.cpp", NF::SourceFileType::Source, "Core");
+    indexer.indexFile("src/Render/Shader.glsl", NF::SourceFileType::Shader, "Render");
+    indexer.indexFile("src/Scripts/main.lua", NF::SourceFileType::Script, "Scripts");
+    indexer.indexFile("data/config.json", NF::SourceFileType::Data, "Data");
+
+    REQUIRE(indexer.fileCount() == 5);
+
+    auto headers = indexer.findFilesByType(NF::SourceFileType::Header);
+    REQUIRE(headers.size() == 1);
+    REQUIRE(headers[0]->path == "src/Core/Core.h");
+
+    auto coreFiles = indexer.findFilesByModule("Core");
+    REQUIRE(coreFiles.size() == 2);
+
+    auto found = indexer.findFilesByName("Shader");
+    REQUIRE(found.size() == 1);
+    REQUIRE(found[0]->path == "src/Render/Shader.glsl");
+
+    indexer.clear();
+    REQUIRE(indexer.fileCount() == 0);
+}
+
+TEST_CASE("ProjectIndexer add and find symbols", "[Editor][IDE]") {
+    NF::ProjectIndexer indexer;
+    indexer.indexFile("src/Engine.h", NF::SourceFileType::Header, "Engine");
+    indexer.indexFile("src/Render.h", NF::SourceFileType::Header, "Render");
+
+    indexer.addSymbol("src/Engine.h", "EngineInit");
+    indexer.addSymbol("src/Engine.h", "EngineShutdown");
+    indexer.addSymbol("src/Render.h", "RenderFrame");
+
+    auto results = indexer.findSymbol("EngineInit");
+    REQUIRE(results.size() == 1);
+    REQUIRE(results[0]->path == "src/Engine.h");
+
+    auto none = indexer.findSymbol("NonExistent");
+    REQUIRE(none.empty());
+}
+
+TEST_CASE("CodeNavigator go to definition", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"myFunc", NF::SymbolKind::Function, "src/main.cpp", 42});
+    nav.addEntry({"MyClass", NF::SymbolKind::Class, "src/types.h", 10});
+
+    auto target = nav.goToDefinition("myFunc");
+    REQUIRE(target.has_value());
+    REQUIRE(target->filePath == "src/main.cpp");
+    REQUIRE(target->line == 42);
+    REQUIRE(target->symbolName == "myFunc");
+    REQUIRE(target->kind == NF::SymbolKind::Function);
+
+    auto missing = nav.goToDefinition("doesNotExist");
+    REQUIRE_FALSE(missing.has_value());
+}
+
+TEST_CASE("CodeNavigator find references", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"update", NF::SymbolKind::Function, "src/a.cpp", 10});
+    nav.addEntry({"update", NF::SymbolKind::Function, "src/b.cpp", 20});
+    nav.addEntry({"update", NF::SymbolKind::Function, "src/c.cpp", 30});
+    nav.addEntry({"render", NF::SymbolKind::Function, "src/d.cpp", 40});
+
+    auto refs = nav.findReferences("update");
+    REQUIRE(refs.size() == 3);
+}
+
+TEST_CASE("CodeNavigator search symbols", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"initEngine", NF::SymbolKind::Function, "src/a.cpp", 1});
+    nav.addEntry({"initRenderer", NF::SymbolKind::Function, "src/b.cpp", 2});
+    nav.addEntry({"shutdown", NF::SymbolKind::Function, "src/c.cpp", 3});
+
+    auto results = nav.searchSymbols("init");
+    REQUIRE(results.size() == 2);
+
+    auto all = nav.searchSymbols("i");
+    REQUIRE(all.size() == 2);  // initEngine, initRenderer contain 'i'
+
+    auto none = nav.searchSymbols("xyz");
+    REQUIRE(none.empty());
+}
+
+TEST_CASE("CodeNavigator find by kind", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"foo", NF::SymbolKind::Function, "a.cpp", 1});
+    nav.addEntry({"bar", NF::SymbolKind::Function, "b.cpp", 2});
+    nav.addEntry({"MyClass", NF::SymbolKind::Class, "c.h", 3});
+    nav.addEntry({"MyEnum", NF::SymbolKind::Enum, "d.h", 4});
+
+    auto funcs = nav.findSymbolsByKind(NF::SymbolKind::Function);
+    REQUIRE(funcs.size() == 2);
+
+    auto classes = nav.findSymbolsByKind(NF::SymbolKind::Class);
+    REQUIRE(classes.size() == 1);
+    REQUIRE(classes[0].symbolName == "MyClass");
+
+    auto enums = nav.findSymbolsByKind(NF::SymbolKind::Enum);
+    REQUIRE(enums.size() == 1);
+}
+
+TEST_CASE("BreadcrumbTrail push and pop", "[Editor][IDE]") {
+    NF::BreadcrumbTrail trail;
+    REQUIRE(trail.depth() == 0);
+    REQUIRE(trail.current() == nullptr);
+
+    trail.push({"main", "src/main.cpp", 1});
+    trail.push({"init", "src/init.cpp", 10});
+    REQUIRE(trail.depth() == 2);
+    REQUIRE(trail.current()->label == "init");
+
+    auto popped = trail.pop();
+    REQUIRE(popped.has_value());
+    REQUIRE(popped->label == "init");
+    REQUIRE(trail.depth() == 1);
+    REQUIRE(trail.current()->label == "main");
+
+    trail.clear();
+    REQUIRE(trail.depth() == 0);
+    REQUIRE(trail.pop() == std::nullopt);
+}
+
+TEST_CASE("BreadcrumbTrail max depth", "[Editor][IDE]") {
+    NF::BreadcrumbTrail trail;
+    for (int i = 0; i < 60; ++i) {
+        trail.push({"item" + std::to_string(i), "file.cpp", static_cast<uint32_t>(i)});
+    }
+    REQUIRE(trail.depth() == 50);
+    // Oldest items should have been evicted; newest should be item59
+    REQUIRE(trail.current()->label == "item59");
+    REQUIRE(trail.trail().front().label == "item10");
+}
+
+TEST_CASE("IDEService lifecycle", "[Editor][IDE]") {
+    NF::IDEService ide;
+    REQUIRE_FALSE(ide.isInitialized());
+
+    ide.init();
+    REQUIRE(ide.isInitialized());
+
+    ide.shutdown();
+    REQUIRE_FALSE(ide.isInitialized());
+}
+
+TEST_CASE("IDEService navigate and go back", "[Editor][IDE]") {
+    NF::IDEService ide;
+    ide.init();
+
+    ide.navigateTo("src/main.cpp", 10, "main");
+    ide.navigateTo("src/render.cpp", 42, "render");
+
+    REQUIRE(ide.breadcrumbs().depth() == 2);
+    REQUIRE(ide.breadcrumbs().current()->label == "render");
+
+    REQUIRE(ide.goBack() == true);
+    REQUIRE(ide.breadcrumbs().depth() == 1);
+    REQUIRE(ide.breadcrumbs().current()->label == "main");
+
+    REQUIRE(ide.goBack() == true);
+    REQUIRE(ide.breadcrumbs().depth() == 0);
+
+    REQUIRE(ide.goBack() == false);
+
+    ide.shutdown();
+}
+
+TEST_CASE("EditorApp IDE commands registered", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.commands().findCommand("ide.go_to_definition") != nullptr);
+    REQUIRE(app.commands().findCommand("ide.find_references") != nullptr);
+    REQUIRE(app.commands().findCommand("ide.go_back") != nullptr);
+    REQUIRE(app.commands().findCommand("ide.index_project") != nullptr);
+
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp IDE service accessor", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.ideService().isInitialized());
+    app.ideService().navigateTo("test.cpp", 1, "test");
+    REQUIRE(app.ideService().breadcrumbs().depth() == 1);
+
+    app.shutdown();
+    REQUIRE_FALSE(app.ideService().isInitialized());
+}

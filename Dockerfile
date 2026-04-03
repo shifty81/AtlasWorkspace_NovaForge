@@ -34,4 +34,9 @@ COPY Schemas/ Schemas/
 EXPOSE 27015/udp
 EXPOSE 27015/tcp
 
+# Server metadata
+LABEL org.opencontainers.image.title="NovaForge Server" \
+      org.opencontainers.image.description="NovaForge dedicated game server" \
+      org.opencontainers.image.version="0.1.0"
+
 ENTRYPOINT ["./NovaForgeServer"]
