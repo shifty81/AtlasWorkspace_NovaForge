@@ -9,7 +9,8 @@ TEST_CASE("Chunk voxel get/set", "[Game][Voxel]") {
 
     chunk.set(5, 5, 5, NF::VoxelType::Stone);
     REQUIRE(chunk.get(5, 5, 5) == NF::VoxelType::Stone);
-    REQUIRE(chunk.dirty);
+    REQUIRE(chunk.meshDirty);
+    REQUIRE(chunk.collisionDirty);
     REQUIRE_FALSE(chunk.meshed);
 }
 
@@ -77,7 +78,6 @@ TEST_CASE("Chunk separate mesh and collision dirty flags", "[Game][Voxel]") {
 
     // markAllClean should clear everything
     chunk.markAllClean();
-    REQUIRE_FALSE(chunk.dirty);
     REQUIRE_FALSE(chunk.meshDirty);
     REQUIRE_FALSE(chunk.collisionDirty);
     REQUIRE(chunk.meshed);

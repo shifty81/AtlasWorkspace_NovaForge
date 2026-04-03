@@ -59,9 +59,6 @@ struct Chunk {
     bool collisionDirty = true;
     bool meshed = false;
 
-    // Legacy alias maintained for existing code
-    bool dirty = true;
-
     VoxelType get(int x, int y, int z) const {
         if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE)
             return VoxelType::Air;
@@ -72,7 +69,6 @@ struct Chunk {
         if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE)
             return;
         voxels[x][y][z] = type;
-        dirty = true;
         meshDirty = true;
         collisionDirty = true;
         meshed = false;
@@ -80,7 +76,7 @@ struct Chunk {
 
     void markMeshClean() { meshDirty = false; meshed = true; }
     void markCollisionClean() { collisionDirty = false; }
-    void markAllClean() { dirty = false; meshDirty = false; collisionDirty = false; meshed = true; }
+    void markAllClean() { meshDirty = false; collisionDirty = false; meshed = true; }
 
     [[nodiscard]] bool isFullyAir() const {
         for (int x = 0; x < CHUNK_SIZE; ++x)
@@ -145,7 +141,6 @@ public:
             }
         }
 
-        chunk.dirty = true;
         chunk.meshDirty = true;
         chunk.collisionDirty = true;
         chunk.meshed = false;

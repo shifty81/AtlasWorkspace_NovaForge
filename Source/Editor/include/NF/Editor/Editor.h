@@ -193,8 +193,9 @@ public:
         // Derive project root from executable path
         auto exePath = std::filesystem::path(executablePath);
         // Walk up from bin/ or Builds/ to find project root
+        constexpr int kMaxProjectRootSearchDepth = 5;
         auto dir = exePath.parent_path();
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < kMaxProjectRootSearchDepth; ++i) {
             if (std::filesystem::exists(dir / "Config" / "novaforge.project.json")) {
                 m_projectRoot = dir.string();
                 break;
@@ -423,16 +424,18 @@ public:
 
         m_commands.registerCommand("edit.undo", [this]() {
             if (m_commandStack.canUndo()) {
+                std::string desc = m_commandStack.undoDescription();
                 m_commandStack.undo();
-                NF_LOG_INFO("Editor", "Undo: " + m_commandStack.redoDescription());
+                NF_LOG_INFO("Editor", "Undo: " + desc);
             }
         }, "Undo", "Ctrl+Z");
         m_commands.setEnabledCheck("edit.undo", [this]() { return m_commandStack.canUndo(); });
 
         m_commands.registerCommand("edit.redo", [this]() {
             if (m_commandStack.canRedo()) {
+                std::string desc = m_commandStack.redoDescription();
                 m_commandStack.redo();
-                NF_LOG_INFO("Editor", "Redo: " + m_commandStack.undoDescription());
+                NF_LOG_INFO("Editor", "Redo: " + desc);
             }
         }, "Redo", "Ctrl+Y");
         m_commands.setEnabledCheck("edit.redo", [this]() { return m_commandStack.canRedo(); });
