@@ -720,3 +720,197 @@ TEST_CASE("EditorApp addPanel", "[Editor][EditorApp]") {
     REQUIRE(app.editorPanels().size() == before + 1);
     app.shutdown();
 }
+
+// ── IDE Tests ────────────────────────────────────────────────────
+
+TEST_CASE("ProjectIndexer index files", "[Editor][IDE]") {
+    NF::ProjectIndexer indexer;
+    indexer.indexFile("src/Core/Core.h", NF::SourceFileType::Header, "Core");
+    indexer.indexFile("src/Core/Core.cpp", NF::SourceFileType::Source, "Core");
+    indexer.indexFile("src/Render/Shader.glsl", NF::SourceFileType::Shader, "Render");
+    indexer.indexFile("src/Scripts/main.lua", NF::SourceFileType::Script, "Scripts");
+    indexer.indexFile("data/config.json", NF::SourceFileType::Data, "Data");
+
+    REQUIRE(indexer.fileCount() == 5);
+
+    auto headers = indexer.findFilesByType(NF::SourceFileType::Header);
+    REQUIRE(headers.size() == 1);
+    REQUIRE(headers[0]->path == "src/Core/Core.h");
+
+    auto coreFiles = indexer.findFilesByModule("Core");
+    REQUIRE(coreFiles.size() == 2);
+
+    auto found = indexer.findFilesByName("Shader");
+    REQUIRE(found.size() == 1);
+    REQUIRE(found[0]->path == "src/Render/Shader.glsl");
+
+    indexer.clear();
+    REQUIRE(indexer.fileCount() == 0);
+}
+
+TEST_CASE("ProjectIndexer add and find symbols", "[Editor][IDE]") {
+    NF::ProjectIndexer indexer;
+    indexer.indexFile("src/Engine.h", NF::SourceFileType::Header, "Engine");
+    indexer.indexFile("src/Render.h", NF::SourceFileType::Header, "Render");
+
+    indexer.addSymbol("src/Engine.h", "EngineInit");
+    indexer.addSymbol("src/Engine.h", "EngineShutdown");
+    indexer.addSymbol("src/Render.h", "RenderFrame");
+
+    auto results = indexer.findSymbol("EngineInit");
+    REQUIRE(results.size() == 1);
+    REQUIRE(results[0]->path == "src/Engine.h");
+
+    auto none = indexer.findSymbol("NonExistent");
+    REQUIRE(none.empty());
+}
+
+TEST_CASE("CodeNavigator go to definition", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"myFunc", NF::SymbolKind::Function, "src/main.cpp", 42});
+    nav.addEntry({"MyClass", NF::SymbolKind::Class, "src/types.h", 10});
+
+    auto target = nav.goToDefinition("myFunc");
+    REQUIRE(target.has_value());
+    REQUIRE(target->filePath == "src/main.cpp");
+    REQUIRE(target->line == 42);
+    REQUIRE(target->symbolName == "myFunc");
+    REQUIRE(target->kind == NF::SymbolKind::Function);
+
+    auto missing = nav.goToDefinition("doesNotExist");
+    REQUIRE_FALSE(missing.has_value());
+}
+
+TEST_CASE("CodeNavigator find references", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"update", NF::SymbolKind::Function, "src/a.cpp", 10});
+    nav.addEntry({"update", NF::SymbolKind::Function, "src/b.cpp", 20});
+    nav.addEntry({"update", NF::SymbolKind::Function, "src/c.cpp", 30});
+    nav.addEntry({"render", NF::SymbolKind::Function, "src/d.cpp", 40});
+
+    auto refs = nav.findReferences("update");
+    REQUIRE(refs.size() == 3);
+}
+
+TEST_CASE("CodeNavigator search symbols", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"initEngine", NF::SymbolKind::Function, "src/a.cpp", 1});
+    nav.addEntry({"initRenderer", NF::SymbolKind::Function, "src/b.cpp", 2});
+    nav.addEntry({"shutdown", NF::SymbolKind::Function, "src/c.cpp", 3});
+
+    auto results = nav.searchSymbols("init");
+    REQUIRE(results.size() == 2);
+
+    auto all = nav.searchSymbols("i");
+    REQUIRE(all.size() == 2);  // initEngine, initRenderer contain 'i'
+
+    auto none = nav.searchSymbols("xyz");
+    REQUIRE(none.empty());
+}
+
+TEST_CASE("CodeNavigator find by kind", "[Editor][IDE]") {
+    NF::CodeNavigator nav;
+    nav.addEntry({"foo", NF::SymbolKind::Function, "a.cpp", 1});
+    nav.addEntry({"bar", NF::SymbolKind::Function, "b.cpp", 2});
+    nav.addEntry({"MyClass", NF::SymbolKind::Class, "c.h", 3});
+    nav.addEntry({"MyEnum", NF::SymbolKind::Enum, "d.h", 4});
+
+    auto funcs = nav.findSymbolsByKind(NF::SymbolKind::Function);
+    REQUIRE(funcs.size() == 2);
+
+    auto classes = nav.findSymbolsByKind(NF::SymbolKind::Class);
+    REQUIRE(classes.size() == 1);
+    REQUIRE(classes[0].symbolName == "MyClass");
+
+    auto enums = nav.findSymbolsByKind(NF::SymbolKind::Enum);
+    REQUIRE(enums.size() == 1);
+}
+
+TEST_CASE("BreadcrumbTrail push and pop", "[Editor][IDE]") {
+    NF::BreadcrumbTrail trail;
+    REQUIRE(trail.depth() == 0);
+    REQUIRE(trail.current() == nullptr);
+
+    trail.push({"main", "src/main.cpp", 1});
+    trail.push({"init", "src/init.cpp", 10});
+    REQUIRE(trail.depth() == 2);
+    REQUIRE(trail.current()->label == "init");
+
+    auto popped = trail.pop();
+    REQUIRE(popped.has_value());
+    REQUIRE(popped->label == "init");
+    REQUIRE(trail.depth() == 1);
+    REQUIRE(trail.current()->label == "main");
+
+    trail.clear();
+    REQUIRE(trail.depth() == 0);
+    REQUIRE(trail.pop() == std::nullopt);
+}
+
+TEST_CASE("BreadcrumbTrail max depth", "[Editor][IDE]") {
+    NF::BreadcrumbTrail trail;
+    for (int i = 0; i < 60; ++i) {
+        trail.push({"item" + std::to_string(i), "file.cpp", static_cast<uint32_t>(i)});
+    }
+    REQUIRE(trail.depth() == 50);
+    // Oldest items should have been evicted; newest should be item59
+    REQUIRE(trail.current()->label == "item59");
+    REQUIRE(trail.trail().front().label == "item10");
+}
+
+TEST_CASE("IDEService lifecycle", "[Editor][IDE]") {
+    NF::IDEService ide;
+    REQUIRE_FALSE(ide.isInitialized());
+
+    ide.init();
+    REQUIRE(ide.isInitialized());
+
+    ide.shutdown();
+    REQUIRE_FALSE(ide.isInitialized());
+}
+
+TEST_CASE("IDEService navigate and go back", "[Editor][IDE]") {
+    NF::IDEService ide;
+    ide.init();
+
+    ide.navigateTo("src/main.cpp", 10, "main");
+    ide.navigateTo("src/render.cpp", 42, "render");
+
+    REQUIRE(ide.breadcrumbs().depth() == 2);
+    REQUIRE(ide.breadcrumbs().current()->label == "render");
+
+    REQUIRE(ide.goBack() == true);
+    REQUIRE(ide.breadcrumbs().depth() == 1);
+    REQUIRE(ide.breadcrumbs().current()->label == "main");
+
+    REQUIRE(ide.goBack() == true);
+    REQUIRE(ide.breadcrumbs().depth() == 0);
+
+    REQUIRE(ide.goBack() == false);
+
+    ide.shutdown();
+}
+
+TEST_CASE("EditorApp IDE commands registered", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.commands().findCommand("ide.go_to_definition") != nullptr);
+    REQUIRE(app.commands().findCommand("ide.find_references") != nullptr);
+    REQUIRE(app.commands().findCommand("ide.go_back") != nullptr);
+    REQUIRE(app.commands().findCommand("ide.index_project") != nullptr);
+
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp IDE service accessor", "[Editor][EditorApp]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    REQUIRE(app.ideService().isInitialized());
+    app.ideService().navigateTo("test.cpp", 1, "test");
+    REQUIRE(app.ideService().breadcrumbs().depth() == 1);
+
+    app.shutdown();
+    REQUIRE_FALSE(app.ideService().isInitialized());
+}
