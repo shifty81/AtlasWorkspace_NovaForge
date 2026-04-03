@@ -23,11 +23,14 @@
 
 ## Phase 1 — Core Engine (Next)
 
-- [ ] Port full Core module from MasterRepoV001 (math, memory, logging, events, reflection, serialization)
-- [ ] Port full Engine module (ECS, world/level, behavior trees, asset system)
-- [ ] Port full Input module (keyboard, mouse, gamepad, action mappings)
-- [ ] Expand Catch2 test coverage
-- [ ] Validate: clean compile, core tests pass
+- [x] Expand Core module (Mat4, Quat, Transform, Timer, StringID, TypeID)
+- [x] Expand Engine module (ComponentStore, SystemBase, Level, BehaviorTree, AssetHandle)
+- [x] Expand Input module (full KeyCode enum, ActionMapping, InputManager, mouse/gamepad)
+- [x] Expand Catch2 test coverage (67 tests, up from 19)
+- [x] Validate: clean compile, core tests pass
+- [ ] Port full Core module from MasterRepoV001 (memory, reflection, serialization)
+- [ ] Port full Engine module (world streaming, scene graph, full asset pipeline)
+- [ ] Port full Input module (platform-specific backends)
 
 ## Phase 2 — Rendering & Physics
 

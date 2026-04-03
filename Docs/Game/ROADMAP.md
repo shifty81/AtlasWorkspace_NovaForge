@@ -7,7 +7,7 @@
 | Phase | Goal | Status |
 |-------|------|--------|
 | **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
-| **Phase 1** — Core Engine | Core, Engine, Input modules compiling with tests | 🔜 Next |
+| **Phase 1** — Core Engine | Core, Engine, Input modules compiling with tests | 🔧 Active |
 | **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | 📋 Planned |
 | **Phase 3** — Voxel Runtime | Chunk data, edit API, serialization, game loop | 📋 Planned |
 | **Phase 4** — Editor | Docking layout, panels, viewport, editor services | 📋 Planned |

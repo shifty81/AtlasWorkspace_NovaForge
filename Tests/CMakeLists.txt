@@ -46,3 +46,10 @@ add_executable(NF_GraphVMTests
 )
 target_link_libraries(NF_GraphVMTests PRIVATE NF::GraphVM NF::Core Catch2::Catch2WithMain)
 catch_discover_tests(NF_GraphVMTests)
+
+# Input tests
+add_executable(NF_InputTests
+    Input/test_input.cpp
+)
+target_link_libraries(NF_InputTests PRIVATE NF::Input NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_InputTests)
