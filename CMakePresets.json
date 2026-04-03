@@ -40,6 +40,36 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "NF_BUILD_TESTS": "OFF"
       }
+    },
+    {
+      "name": "vs2022",
+      "displayName": "Visual Studio 2022",
+      "description": "Generate .sln for Visual Studio 2022 (Windows only)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/Builds/vs2022",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "NF_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "vs2019",
+      "displayName": "Visual Studio 2019",
+      "description": "Generate .sln for Visual Studio 2019 (Windows only)",
+      "generator": "Visual Studio 16 2019",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/Builds/vs2019",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "NF_BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -54,12 +84,40 @@
     {
       "name": "relwithdebinfo",
       "configurePreset": "relwithdebinfo"
+    },
+    {
+      "name": "vs2022-debug",
+      "configurePreset": "vs2022",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vs2022-release",
+      "configurePreset": "vs2022",
+      "configuration": "Release"
+    },
+    {
+      "name": "vs2019-debug",
+      "configurePreset": "vs2019",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vs2019-release",
+      "configurePreset": "vs2019",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "vs2022",
+      "configurePreset": "vs2022",
+      "configuration": "Debug",
       "output": {
         "outputOnFailure": true
       }
