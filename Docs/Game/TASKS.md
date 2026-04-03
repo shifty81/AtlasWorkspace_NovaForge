@@ -142,10 +142,16 @@
 
 ## Phase 8 — Custom IDE
 
-- [ ] Define IDE architecture
-- [ ] Implement project indexer
-- [ ] Add code navigation
-- [ ] Integrate with editor command system
+- [x] IDE architecture (IDEService owns ProjectIndexer, CodeNavigator, BreadcrumbTrail)
+- [x] ProjectIndexer (file classification: Header/Source/Shader/Script/Data/Config, module grouping, symbol indexing)
+- [x] CodeNavigator (go-to-definition, find references, search symbols, filter by SymbolKind)
+- [x] BreadcrumbTrail (navigation history with max depth 50, push/pop/current)
+- [x] IDEPanel (EditorPanel subclass for IDE viewport)
+- [x] IDEService lifecycle (init/shutdown, navigateTo/goBack)
+- [x] EditorApp integration (ide.go_to_definition, ide.find_references, ide.go_back, ide.index_project commands)
+- [x] IDE test suite (12 tests covering indexer, navigator, breadcrumbs, service, integration)
+- [x] Expand test coverage (351 tests, up from 339)
+- [x] Multi-config build verified (Debug + Release with Ninja Multi-Config)
 - [ ] Validate: IDE can open project
 
 ## Phase 9 — Documentation & Polish
