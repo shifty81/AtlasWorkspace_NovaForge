@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "novaforge",
+  "version": "0.1.0",
+  "description": "NovaForge — Voxel-first PvE space simulator with custom engine, editor, and tooling",
+  "license": "GPL-3.0-only",
+  "dependencies": [
+    {
+      "name": "glfw3",
+      "platform": "windows | osx | linux"
+    },
+    "nlohmann-json",
+    "freetype",
+    {
+      "name": "openal-soft",
+      "platform": "windows | osx | linux"
+    },
+    {
+      "name": "catch2",
+      "features": [],
+      "platform": "!uwp"
+    }
+  ]
+}

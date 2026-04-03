@@ -1,0 +1,39 @@
+{
+  "project": {
+    "name": "NovaForge",
+    "version": "0.1.0",
+    "type": "game",
+    "engine": "NovaForge Engine"
+  },
+  "paths": {
+    "content": "Content",
+    "data": "Data",
+    "schemas": "Schemas",
+    "config": "Config",
+    "scripts": "Scripts"
+  },
+  "build": {
+    "standard": "C++20",
+    "system": "CMake",
+    "minimum_cmake": "3.22"
+  },
+  "editor": {
+    "default_level": "Content/Definitions/DevWorld.json",
+    "ui_framework": "custom",
+    "dpi_aware": true
+  },
+  "game": {
+    "title": "Nova Forge",
+    "genre": "PvE Space Simulator",
+    "render_api": "OpenGL",
+    "render_api_version": "3.3",
+    "voxel_authoritative": true,
+    "deterministic_simulation": true
+  },
+  "server": {
+    "default_port": 27015,
+    "tick_rate": 60,
+    "max_players": 20,
+    "protocol": "lockstep_rollback"
+  }
+}
