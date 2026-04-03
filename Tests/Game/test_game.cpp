@@ -278,3 +278,215 @@ TEST_CASE("VoxelEditCommand multiple edits undo chain", "[Game][Undo]") {
     REQUIRE(stack.redoCount() == 0);  // redo stack cleared by new edit
     REQUIRE(stack.undoCount() == 2);
 }
+
+// ── ChunkMesher tests ───────────────────────────────────────────
+
+TEST_CASE("ChunkMesher empty chunk produces no geometry", "[Game][Mesher]") {
+    NF::Chunk chunk;
+    // All air - should produce nothing
+    auto result = NF::ChunkMesher::buildMesh(chunk);
+    REQUIRE(result.vertices.empty());
+    REQUIRE(result.indices.empty());
+    REQUIRE(result.faceCount == 0);
+}
+
+TEST_CASE("ChunkMesher single voxel produces 6 faces", "[Game][Mesher]") {
+    NF::Chunk chunk;
+    chunk.set(8, 8, 8, NF::VoxelType::Stone);
+
+    auto result = NF::ChunkMesher::buildMesh(chunk);
+    // A lone voxel surrounded by air should have 6 exposed faces
+    REQUIRE(result.faceCount == 6);
+    REQUIRE(result.vertices.size() == 24);   // 4 verts per face * 6 faces
+    REQUIRE(result.indices.size() == 36);    // 6 indices per face * 6 faces
+}
+
+TEST_CASE("ChunkMesher adjacent voxels cull shared face", "[Game][Mesher]") {
+    NF::Chunk chunk;
+    chunk.set(8, 8, 8, NF::VoxelType::Stone);
+    chunk.set(9, 8, 8, NF::VoxelType::Stone);
+
+    auto result = NF::ChunkMesher::buildMesh(chunk);
+    // Two adjacent voxels: 6+6 faces minus 2 shared faces = 10 exposed
+    REQUIRE(result.faceCount == 10);
+}
+
+TEST_CASE("ChunkMesher voxel colors match type", "[Game][Mesher]") {
+    NF::Chunk chunk;
+    chunk.set(0, 0, 0, NF::VoxelType::Grass);
+
+    auto result = NF::ChunkMesher::buildMesh(chunk);
+    REQUIRE_FALSE(result.vertices.empty());
+
+    NF::Vec4 grassColor = NF::voxelColor(NF::VoxelType::Grass);
+    // All vertices should have the grass color
+    for (const auto& v : result.vertices) {
+        REQUIRE(v.color.x == grassColor.x);
+        REQUIRE(v.color.y == grassColor.y);
+        REQUIRE(v.color.z == grassColor.z);
+    }
+}
+
+TEST_CASE("ChunkMesher buildRenderMesh returns valid Mesh", "[Game][Mesher]") {
+    NF::Chunk chunk;
+    chunk.set(4, 4, 4, NF::VoxelType::Metal);
+
+    NF::Mesh mesh = NF::ChunkMesher::buildRenderMesh(chunk);
+    REQUIRE(mesh.vertexCount() == 24);
+    REQUIRE(mesh.indexCount() == 36);
+    REQUIRE(mesh.triangleCount() == 12);
+}
+
+TEST_CASE("ChunkMesher world offset is applied", "[Game][Mesher]") {
+    NF::Chunk chunk;
+    chunk.cx = 2; chunk.cy = 0; chunk.cz = 1;
+    chunk.set(0, 0, 0, NF::VoxelType::Stone);
+
+    auto result = NF::ChunkMesher::buildMesh(chunk);
+    REQUIRE_FALSE(result.vertices.empty());
+
+    // Vertices should be offset by chunk position * CHUNK_SIZE
+    float expectedMinX = 2.f * NF::CHUNK_SIZE;
+    float expectedMinZ = 1.f * NF::CHUNK_SIZE;
+    bool foundOffsetVert = false;
+    for (const auto& v : result.vertices) {
+        if (v.position.x >= expectedMinX && v.position.z >= expectedMinZ) {
+            foundOffsetVert = true;
+            break;
+        }
+    }
+    REQUIRE(foundOffsetVert);
+}
+
+// ── WorldState tests ─────────────────────────────────────────────
+
+TEST_CASE("WorldState get/set world coordinates", "[Game][World]") {
+    NF::WorldState world;
+
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+    REQUIRE(world.getWorld(5, 5, 5) == NF::VoxelType::Stone);
+    REQUIRE(world.getWorld(0, 0, 0) == NF::VoxelType::Air);
+    REQUIRE(world.chunkCount() == 1);
+}
+
+TEST_CASE("WorldState negative coordinates", "[Game][World]") {
+    NF::WorldState world;
+
+    world.setWorld(-1, -1, -1, NF::VoxelType::Dirt);
+    REQUIRE(world.getWorld(-1, -1, -1) == NF::VoxelType::Dirt);
+    REQUIRE(world.chunkCount() == 1);
+}
+
+TEST_CASE("WorldState cross-chunk boundaries", "[Game][World]") {
+    NF::WorldState world;
+
+    // Set voxels in different chunks
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+    world.setWorld(16, 0, 0, NF::VoxelType::Dirt);   // next chunk
+    world.setWorld(-1, 0, 0, NF::VoxelType::Grass);  // previous chunk
+
+    REQUIRE(world.getWorld(0, 0, 0) == NF::VoxelType::Stone);
+    REQUIRE(world.getWorld(16, 0, 0) == NF::VoxelType::Dirt);
+    REQUIRE(world.getWorld(-1, 0, 0) == NF::VoxelType::Grass);
+    REQUIRE(world.chunkCount() == 3);
+}
+
+TEST_CASE("WorldState forEach iterates all chunks", "[Game][World]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+    world.setWorld(16, 0, 0, NF::VoxelType::Dirt);
+
+    int count = 0;
+    world.forEach([&](const NF::Chunk&) { ++count; });
+    REQUIRE(count == 2);
+}
+
+// ── WorldSerializer tests ────────────────────────────────────────
+
+TEST_CASE("WorldSerializer round-trip preserves world", "[Game][Serialization]") {
+    NF::WorldState original;
+    original.setWorld(5, 5, 5, NF::VoxelType::Stone);
+    original.setWorld(20, 0, 0, NF::VoxelType::Ore_Gold);
+    original.setWorld(-5, 10, -5, NF::VoxelType::Glass);
+
+    std::string json = NF::WorldSerializer::serialize(original);
+    REQUIRE_FALSE(json.empty());
+
+    NF::WorldState loaded = NF::WorldSerializer::deserialize(json);
+
+    REQUIRE(loaded.chunkCount() == original.chunkCount());
+    REQUIRE(loaded.getWorld(5, 5, 5) == NF::VoxelType::Stone);
+    REQUIRE(loaded.getWorld(20, 0, 0) == NF::VoxelType::Ore_Gold);
+    REQUIRE(loaded.getWorld(-5, 10, -5) == NF::VoxelType::Glass);
+    REQUIRE(loaded.getWorld(0, 0, 0) == NF::VoxelType::Air);
+}
+
+TEST_CASE("WorldSerializer empty world round-trip", "[Game][Serialization]") {
+    NF::WorldState original;
+    std::string json = NF::WorldSerializer::serialize(original);
+    NF::WorldState loaded = NF::WorldSerializer::deserialize(json);
+    REQUIRE(loaded.chunkCount() == 0);
+}
+
+// ── VoxelPickService tests ───────────────────────────────────────
+
+TEST_CASE("VoxelPickService hits solid voxel", "[Game][Pick]") {
+    NF::WorldState world;
+    // Place a stone block at (5, 5, 5)
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    // Cast from above, looking down
+    NF::Vec3 origin{5.5f, 20.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto hit = NF::VoxelPickService::raycast(world, origin, dir);
+    REQUIRE(hit.has_value());
+    REQUIRE(hit->wx == 5);
+    REQUIRE(hit->wy == 5);
+    REQUIRE(hit->wz == 5);
+    REQUIRE(hit->type == NF::VoxelType::Stone);
+    REQUIRE(hit->face == 2); // hit the +Y face
+}
+
+TEST_CASE("VoxelPickService misses empty world", "[Game][Pick]") {
+    NF::WorldState world;
+
+    NF::Vec3 origin{0.f, 10.f, 0.f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto hit = NF::VoxelPickService::raycast(world, origin, dir, 50.f);
+    REQUIRE_FALSE(hit.has_value());
+}
+
+TEST_CASE("VoxelPickService adjacentVoxel calculation", "[Game][Pick]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::Vec3 origin{5.5f, 20.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto hit = NF::VoxelPickService::raycast(world, origin, dir);
+    REQUIRE(hit.has_value());
+
+    auto adj = hit->adjacentVoxel();
+    // Hit +Y face of (5,5,5), adjacent should be (5,6,5)
+    REQUIRE(adj.x == 5);
+    REQUIRE(adj.y == 6);
+    REQUIRE(adj.z == 5);
+}
+
+TEST_CASE("VoxelPickService respects maxDist", "[Game][Pick]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::Vec3 origin{5.5f, 100.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    // maxDist too short to reach
+    auto hit = NF::VoxelPickService::raycast(world, origin, dir, 10.f);
+    REQUIRE_FALSE(hit.has_value());
+
+    // maxDist long enough
+    auto hit2 = NF::VoxelPickService::raycast(world, origin, dir, 200.f);
+    REQUIRE(hit2.has_value());
+}

@@ -57,7 +57,12 @@
 - [x] ChunkSerializer (toJson, fromJson, serialize, deserialize)
 - [x] VoxelEditCommand (undo-safe voxel edits via ICommand)
 - [x] **Voxel edit save/reload round-trip PROVEN** (test: edit → serialize → deserialize → verify)
-- [ ] Port UI module (custom renderer)
+- [x] Voxel color mapping (voxelColor per VoxelType)
+- [x] ChunkMesher (face-culled geometry generation, normals, per-type vertex coloring)
+- [x] WorldState (multi-chunk container with world-coordinate get/set, forEach)
+- [x] WorldSerializer (multi-chunk world save/load with round-trip proven)
+- [x] **World save/reload round-trip PROVEN** (test: multi-chunk edit → serialize → deserialize → verify)
+- [x] VoxelPickService (DDA ray-voxel traversal, face identification, adjacent voxel calculation)
 - [ ] Port game data from Atlas-NovaForge into Data/
 - [ ] Port schemas into Schemas/
 - [ ] Validate: DevWorld loads, voxel edit loop works in-editor
@@ -72,9 +77,13 @@
 - [x] LaunchService (game exe discovery, validation, deterministic path resolution)
 - [x] Editor commands: file.new, file.open, file.save, file.save_as, edit.undo, edit.redo, edit.select_all, edit.deselect, view.reset_layout
 - [x] EditorApp owns CommandStack, SelectionService, ContentBrowser, RecentFiles, LaunchService
-- [x] Editor test suite (20 tests covering selection, commands, content browser, launch)
+- [x] EditorTheme (dark/light themes with panel, button, input, toolbar, inspector colors + font/spacing)
+- [x] PropertyEditor (read/write via reflection offsets: Bool, Int32, Float, String, Vec3, Color)
+- [x] Undo-safe property transactions (makeFloatChange, makeIntChange, makeVec3Change, makeColorChange, makeStringChange)
+- [x] UI renderer implementation (quad batching drawRect, character-based drawText, drawRectOutline)
+- [x] Editor + PropertyEditor test suite (42 tests covering all property types, undo, theme, selection, commands)
+- [x] Expand test coverage (212 tests, up from 183)
 - [ ] Port Editor module (docking, panels, toolbar)
-- [ ] Implement VoxelPickService
 - [ ] Port 14+ panels from Atlas-NovaForge
 - [ ] Validate: editor boots, edit loop works
 
