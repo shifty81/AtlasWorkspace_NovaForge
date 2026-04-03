@@ -122,11 +122,23 @@
 
 ## Phase 7 — AI & Tooling
 
-- [ ] Port SwissAgent into Tools/
-- [ ] Port ArbiterAI into Tools/
-- [ ] Port Blender generator into Tools/
-- [ ] Wire AI assistant into editor
-- [ ] Validate: tools functional
+- [x] Faction system (FactionManager, FactionRelation, FactionReputation with standing)
+- [x] NPC personality (PersonalityTrait enum, PersonalityProfile with morale/confidence)
+- [x] AI Blackboard (variant-based shared knowledge store with set/get/has/remove)
+- [x] Utility AI scoring (UtilitySelector, UtilityCurve: Linear/Quadratic/Logistic/Inverse, evaluateCurve)
+- [x] AI Agent (entity-bound agent with behavior, personality, memory, blackboard)
+- [x] AISystem expansion (register/unregister/find agents, update all on tick)
+- [x] SwissAgentTool (query processing with response generation)
+- [x] ArbiterAITool (rule-based evaluation with context → result)
+- [x] BlenderGeneratorTool (mesh generation by type with params)
+- [x] ContractScannerTool (code scanning for issues)
+- [x] ReplayMinimizerTool (frame sequence minimization with compression ratio)
+- [x] ITool interface + ToolRegistry (register/find/list tools)
+- [x] EditorAIAssistant (tool registry integration, query dispatch)
+- [x] AI test suite (40 tests covering all subsystems)
+- [x] Expand test coverage (339 tests, up from 299)
+- [x] Multi-config build verified (Debug + Release with Ninja Multi-Config)
+- [ ] Validate: AI assistant functional in editor loop
 
 ## Phase 8 — Custom IDE
 

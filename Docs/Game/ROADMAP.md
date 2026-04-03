@@ -13,8 +13,8 @@
 | **Phase 4** — Editor | Docking layout, panels, viewport, editor services | ✅ Done |
 | **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types, visual scripting | ✅ Done |
 | **Phase 6** — Multiplayer | Server authority, replication, sessions, lockstep/rollback | ✅ Done |
-| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender generator integration | 🔜 Next |
-| **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | 📋 Planned |
+| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender generator integration | ✅ Done |
+| **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | 🔜 Next |
 | **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide | 📋 Planned |
 
 ## Game Phases (Nova Forge)
