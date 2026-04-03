@@ -477,6 +477,502 @@ private:
     static inline uint32_t s_nextID = 1;
 };
 
+// ── Memory: Linear Allocator ─────────────────────────────────────
+
+class LinearAllocator {
+public:
+    explicit LinearAllocator(size_t capacityBytes)
+        : m_capacity(capacityBytes)
+    {
+        m_buffer = std::make_unique<uint8_t[]>(capacityBytes);
+    }
+
+    void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) {
+        size_t aligned = align(m_offset, alignment);
+        if (aligned + size > m_capacity) return nullptr;
+        void* ptr = m_buffer.get() + aligned;
+        m_offset = aligned + size;
+        ++m_allocationCount;
+        return ptr;
+    }
+
+    template<typename T, typename... Args>
+    T* create(Args&&... args) {
+        void* mem = allocate(sizeof(T), alignof(T));
+        if (!mem) return nullptr;
+        return new (mem) T(std::forward<Args>(args)...);
+    }
+
+    void reset() { m_offset = 0; m_allocationCount = 0; }
+
+    [[nodiscard]] size_t used() const { return m_offset; }
+    [[nodiscard]] size_t capacity() const { return m_capacity; }
+    [[nodiscard]] size_t remaining() const { return m_capacity - m_offset; }
+    [[nodiscard]] size_t allocationCount() const { return m_allocationCount; }
+
+private:
+    static size_t align(size_t offset, size_t alignment) {
+        return (offset + alignment - 1) & ~(alignment - 1);
+    }
+
+    std::unique_ptr<uint8_t[]> m_buffer;
+    size_t m_capacity = 0;
+    size_t m_offset = 0;
+    size_t m_allocationCount = 0;
+};
+
+// ── Memory: Pool Allocator ───────────────────────────────────────
+
+class PoolAllocator {
+public:
+    PoolAllocator(size_t objectSize, size_t count)
+        : m_objectSize(std::max(objectSize, sizeof(void*)))
+        , m_count(count)
+    {
+        m_buffer = std::make_unique<uint8_t[]>(m_objectSize * count);
+        buildFreeList();
+    }
+
+    void* allocate() {
+        if (!m_freeHead) return nullptr;
+        void* ptr = m_freeHead;
+        m_freeHead = *reinterpret_cast<void**>(m_freeHead);
+        ++m_activeCount;
+        return ptr;
+    }
+
+    void deallocate(void* ptr) {
+        if (!ptr) return;
+        *reinterpret_cast<void**>(ptr) = m_freeHead;
+        m_freeHead = ptr;
+        --m_activeCount;
+    }
+
+    template<typename T, typename... Args>
+    T* create(Args&&... args) {
+        static_assert(sizeof(T) <= sizeof(void*) || sizeof(T) <= 4096,
+            "Object too large for pool");
+        void* mem = allocate();
+        if (!mem) return nullptr;
+        return new (mem) T(std::forward<Args>(args)...);
+    }
+
+    template<typename T>
+    void destroy(T* ptr) {
+        if (!ptr) return;
+        ptr->~T();
+        deallocate(ptr);
+    }
+
+    void reset() {
+        m_activeCount = 0;
+        buildFreeList();
+    }
+
+    [[nodiscard]] size_t objectSize() const { return m_objectSize; }
+    [[nodiscard]] size_t totalCount() const { return m_count; }
+    [[nodiscard]] size_t activeCount() const { return m_activeCount; }
+    [[nodiscard]] size_t freeCount() const { return m_count - m_activeCount; }
+
+private:
+    void buildFreeList() {
+        m_freeHead = nullptr;
+        for (size_t i = m_count; i > 0; --i) {
+            void* block = m_buffer.get() + (i - 1) * m_objectSize;
+            *reinterpret_cast<void**>(block) = m_freeHead;
+            m_freeHead = block;
+        }
+    }
+
+    std::unique_ptr<uint8_t[]> m_buffer;
+    size_t m_objectSize;
+    size_t m_count;
+    size_t m_activeCount = 0;
+    void*  m_freeHead = nullptr;
+};
+
+// ── Reflection: PropertyInfo ─────────────────────────────────────
+
+enum class PropertyType : uint8_t {
+    Int32,
+    Float,
+    Bool,
+    String,
+    Vec2,
+    Vec3,
+    Vec4,
+    Quat,
+    Custom
+};
+
+struct PropertyInfo {
+    std::string name;
+    PropertyType type = PropertyType::Custom;
+    size_t offset = 0;
+    size_t size = 0;
+};
+
+class TypeDescriptor {
+public:
+    explicit TypeDescriptor(std::string name, size_t size)
+        : m_name(std::move(name)), m_size(size) {}
+
+    TypeDescriptor& addProperty(const std::string& name, PropertyType type,
+                                 size_t offset, size_t size) {
+        m_properties.push_back({name, type, offset, size});
+        return *this;
+    }
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+    [[nodiscard]] size_t size() const { return m_size; }
+    [[nodiscard]] const std::vector<PropertyInfo>& properties() const { return m_properties; }
+
+    [[nodiscard]] const PropertyInfo* findProperty(std::string_view propName) const {
+        for (auto& p : m_properties) {
+            if (p.name == propName) return &p;
+        }
+        return nullptr;
+    }
+
+private:
+    std::string m_name;
+    size_t m_size;
+    std::vector<PropertyInfo> m_properties;
+};
+
+class TypeRegistry {
+public:
+    static TypeRegistry& instance() {
+        static TypeRegistry reg;
+        return reg;
+    }
+
+    TypeDescriptor& registerType(const std::string& name, size_t size) {
+        auto it = m_types.find(name);
+        if (it != m_types.end()) return it->second;
+        auto [newIt, _] = m_types.emplace(name, TypeDescriptor(name, size));
+        return newIt->second;
+    }
+
+    [[nodiscard]] const TypeDescriptor* findType(const std::string& name) const {
+        auto it = m_types.find(name);
+        return (it != m_types.end()) ? &it->second : nullptr;
+    }
+
+    [[nodiscard]] size_t typeCount() const { return m_types.size(); }
+
+private:
+    TypeRegistry() = default;
+    std::unordered_map<std::string, TypeDescriptor> m_types;
+};
+
+// Helper macro to register a type with reflection
+#define NF_REFLECT_TYPE(TypeName) \
+    NF::TypeRegistry::instance().registerType(#TypeName, sizeof(TypeName))
+
+#define NF_REFLECT_PROPERTY(desc, TypeName, PropName, PropType) \
+    (desc).addProperty(#PropName, PropType, offsetof(TypeName, PropName), sizeof(((TypeName*)nullptr)->PropName))
+
+// ── Serialization: JSON Value ────────────────────────────────────
+
+enum class JsonType : uint8_t {
+    Null,
+    Bool,
+    Int,
+    Float,
+    String,
+    Array,
+    Object
+};
+
+class JsonValue {
+public:
+    JsonValue() : m_type(JsonType::Null) {}
+    explicit JsonValue(bool v) : m_type(JsonType::Bool), m_bool(v) {}
+    explicit JsonValue(int32_t v) : m_type(JsonType::Int), m_int(v) {}
+    explicit JsonValue(float v) : m_type(JsonType::Float), m_float(v) {}
+    explicit JsonValue(double v) : m_type(JsonType::Float), m_float(static_cast<float>(v)) {}
+    explicit JsonValue(const std::string& v) : m_type(JsonType::String), m_string(v) {}
+    explicit JsonValue(const char* v) : m_type(JsonType::String), m_string(v) {}
+
+    static JsonValue array() { JsonValue v; v.m_type = JsonType::Array; return v; }
+    static JsonValue object() { JsonValue v; v.m_type = JsonType::Object; return v; }
+
+    // Type checks
+    [[nodiscard]] JsonType type() const { return m_type; }
+    [[nodiscard]] bool isNull() const { return m_type == JsonType::Null; }
+    [[nodiscard]] bool isBool() const { return m_type == JsonType::Bool; }
+    [[nodiscard]] bool isInt() const { return m_type == JsonType::Int; }
+    [[nodiscard]] bool isFloat() const { return m_type == JsonType::Float; }
+    [[nodiscard]] bool isNumber() const { return m_type == JsonType::Int || m_type == JsonType::Float; }
+    [[nodiscard]] bool isString() const { return m_type == JsonType::String; }
+    [[nodiscard]] bool isArray() const { return m_type == JsonType::Array; }
+    [[nodiscard]] bool isObject() const { return m_type == JsonType::Object; }
+
+    // Getters
+    [[nodiscard]] bool asBool(bool def = false) const { return isBool() ? m_bool : def; }
+    [[nodiscard]] int32_t asInt(int32_t def = 0) const {
+        if (isInt()) return m_int;
+        if (isFloat()) return static_cast<int32_t>(m_float);
+        return def;
+    }
+    [[nodiscard]] float asFloat(float def = 0.f) const {
+        if (isFloat()) return m_float;
+        if (isInt()) return static_cast<float>(m_int);
+        return def;
+    }
+    [[nodiscard]] const std::string& asString() const {
+        static const std::string empty;
+        return isString() ? m_string : empty;
+    }
+
+    // Array operations
+    void push(JsonValue val) {
+        if (m_type != JsonType::Array) m_type = JsonType::Array;
+        m_array.push_back(std::move(val));
+    }
+    [[nodiscard]] size_t size() const {
+        if (isArray()) return m_array.size();
+        if (isObject()) return m_object.size();
+        return 0;
+    }
+    const JsonValue& operator[](size_t index) const {
+        static const JsonValue null;
+        return (isArray() && index < m_array.size()) ? m_array[index] : null;
+    }
+    JsonValue& operator[](size_t index) {
+        if (m_type != JsonType::Array) m_type = JsonType::Array;
+        if (index >= m_array.size()) m_array.resize(index + 1);
+        return m_array[index];
+    }
+
+    // Object operations
+    void set(const std::string& key, JsonValue val) {
+        if (m_type != JsonType::Object) m_type = JsonType::Object;
+        m_object[key] = std::move(val);
+    }
+    const JsonValue& operator[](const std::string& key) const {
+        static const JsonValue null;
+        if (!isObject()) return null;
+        auto it = m_object.find(key);
+        return (it != m_object.end()) ? it->second : null;
+    }
+    JsonValue& operator[](const std::string& key) {
+        if (m_type != JsonType::Object) m_type = JsonType::Object;
+        return m_object[key];
+    }
+    [[nodiscard]] bool hasKey(const std::string& key) const {
+        return isObject() && m_object.count(key) > 0;
+    }
+    [[nodiscard]] const std::unordered_map<std::string, JsonValue>& members() const {
+        return m_object;
+    }
+    [[nodiscard]] const std::vector<JsonValue>& elements() const {
+        return m_array;
+    }
+
+    // Serialization to string
+    [[nodiscard]] std::string toJson(int indent = 0) const {
+        return serialize(indent, 0);
+    }
+
+private:
+    JsonType m_type;
+    bool m_bool = false;
+    int32_t m_int = 0;
+    float m_float = 0.f;
+    std::string m_string;
+    std::vector<JsonValue> m_array;
+    std::unordered_map<std::string, JsonValue> m_object;
+
+    [[nodiscard]] std::string serialize(int indent, int depth) const {
+        switch (m_type) {
+        case JsonType::Null: return "null";
+        case JsonType::Bool: return m_bool ? "true" : "false";
+        case JsonType::Int: return std::to_string(m_int);
+        case JsonType::Float: {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%.6g", static_cast<double>(m_float));
+            return buf;
+        }
+        case JsonType::String: return "\"" + escapeString(m_string) + "\"";
+        case JsonType::Array: {
+            if (m_array.empty()) return "[]";
+            std::string s = "[";
+            bool compact = indent == 0;
+            for (size_t i = 0; i < m_array.size(); ++i) {
+                if (!compact) s += "\n" + std::string((depth + 1) * indent, ' ');
+                s += m_array[i].serialize(indent, depth + 1);
+                if (i + 1 < m_array.size()) s += ",";
+                if (compact && i + 1 < m_array.size()) s += " ";
+            }
+            if (!compact) s += "\n" + std::string(depth * indent, ' ');
+            s += "]";
+            return s;
+        }
+        case JsonType::Object: {
+            if (m_object.empty()) return "{}";
+            std::string s = "{";
+            bool compact = indent == 0;
+            size_t idx = 0;
+            // Use sorted keys for deterministic output
+            std::vector<std::string> keys;
+            keys.reserve(m_object.size());
+            for (auto& [k, _] : m_object) keys.push_back(k);
+            std::sort(keys.begin(), keys.end());
+            for (auto& k : keys) {
+                if (!compact) s += "\n" + std::string((depth + 1) * indent, ' ');
+                s += "\"" + escapeString(k) + "\":";
+                if (!compact) s += " ";
+                s += m_object.at(k).serialize(indent, depth + 1);
+                if (idx + 1 < keys.size()) s += ",";
+                if (compact && idx + 1 < keys.size()) s += " ";
+                ++idx;
+            }
+            if (!compact) s += "\n" + std::string(depth * indent, ' ');
+            s += "}";
+            return s;
+        }
+        }
+        return "null";
+    }
+
+    static std::string escapeString(const std::string& s) {
+        std::string out;
+        out.reserve(s.size());
+        for (char c : s) {
+            switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:   out += c; break;
+            }
+        }
+        return out;
+    }
+};
+
+// ── Serialization: JSON Parser ───────────────────────────────────
+
+class JsonParser {
+public:
+    static JsonValue parse(std::string_view input) {
+        size_t pos = 0;
+        skipWhitespace(input, pos);
+        if (pos >= input.size()) return {};
+        return parseValue(input, pos);
+    }
+
+private:
+    static void skipWhitespace(std::string_view s, size_t& pos) {
+        while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t' ||
+               s[pos] == '\n' || s[pos] == '\r')) ++pos;
+    }
+
+    static JsonValue parseValue(std::string_view s, size_t& pos) {
+        skipWhitespace(s, pos);
+        if (pos >= s.size()) return {};
+
+        char c = s[pos];
+        if (c == '"') return parseString(s, pos);
+        if (c == '{') return parseObject(s, pos);
+        if (c == '[') return parseArray(s, pos);
+        if (c == 't' || c == 'f') return parseBool(s, pos);
+        if (c == 'n') return parseNull(s, pos);
+        if (c == '-' || (c >= '0' && c <= '9')) return parseNumber(s, pos);
+        return {};
+    }
+
+    static JsonValue parseString(std::string_view s, size_t& pos) {
+        ++pos; // skip opening quote
+        std::string result;
+        while (pos < s.size() && s[pos] != '"') {
+            if (s[pos] == '\\' && pos + 1 < s.size()) {
+                ++pos;
+                switch (s[pos]) {
+                case '"':  result += '"'; break;
+                case '\\': result += '\\'; break;
+                case 'n':  result += '\n'; break;
+                case 'r':  result += '\r'; break;
+                case 't':  result += '\t'; break;
+                default:   result += s[pos]; break;
+                }
+            } else {
+                result += s[pos];
+            }
+            ++pos;
+        }
+        if (pos < s.size()) ++pos; // skip closing quote
+        return JsonValue(result);
+    }
+
+    static JsonValue parseNumber(std::string_view s, size_t& pos) {
+        size_t start = pos;
+        bool isFloat = false;
+        if (s[pos] == '-') ++pos;
+        while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') ++pos;
+        if (pos < s.size() && s[pos] == '.') { isFloat = true; ++pos; }
+        while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') ++pos;
+        if (pos < s.size() && (s[pos] == 'e' || s[pos] == 'E')) {
+            isFloat = true;
+            ++pos;
+            if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) ++pos;
+            while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') ++pos;
+        }
+        std::string numStr(s.substr(start, pos - start));
+        if (isFloat) return JsonValue(std::stof(numStr));
+        return JsonValue(std::stoi(numStr));
+    }
+
+    static JsonValue parseBool(std::string_view s, size_t& pos) {
+        if (s.substr(pos, 4) == "true") { pos += 4; return JsonValue(true); }
+        if (s.substr(pos, 5) == "false") { pos += 5; return JsonValue(false); }
+        return {};
+    }
+
+    static JsonValue parseNull(std::string_view s, size_t& pos) {
+        if (s.substr(pos, 4) == "null") { pos += 4; return JsonValue(); }
+        return {};
+    }
+
+    static JsonValue parseArray(std::string_view s, size_t& pos) {
+        ++pos; // skip [
+        JsonValue arr = JsonValue::array();
+        skipWhitespace(s, pos);
+        if (pos < s.size() && s[pos] == ']') { ++pos; return arr; }
+        while (pos < s.size()) {
+            arr.push(parseValue(s, pos));
+            skipWhitespace(s, pos);
+            if (pos < s.size() && s[pos] == ',') { ++pos; skipWhitespace(s, pos); }
+            else break;
+        }
+        if (pos < s.size() && s[pos] == ']') ++pos;
+        return arr;
+    }
+
+    static JsonValue parseObject(std::string_view s, size_t& pos) {
+        ++pos; // skip {
+        JsonValue obj = JsonValue::object();
+        skipWhitespace(s, pos);
+        if (pos < s.size() && s[pos] == '}') { ++pos; return obj; }
+        while (pos < s.size()) {
+            skipWhitespace(s, pos);
+            if (pos >= s.size() || s[pos] != '"') break;
+            auto keyVal = parseString(s, pos);
+            skipWhitespace(s, pos);
+            if (pos < s.size() && s[pos] == ':') ++pos;
+            obj.set(keyVal.asString(), parseValue(s, pos));
+            skipWhitespace(s, pos);
+            if (pos < s.size() && s[pos] == ',') { ++pos; skipWhitespace(s, pos); }
+            else break;
+        }
+        if (pos < s.size() && s[pos] == '}') ++pos;
+        return obj;
+    }
+};
+
 // ── Version ──────────────────────────────────────────────────────
 
 constexpr int NF_VERSION_MAJOR = 0;

@@ -310,4 +310,135 @@ private:
     std::unique_ptr<T> m_data;
 };
 
+// ── Scene Graph (parent/child entity hierarchy) ──────────────────
+
+class SceneGraph {
+public:
+    void setParent(EntityID child, EntityID parent) {
+        // Remove from previous parent
+        removeFromParent(child);
+        m_parent[child] = parent;
+        m_children[parent].push_back(child);
+    }
+
+    void removeFromParent(EntityID child) {
+        auto pit = m_parent.find(child);
+        if (pit != m_parent.end()) {
+            EntityID oldParent = pit->second;
+            auto& siblings = m_children[oldParent];
+            siblings.erase(std::remove(siblings.begin(), siblings.end(), child), siblings.end());
+            m_parent.erase(pit);
+        }
+    }
+
+    void removeEntity(EntityID entity) {
+        // Reparent children to grandparent (or make them roots)
+        auto cit = m_children.find(entity);
+        if (cit != m_children.end()) {
+            auto pit = m_parent.find(entity);
+            EntityID grandparent = (pit != m_parent.end()) ? pit->second : INVALID_ENTITY;
+            for (EntityID child : cit->second) {
+                m_parent.erase(child);
+                if (grandparent != INVALID_ENTITY) {
+                    setParent(child, grandparent);
+                }
+            }
+            m_children.erase(cit);
+        }
+        removeFromParent(entity);
+    }
+
+    [[nodiscard]] EntityID parent(EntityID entity) const {
+        auto it = m_parent.find(entity);
+        return (it != m_parent.end()) ? it->second : INVALID_ENTITY;
+    }
+
+    [[nodiscard]] const std::vector<EntityID>& children(EntityID entity) const {
+        static const std::vector<EntityID> empty;
+        auto it = m_children.find(entity);
+        return (it != m_children.end()) ? it->second : empty;
+    }
+
+    [[nodiscard]] bool isRoot(EntityID entity) const {
+        return m_parent.find(entity) == m_parent.end();
+    }
+
+    [[nodiscard]] bool isDescendantOf(EntityID entity, EntityID ancestor) const {
+        EntityID current = parent(entity);
+        while (current != INVALID_ENTITY) {
+            if (current == ancestor) return true;
+            current = parent(current);
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t childCount(EntityID entity) const {
+        auto it = m_children.find(entity);
+        return (it != m_children.end()) ? it->second.size() : 0;
+    }
+
+    // Compute world transform by walking up the hierarchy
+    [[nodiscard]] Transform worldTransform(EntityID entity,
+                                            const ComponentStore& components) const {
+        std::vector<EntityID> chain;
+        EntityID current = entity;
+        while (current != INVALID_ENTITY) {
+            chain.push_back(current);
+            current = parent(current);
+        }
+
+        Transform world;
+        // Walk from root to leaf, accumulating transforms
+        for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+            const Transform* local = components.get<Transform>(*it);
+            if (local) {
+                Mat4 worldMat = world.toMatrix() * local->toMatrix();
+                world.position = worldMat.transformPoint({0.f, 0.f, 0.f});
+                world.rotation = world.rotation * local->rotation;
+                world.scale = {
+                    world.scale.x * local->scale.x,
+                    world.scale.y * local->scale.y,
+                    world.scale.z * local->scale.z
+                };
+            }
+        }
+        return world;
+    }
+
+private:
+    std::unordered_map<EntityID, EntityID> m_parent;
+    std::unordered_map<EntityID, std::vector<EntityID>> m_children;
+};
+
+// ── System Registry ──────────────────────────────────────────────
+
+class SystemRegistry {
+public:
+    template<typename T, typename... Args>
+    T& addSystem(Args&&... args) {
+        auto sys = std::make_unique<T>(std::forward<Args>(args)...);
+        T& ref = *sys;
+        m_systems.push_back(std::move(sys));
+        return ref;
+    }
+
+    void initAll(EntityManager& em, ComponentStore& cs) {
+        for (auto& sys : m_systems) sys->init(em, cs);
+    }
+
+    void updateAll(float dt) {
+        for (auto& sys : m_systems) sys->update(dt);
+    }
+
+    void shutdownAll() {
+        for (auto it = m_systems.rbegin(); it != m_systems.rend(); ++it)
+            (*it)->shutdown();
+    }
+
+    [[nodiscard]] size_t count() const { return m_systems.size(); }
+
+private:
+    std::vector<std::unique_ptr<SystemBase>> m_systems;
+};
+
 } // namespace NF
