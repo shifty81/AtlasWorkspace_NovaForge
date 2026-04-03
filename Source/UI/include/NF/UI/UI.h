@@ -46,16 +46,16 @@ public:
 
     void drawText(float x, float y, std::string_view text, uint32_t color = 0xFFFFFFFF) {
         // Simple bitmap-style text rendering: each character is a small quad
-        constexpr float charW = 8.f;
-        constexpr float charH = 14.f;
+        constexpr float kCharWidth = 8.f;
+        constexpr float kCharHeight = 14.f;
         float cx = x;
         for (char ch : text) {
-            if (ch == '\n') { cx = x; y += charH + 2.f; continue; }
-            if (ch == ' ')  { cx += charW; continue; }
+            if (ch == '\n') { cx = x; y += kCharHeight + 2.f; continue; }
+            if (ch == ' ')  { cx += kCharWidth; continue; }
 
-            Rect charRect{cx, y, charW, charH};
+            Rect charRect{cx, y, kCharWidth, kCharHeight};
             drawRect(charRect, color);
-            cx += charW;
+            cx += kCharWidth;
         }
         ++m_textDrawCount;
     }

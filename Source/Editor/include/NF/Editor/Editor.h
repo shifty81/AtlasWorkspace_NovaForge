@@ -187,6 +187,8 @@ private:
 
 class ProjectPathService {
 public:
+    static constexpr const char* kProjectFileName = "novaforge.project.json";
+
     void init(const std::string& executablePath) {
         m_executablePath = executablePath;
 
@@ -196,7 +198,7 @@ public:
         constexpr int kMaxProjectRootSearchDepth = 5;
         auto dir = exePath.parent_path();
         for (int i = 0; i < kMaxProjectRootSearchDepth; ++i) {
-            if (std::filesystem::exists(dir / "Config" / "novaforge.project.json")) {
+            if (std::filesystem::exists(dir / "Config" / kProjectFileName)) {
                 m_projectRoot = dir.string();
                 break;
             }

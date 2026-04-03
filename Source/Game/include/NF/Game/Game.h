@@ -406,28 +406,26 @@ public:
 
     // Get voxel at world coordinates
     VoxelType getWorld(int wx, int wy, int wz) const {
-        int cx = (wx >= 0) ? wx / CHUNK_SIZE : (wx - CHUNK_SIZE + 1) / CHUNK_SIZE;
-        int cy = (wy >= 0) ? wy / CHUNK_SIZE : (wy - CHUNK_SIZE + 1) / CHUNK_SIZE;
-        int cz = (wz >= 0) ? wz / CHUNK_SIZE : (wz - CHUNK_SIZE + 1) / CHUNK_SIZE;
-        int lx = wx - cx * CHUNK_SIZE;
-        int ly = wy - cy * CHUNK_SIZE;
-        int lz = wz - cz * CHUNK_SIZE;
+        auto [cx, cy, cz, lx, ly, lz] = worldToLocal(wx, wy, wz);
         const Chunk* ch = findChunk(cx, cy, cz);
         return ch ? ch->get(lx, ly, lz) : VoxelType::Air;
     }
 
     // Set voxel at world coordinates (creates chunk if needed)
     void setWorld(int wx, int wy, int wz, VoxelType type) {
-        int cx = (wx >= 0) ? wx / CHUNK_SIZE : (wx - CHUNK_SIZE + 1) / CHUNK_SIZE;
-        int cy = (wy >= 0) ? wy / CHUNK_SIZE : (wy - CHUNK_SIZE + 1) / CHUNK_SIZE;
-        int cz = (wz >= 0) ? wz / CHUNK_SIZE : (wz - CHUNK_SIZE + 1) / CHUNK_SIZE;
-        int lx = wx - cx * CHUNK_SIZE;
-        int ly = wy - cy * CHUNK_SIZE;
-        int lz = wz - cz * CHUNK_SIZE;
+        auto [cx, cy, cz, lx, ly, lz] = worldToLocal(wx, wy, wz);
         getOrCreateChunk(cx, cy, cz).set(lx, ly, lz, type);
     }
 
 private:
+    // Convert world coordinates to chunk + local coordinates
+    struct LocalCoord { int cx, cy, cz, lx, ly, lz; };
+    static LocalCoord worldToLocal(int wx, int wy, int wz) {
+        int cx = (wx >= 0) ? wx / CHUNK_SIZE : (wx - CHUNK_SIZE + 1) / CHUNK_SIZE;
+        int cy = (wy >= 0) ? wy / CHUNK_SIZE : (wy - CHUNK_SIZE + 1) / CHUNK_SIZE;
+        int cz = (wz >= 0) ? wz / CHUNK_SIZE : (wz - CHUNK_SIZE + 1) / CHUNK_SIZE;
+        return {cx, cy, cz, wx - cx * CHUNK_SIZE, wy - cy * CHUNK_SIZE, wz - cz * CHUNK_SIZE};
+    }
     std::unordered_map<ChunkCoord, Chunk> m_chunks;
 };
 
@@ -494,6 +492,9 @@ struct VoxelHit {
 
 class VoxelPickService {
 public:
+    static constexpr float kEpsilon = 1e-8f;
+    static constexpr float kMaxT    = 1e30f;
+
     // Cast a ray through the voxel world using DDA (Digital Differential Analyzer).
     // Returns the first solid voxel hit, or std::nullopt if nothing hit within maxDist.
     static std::optional<VoxelHit> raycast(const WorldState& world,
@@ -513,20 +514,20 @@ public:
         int stepZ = (dir.z >= 0.f) ? 1 : -1;
 
         // Distance to next voxel boundary
-        float tMaxX = (std::abs(dir.x) > 1e-8f)
+        float tMaxX = (std::abs(dir.x) > kEpsilon)
             ? ((stepX > 0 ? (vx + 1.f - origin.x) : (origin.x - vx)) / std::abs(dir.x))
-            : 1e30f;
-        float tMaxY = (std::abs(dir.y) > 1e-8f)
+            : kMaxT;
+        float tMaxY = (std::abs(dir.y) > kEpsilon)
             ? ((stepY > 0 ? (vy + 1.f - origin.y) : (origin.y - vy)) / std::abs(dir.y))
-            : 1e30f;
-        float tMaxZ = (std::abs(dir.z) > 1e-8f)
+            : kMaxT;
+        float tMaxZ = (std::abs(dir.z) > kEpsilon)
             ? ((stepZ > 0 ? (vz + 1.f - origin.z) : (origin.z - vz)) / std::abs(dir.z))
-            : 1e30f;
+            : kMaxT;
 
         // Distance between voxel boundaries
-        float tDeltaX = (std::abs(dir.x) > 1e-8f) ? (1.f / std::abs(dir.x)) : 1e30f;
-        float tDeltaY = (std::abs(dir.y) > 1e-8f) ? (1.f / std::abs(dir.y)) : 1e30f;
-        float tDeltaZ = (std::abs(dir.z) > 1e-8f) ? (1.f / std::abs(dir.z)) : 1e30f;
+        float tDeltaX = (std::abs(dir.x) > kEpsilon) ? (1.f / std::abs(dir.x)) : kMaxT;
+        float tDeltaY = (std::abs(dir.y) > kEpsilon) ? (1.f / std::abs(dir.y)) : kMaxT;
+        float tDeltaZ = (std::abs(dir.z) > kEpsilon) ? (1.f / std::abs(dir.z)) : kMaxT;
 
         float t = 0.f;
         int lastFace = -1;
