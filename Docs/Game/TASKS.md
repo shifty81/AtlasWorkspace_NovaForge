@@ -338,3 +338,22 @@
 - [x] SkillTree class (addSkill, unlockSkill, isUnlocked, findSkill, getAvailable, computeBonuses, unlockedCount)
 - [x] ProgressionSystem class (init, awardXP → skill points on level-up, spendSkillPoint, bonuses())
 - [x] Comprehensive test coverage (8 new tests)
+
+## Game Phase G16 — Crafting System
+
+- [x] CraftingCategory enum (Weapon, Armor, Tool, Component, Consumable, Fuel, Decoration) with craftingCategoryName()
+- [x] CraftingIngredient struct (itemId, quantity)
+- [x] CraftingRecipe struct (recipeId, outputItemId, outputQuantity, category, ingredients, craftTime, requiredLevel)
+- [x] CraftingJob struct (tick, progress, complete flag)
+- [x] CraftingQueue class (enqueue, tick head-only FIFO, collectCompleted, currentJob)
+- [x] CraftingSystem class (registerRecipe, findRecipe, canCraft with inventory/level check, enqueue with ingredient deduction, recipesByCategory)
+- [x] Comprehensive test coverage (8 new tests)
+
+## Game Phase G17 — Inventory & Equipment
+
+- [x] ItemRarity enum (Common, Uncommon, Rare, Epic, Legendary) with itemRarityName()
+- [x] ItemSlot enum (None, Head, Chest, Legs, Boots, Weapon, Shield, Accessory) with itemSlotName()
+- [x] Item struct (id, displayName, rarity, slot, stackMax, count, weight, stat bonuses)
+- [x] PlayerInventory class (addItem with stacking, removeItem, countItem, findItem, capacity, toCountMap)
+- [x] EquipmentLoadout class (equip/unequip by slot, slot replace returns previous, computeBonuses aggregate)
+- [x] Comprehensive test coverage (8 new tests)

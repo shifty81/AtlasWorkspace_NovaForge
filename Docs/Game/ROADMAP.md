@@ -36,6 +36,8 @@
 | **G13** — World Events | Dynamic sector events, severity effects, expiry | ✅ Done |
 | **G14** — Tech Tree | Category-tiered research tree with prereqs and bonuses | ✅ Done |
 | **G15** — Player Progression | XP, levelling (cap 50), skill tree, stat bonuses | ✅ Done |
+| **G16** — Crafting System | Recipes, ingredients, FIFO crafting queue, level-gated | ✅ Done |
+| **G17** — Inventory & Equipment | Stackable items, rarity, slot-based equipment, stat bonuses | ✅ Done |
 
 ## Status Key
 

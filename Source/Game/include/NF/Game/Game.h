@@ -3494,4 +3494,379 @@ private:
     int         m_skillPoints = 0;
 };
 
+// ── Game Phase G16 — Crafting System ──────────────────────────────
+
+enum class CraftingCategory : uint8_t {
+    Weapon,
+    Armor,
+    Tool,
+    Component,
+    Consumable,
+    Fuel,
+    Decoration
+};
+
+inline std::string craftingCategoryName(CraftingCategory c) {
+    switch (c) {
+        case CraftingCategory::Weapon:     return "Weapon";
+        case CraftingCategory::Armor:      return "Armor";
+        case CraftingCategory::Tool:       return "Tool";
+        case CraftingCategory::Component:  return "Component";
+        case CraftingCategory::Consumable: return "Consumable";
+        case CraftingCategory::Fuel:       return "Fuel";
+        case CraftingCategory::Decoration: return "Decoration";
+        default: return "Unknown";
+    }
+}
+
+struct CraftingIngredient {
+    std::string itemId;
+    int         quantity = 1;
+};
+
+struct CraftingRecipe {
+    std::string                    recipeId;
+    std::string                    outputItemId;
+    int                            outputQuantity = 1;
+    CraftingCategory               category       = CraftingCategory::Component;
+    std::vector<CraftingIngredient> ingredients;
+    float                          craftTime       = 5.f;   // seconds
+    int                            requiredLevel   = 1;
+};
+
+struct CraftingJob {
+    std::string recipeId;
+    float       elapsed  = 0.f;
+    float       duration = 5.f;
+    bool        complete = false;
+
+    void tick(float dt) {
+        if (complete) return;
+        elapsed += dt;
+        if (elapsed >= duration) {
+            elapsed = duration;
+            complete = true;
+        }
+    }
+
+    [[nodiscard]] float progress() const {
+        return duration > 0.f ? std::min(elapsed / duration, 1.f) : 1.f;
+    }
+};
+
+class CraftingQueue {
+public:
+    void enqueue(const std::string& recipeId, float duration) {
+        CraftingJob job;
+        job.recipeId = recipeId;
+        job.duration = duration;
+        m_jobs.push_back(job);
+        NF_LOG_INFO("Crafting", "Enqueued: " + recipeId);
+    }
+
+    // Tick the frontmost incomplete job.
+    void tick(float dt) {
+        for (auto& job : m_jobs) {
+            if (!job.complete) {
+                job.tick(dt);
+                break;   // only tick the head job
+            }
+        }
+    }
+
+    // Collect and remove all completed jobs, return their recipe ids.
+    [[nodiscard]] std::vector<std::string> collectCompleted() {
+        std::vector<std::string> out;
+        auto it = m_jobs.begin();
+        while (it != m_jobs.end()) {
+            if (it->complete) {
+                out.push_back(it->recipeId);
+                it = m_jobs.erase(it);
+            } else {
+                break;   // queue is FIFO; stop at first incomplete
+            }
+        }
+        return out;
+    }
+
+    [[nodiscard]] int  pendingCount() const { return static_cast<int>(m_jobs.size()); }
+    [[nodiscard]] bool isEmpty()      const { return m_jobs.empty(); }
+
+    [[nodiscard]] const CraftingJob* currentJob() const {
+        for (const auto& j : m_jobs) {
+            if (!j.complete) return &j;
+        }
+        return nullptr;
+    }
+
+private:
+    std::vector<CraftingJob> m_jobs;
+};
+
+class CraftingSystem {
+public:
+    void registerRecipe(const CraftingRecipe& recipe) {
+        m_recipes[recipe.recipeId] = recipe;
+    }
+
+    [[nodiscard]] const CraftingRecipe* findRecipe(const std::string& id) const {
+        auto it = m_recipes.find(id);
+        return it != m_recipes.end() ? &it->second : nullptr;
+    }
+
+    // Check if the player has enough resources (represented as a map<itemId, count>).
+    [[nodiscard]] bool canCraft(const std::string& recipeId,
+                                 const std::map<std::string, int>& inventory,
+                                 int playerLevel = 1) const {
+        auto it = m_recipes.find(recipeId);
+        if (it == m_recipes.end()) return false;
+        const auto& recipe = it->second;
+        if (playerLevel < recipe.requiredLevel) return false;
+        for (const auto& ing : recipe.ingredients) {
+            auto iit = inventory.find(ing.itemId);
+            if (iit == inventory.end() || iit->second < ing.quantity) return false;
+        }
+        return true;
+    }
+
+    // Deduct ingredients and enqueue the job. Returns false if cannot craft.
+    bool enqueue(const std::string& recipeId,
+                 std::map<std::string, int>& inventory,
+                 int playerLevel = 1) {
+        if (!canCraft(recipeId, inventory, playerLevel)) return false;
+        const auto& recipe = m_recipes[recipeId];
+        for (const auto& ing : recipe.ingredients) {
+            inventory[ing.itemId] -= ing.quantity;
+        }
+        m_queue.enqueue(recipeId, recipe.craftTime);
+        return true;
+    }
+
+    void tick(float dt) { m_queue.tick(dt); }
+
+    [[nodiscard]] std::vector<std::string> collectCompleted() {
+        return m_queue.collectCompleted();
+    }
+
+    [[nodiscard]] CraftingQueue&       queue()       { return m_queue; }
+    [[nodiscard]] const CraftingQueue& queue() const { return m_queue; }
+    [[nodiscard]] int recipeCount() const { return static_cast<int>(m_recipes.size()); }
+
+    // Get all recipe ids for a given category.
+    [[nodiscard]] std::vector<std::string> recipesByCategory(CraftingCategory cat) const {
+        std::vector<std::string> out;
+        for (const auto& [id, r] : m_recipes)
+            if (r.category == cat) out.push_back(id);
+        return out;
+    }
+
+private:
+    std::map<std::string, CraftingRecipe> m_recipes;
+    CraftingQueue m_queue;
+};
+
+// ── Game Phase G17 — Inventory & Equipment ───────────────────────
+
+enum class ItemRarity : uint8_t {
+    Common,
+    Uncommon,
+    Rare,
+    Epic,
+    Legendary
+};
+
+inline std::string itemRarityName(ItemRarity r) {
+    switch (r) {
+        case ItemRarity::Common:    return "Common";
+        case ItemRarity::Uncommon:  return "Uncommon";
+        case ItemRarity::Rare:      return "Rare";
+        case ItemRarity::Epic:      return "Epic";
+        case ItemRarity::Legendary: return "Legendary";
+        default: return "Unknown";
+    }
+}
+
+enum class ItemSlot : uint8_t {
+    None,
+    Head,
+    Chest,
+    Legs,
+    Boots,
+    Weapon,
+    Shield,
+    Accessory
+};
+
+inline std::string itemSlotName(ItemSlot s) {
+    switch (s) {
+        case ItemSlot::None:      return "None";
+        case ItemSlot::Head:      return "Head";
+        case ItemSlot::Chest:     return "Chest";
+        case ItemSlot::Legs:      return "Legs";
+        case ItemSlot::Boots:     return "Boots";
+        case ItemSlot::Weapon:    return "Weapon";
+        case ItemSlot::Shield:    return "Shield";
+        case ItemSlot::Accessory: return "Accessory";
+        default: return "Unknown";
+    }
+}
+
+struct Item {
+    std::string id;
+    std::string displayName;
+    ItemRarity  rarity    = ItemRarity::Common;
+    ItemSlot    slot      = ItemSlot::None;
+    int         stackMax  = 99;
+    int         count     = 1;
+    float       weight    = 1.f;
+
+    // Stat bonuses (applicable when equipped)
+    float damageBonus  = 0.f;
+    float armorBonus   = 0.f;
+    float speedBonus   = 0.f;
+    float healthBonus  = 0.f;
+
+    [[nodiscard]] bool isStackable() const { return stackMax > 1; }
+    [[nodiscard]] bool canStack(int amount) const { return count + amount <= stackMax; }
+};
+
+class PlayerInventory {
+public:
+    explicit PlayerInventory(int capacity = 40) : m_capacity(capacity) {}
+
+    // Add items. Returns the leftover count that didn't fit.
+    int addItem(const Item& item) {
+        int remaining = item.count;
+
+        // Try stacking first
+        if (item.isStackable()) {
+            for (auto& existing : m_items) {
+                if (existing.id == item.id && existing.canStack(remaining)) {
+                    existing.count += remaining;
+                    NF_LOG_INFO("Inventory", "Stacked " + std::to_string(remaining) + "x " + item.id);
+                    return 0;
+                } else if (existing.id == item.id) {
+                    int space = existing.stackMax - existing.count;
+                    existing.count = existing.stackMax;
+                    remaining -= space;
+                }
+            }
+        }
+
+        // New slot(s)
+        while (remaining > 0 && static_cast<int>(m_items.size()) < m_capacity) {
+            Item newSlot = item;
+            newSlot.count = std::min(remaining, item.stackMax);
+            remaining -= newSlot.count;
+            m_items.push_back(newSlot);
+        }
+
+        return remaining;   // 0 = all added
+    }
+
+    // Remove `count` of the given item. Returns amount actually removed.
+    int removeItem(const std::string& id, int count) {
+        int removed = 0;
+        for (auto it = m_items.begin(); it != m_items.end() && removed < count; ) {
+            if (it->id == id) {
+                int take = std::min(it->count, count - removed);
+                it->count -= take;
+                removed += take;
+                if (it->count <= 0) {
+                    it = m_items.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+        return removed;
+    }
+
+    [[nodiscard]] int countItem(const std::string& id) const {
+        int total = 0;
+        for (const auto& item : m_items)
+            if (item.id == id) total += item.count;
+        return total;
+    }
+
+    [[nodiscard]] const Item* findItem(const std::string& id) const {
+        for (const auto& item : m_items)
+            if (item.id == id) return &item;
+        return nullptr;
+    }
+
+    [[nodiscard]] int usedSlots()  const { return static_cast<int>(m_items.size()); }
+    [[nodiscard]] int freeSlots()  const { return m_capacity - usedSlots(); }
+    [[nodiscard]] int capacity()   const { return m_capacity; }
+    [[nodiscard]] bool isFull()    const { return usedSlots() >= m_capacity; }
+    [[nodiscard]] const std::vector<Item>& items() const { return m_items; }
+
+    // Convert to a simple map<itemId, count> (useful for crafting checks).
+    [[nodiscard]] std::map<std::string, int> toCountMap() const {
+        std::map<std::string, int> m;
+        for (const auto& item : m_items) m[item.id] += item.count;
+        return m;
+    }
+
+private:
+    std::vector<Item> m_items;
+    int m_capacity;
+};
+
+class EquipmentLoadout {
+public:
+    // Equip item in its designated slot. Returns the previously-equipped item id (empty if none).
+    std::string equip(const Item& item) {
+        if (item.slot == ItemSlot::None) return "";
+        std::string prev;
+        auto it = m_equipped.find(item.slot);
+        if (it != m_equipped.end()) prev = it->second.id;
+        m_equipped[item.slot] = item;
+        NF_LOG_INFO("Equipment", "Equipped " + item.id + " in " + itemSlotName(item.slot));
+        return prev;
+    }
+
+    // Unequip and return the item. Returns nullopt if slot is empty.
+    std::string unequip(ItemSlot slot) {
+        auto it = m_equipped.find(slot);
+        if (it == m_equipped.end()) return "";
+        std::string id = it->second.id;
+        m_equipped.erase(it);
+        NF_LOG_INFO("Equipment", "Unequipped " + id + " from " + itemSlotName(slot));
+        return id;
+    }
+
+    [[nodiscard]] bool isSlotOccupied(ItemSlot slot) const {
+        return m_equipped.find(slot) != m_equipped.end();
+    }
+
+    [[nodiscard]] const Item* getEquipped(ItemSlot slot) const {
+        auto it = m_equipped.find(slot);
+        return it != m_equipped.end() ? &it->second : nullptr;
+    }
+
+    struct EquipmentBonuses {
+        float damage = 0.f;
+        float armor  = 0.f;
+        float speed  = 0.f;
+        float health = 0.f;
+    };
+
+    [[nodiscard]] EquipmentBonuses computeBonuses() const {
+        EquipmentBonuses b;
+        for (const auto& [slot, item] : m_equipped) {
+            b.damage += item.damageBonus;
+            b.armor  += item.armorBonus;
+            b.speed  += item.speedBonus;
+            b.health += item.healthBonus;
+        }
+        return b;
+    }
+
+    [[nodiscard]] int equippedCount() const { return static_cast<int>(m_equipped.size()); }
+
+private:
+    std::map<ItemSlot, Item> m_equipped;
+};
+
 } // namespace NF

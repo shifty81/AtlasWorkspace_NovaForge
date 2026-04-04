@@ -3058,3 +3058,272 @@ TEST_CASE("ProgressionSystem spendSkillPoint unlocks skill", "[Game][Progression
     REQUIRE(prog.skillPoints() == 0);
     REQUIRE(prog.bonuses().mining == Catch::Approx(5.f));
 }
+
+// ── G16: Crafting System ─────────────────────────────────────────
+
+TEST_CASE("CraftingCategory names", "[Game][Crafting]") {
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Weapon)     == "Weapon");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Armor)      == "Armor");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Tool)       == "Tool");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Component)  == "Component");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Consumable) == "Consumable");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Fuel)       == "Fuel");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Decoration) == "Decoration");
+}
+
+TEST_CASE("CraftingQueue enqueue and tick to completion", "[Game][Crafting]") {
+    NF::CraftingQueue q;
+    REQUIRE(q.isEmpty());
+
+    q.enqueue("iron_plate", 3.f);
+    REQUIRE(q.pendingCount() == 1);
+
+    q.tick(2.f);
+    auto done = q.collectCompleted();
+    REQUIRE(done.empty());
+
+    q.tick(2.f);
+    done = q.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "iron_plate");
+    REQUIRE(q.isEmpty());
+}
+
+TEST_CASE("CraftingQueue processes jobs in FIFO order", "[Game][Crafting]") {
+    NF::CraftingQueue q;
+    q.enqueue("a", 1.f);
+    q.enqueue("b", 1.f);
+
+    q.tick(1.5f);
+    auto done = q.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "a");
+
+    q.tick(1.5f);
+    done = q.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "b");
+}
+
+TEST_CASE("CraftingSystem registerRecipe and canCraft", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe recipe;
+    recipe.recipeId = "steel_bar";
+    recipe.outputItemId = "steel";
+    recipe.category = NF::CraftingCategory::Component;
+    recipe.craftTime = 4.f;
+    recipe.ingredients.push_back({"iron", 2});
+    recipe.ingredients.push_back({"coal", 1});
+    cs.registerRecipe(recipe);
+
+    REQUIRE(cs.recipeCount() == 1);
+    REQUIRE(cs.findRecipe("steel_bar") != nullptr);
+
+    std::map<std::string, int> inv = {{"iron", 5}, {"coal", 3}};
+    REQUIRE(cs.canCraft("steel_bar", inv));
+
+    std::map<std::string, int> noCoal = {{"iron", 5}};
+    REQUIRE_FALSE(cs.canCraft("steel_bar", noCoal));
+}
+
+TEST_CASE("CraftingSystem enqueue deducts ingredients", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe recipe;
+    recipe.recipeId = "circuit";
+    recipe.craftTime = 2.f;
+    recipe.ingredients.push_back({"copper", 3});
+    cs.registerRecipe(recipe);
+
+    std::map<std::string, int> inv = {{"copper", 5}};
+    REQUIRE(cs.enqueue("circuit", inv));
+    REQUIRE(inv["copper"] == 2);
+
+    cs.tick(3.f);
+    auto done = cs.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "circuit");
+}
+
+TEST_CASE("CraftingSystem canCraft respects required level", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe recipe;
+    recipe.recipeId = "advanced_laser";
+    recipe.requiredLevel = 10;
+    recipe.craftTime = 1.f;
+    cs.registerRecipe(recipe);
+
+    std::map<std::string, int> inv;
+    REQUIRE_FALSE(cs.canCraft("advanced_laser", inv, 5));
+    REQUIRE(cs.canCraft("advanced_laser", inv, 10));
+}
+
+TEST_CASE("CraftingSystem recipesByCategory filters", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe r1; r1.recipeId = "sword"; r1.category = NF::CraftingCategory::Weapon;
+    NF::CraftingRecipe r2; r2.recipeId = "potion"; r2.category = NF::CraftingCategory::Consumable;
+    NF::CraftingRecipe r3; r3.recipeId = "axe"; r3.category = NF::CraftingCategory::Weapon;
+    cs.registerRecipe(r1);
+    cs.registerRecipe(r2);
+    cs.registerRecipe(r3);
+
+    auto weapons = cs.recipesByCategory(NF::CraftingCategory::Weapon);
+    REQUIRE(weapons.size() == 2);
+    REQUIRE(cs.recipesByCategory(NF::CraftingCategory::Consumable).size() == 1);
+}
+
+TEST_CASE("CraftingJob progress tracks correctly", "[Game][Crafting]") {
+    NF::CraftingJob job;
+    job.recipeId = "test";
+    job.duration = 10.f;
+
+    REQUIRE(job.progress() == Catch::Approx(0.f));
+    job.tick(5.f);
+    REQUIRE(job.progress() == Catch::Approx(0.5f));
+    job.tick(5.f);
+    REQUIRE(job.complete);
+    REQUIRE(job.progress() == Catch::Approx(1.f));
+}
+
+// ── G17: Inventory & Equipment ───────────────────────────────────
+
+TEST_CASE("ItemRarity and ItemSlot names", "[Game][Inventory]") {
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Common)    == "Common");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Uncommon)  == "Uncommon");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Rare)      == "Rare");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Epic)      == "Epic");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Legendary) == "Legendary");
+
+    REQUIRE(NF::itemSlotName(NF::ItemSlot::Head)   == "Head");
+    REQUIRE(NF::itemSlotName(NF::ItemSlot::Weapon) == "Weapon");
+    REQUIRE(NF::itemSlotName(NF::ItemSlot::Shield) == "Shield");
+}
+
+TEST_CASE("Inventory addItem and stacking", "[Game][Inventory]") {
+    NF::PlayerInventory inv(10);
+    REQUIRE(inv.freeSlots() == 10);
+
+    NF::Item iron;
+    iron.id = "iron_ore";
+    iron.count = 5;
+    iron.stackMax = 20;
+
+    int leftover = inv.addItem(iron);
+    REQUIRE(leftover == 0);
+    REQUIRE(inv.usedSlots() == 1);
+    REQUIRE(inv.countItem("iron_ore") == 5);
+
+    // Stack onto same slot
+    iron.count = 10;
+    leftover = inv.addItem(iron);
+    REQUIRE(leftover == 0);
+    REQUIRE(inv.usedSlots() == 1);
+    REQUIRE(inv.countItem("iron_ore") == 15);
+}
+
+TEST_CASE("Inventory removeItem", "[Game][Inventory]") {
+    NF::PlayerInventory inv(10);
+
+    NF::Item item;
+    item.id = "gem";
+    item.count = 8;
+    item.stackMax = 99;
+    inv.addItem(item);
+
+    int removed = inv.removeItem("gem", 3);
+    REQUIRE(removed == 3);
+    REQUIRE(inv.countItem("gem") == 5);
+
+    removed = inv.removeItem("gem", 10);
+    REQUIRE(removed == 5);
+    REQUIRE(inv.countItem("gem") == 0);
+    REQUIRE(inv.usedSlots() == 0);
+}
+
+TEST_CASE("Inventory capacity limit", "[Game][Inventory]") {
+    NF::PlayerInventory inv(2);
+
+    NF::Item a; a.id = "a"; a.count = 1; a.stackMax = 1;
+    NF::Item b; b.id = "b"; b.count = 1; b.stackMax = 1;
+    NF::Item c; c.id = "c"; c.count = 1; c.stackMax = 1;
+
+    REQUIRE(inv.addItem(a) == 0);
+    REQUIRE(inv.addItem(b) == 0);
+    REQUIRE(inv.isFull());
+
+    int left = inv.addItem(c);
+    REQUIRE(left == 1);   // couldn't fit
+}
+
+TEST_CASE("Inventory toCountMap", "[Game][Inventory]") {
+    NF::PlayerInventory inv(10);
+
+    NF::Item iron; iron.id = "iron"; iron.count = 5; iron.stackMax = 99;
+    NF::Item coal; coal.id = "coal"; coal.count = 3; coal.stackMax = 99;
+    inv.addItem(iron);
+    inv.addItem(coal);
+
+    auto m = inv.toCountMap();
+    REQUIRE(m["iron"] == 5);
+    REQUIRE(m["coal"] == 3);
+}
+
+TEST_CASE("EquipmentLoadout equip and unequip", "[Game][Equipment]") {
+    NF::EquipmentLoadout eq;
+
+    NF::Item helmet;
+    helmet.id = "iron_helm";
+    helmet.slot = NF::ItemSlot::Head;
+    helmet.armorBonus = 5.f;
+
+    eq.equip(helmet);
+    REQUIRE(eq.isSlotOccupied(NF::ItemSlot::Head));
+    REQUIRE(eq.equippedCount() == 1);
+
+    auto prev = eq.unequip(NF::ItemSlot::Head);
+    REQUIRE(prev == "iron_helm");
+    REQUIRE_FALSE(eq.isSlotOccupied(NF::ItemSlot::Head));
+}
+
+TEST_CASE("EquipmentLoadout replaces existing and computes bonuses", "[Game][Equipment]") {
+    NF::EquipmentLoadout eq;
+
+    NF::Item sword1;
+    sword1.id = "rusty_sword";
+    sword1.slot = NF::ItemSlot::Weapon;
+    sword1.damageBonus = 3.f;
+
+    NF::Item sword2;
+    sword2.id = "steel_sword";
+    sword2.slot = NF::ItemSlot::Weapon;
+    sword2.damageBonus = 8.f;
+
+    eq.equip(sword1);
+    auto prev = eq.equip(sword2);
+    REQUIRE(prev == "rusty_sword");
+    REQUIRE(eq.equippedCount() == 1);
+
+    auto b = eq.computeBonuses();
+    REQUIRE(b.damage == Catch::Approx(8.f));
+}
+
+TEST_CASE("EquipmentLoadout computeBonuses aggregates all slots", "[Game][Equipment]") {
+    NF::EquipmentLoadout eq;
+
+    NF::Item helm;  helm.id = "h";  helm.slot = NF::ItemSlot::Head;   helm.armorBonus = 5.f;
+    NF::Item chest; chest.id = "c"; chest.slot = NF::ItemSlot::Chest;  chest.armorBonus = 10.f; chest.healthBonus = 20.f;
+    NF::Item wpn;   wpn.id = "w";   wpn.slot = NF::ItemSlot::Weapon;  wpn.damageBonus = 7.f;
+
+    eq.equip(helm);
+    eq.equip(chest);
+    eq.equip(wpn);
+
+    auto b = eq.computeBonuses();
+    REQUIRE(b.armor  == Catch::Approx(15.f));
+    REQUIRE(b.health == Catch::Approx(20.f));
+    REQUIRE(b.damage == Catch::Approx(7.f));
+    REQUIRE(eq.equippedCount() == 3);
+}
