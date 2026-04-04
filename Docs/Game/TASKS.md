@@ -280,3 +280,25 @@
 - [x] NPCMemory class (remember, decay, dispositionTowardPlayer, entryCount, remembers)
 - [x] LegendStatus class (init, reputation, worldBias, overallTier, isLegend)
 - [x] Comprehensive test coverage (12 new tests)
+
+## Game Phase G10 — Quest & Mission System
+
+- [x] MissionObjectiveType enum (Kill, Collect, Deliver, Explore, Survive, Escort) with missionObjectiveTypeName()
+- [x] MissionObjective struct (type, targetId, description, required, current, isComplete, progress)
+- [x] MissionReward struct (credits, resources map, reputationFactionId, reputationAmount)
+- [x] MissionStatus enum (Active, Completed, Failed)
+- [x] ActiveMission class (init, objectives, reward, allObjectivesComplete, complete, fail)
+- [x] MissionLog class (acceptMission, completeMission, failMission, findActive, counts)
+- [x] QuestChain class (init, addMission, currentMissionId, advance, isComplete)
+- [x] Comprehensive test coverage (10 new tests)
+
+## Game Phase G11 — Dialogue System
+
+- [x] DialogueConditionType enum (Always, HasReputation, HasItem, MissionActive, MissionComplete)
+- [x] DialogueCondition struct (type, factionId, minReputation, itemType, missionId, evaluate)
+- [x] DialogueEffect struct (reputationFactionId, reputationDelta, startMissionId, giveItem)
+- [x] DialogueOption struct (text, condition, effect, nextNodeId)
+- [x] DialogueNode struct (nodeId, speakerName, text, options)
+- [x] DialogueGraph class (setStartNodeId, addNode, getNode, nodeCount)
+- [x] DialogueRunner class (init, currentNode, selectOption, isComplete)
+- [x] Comprehensive test coverage (7 new tests)

@@ -2360,3 +2360,260 @@ TEST_CASE("NF::LegendStatus init and is legend", "[g9]") {
     REQUIRE(ls.reputation().globalFame() == Catch::Approx(2500.f));
     REQUIRE(ls.isLegend() == true);
 }
+
+// ── G10: Quest & Mission System ──────────────────────────────────
+
+TEST_CASE("NF::missionObjectiveTypeName round-trip", "[g10]") {
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Kill))    == "Kill");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Collect)) == "Collect");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Deliver)) == "Deliver");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Explore)) == "Explore");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Survive)) == "Survive");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Escort))  == "Escort");
+}
+
+TEST_CASE("NF::MissionObjective progress and isComplete", "[g10]") {
+    NF::MissionObjective obj;
+    obj.type = NF::MissionObjectiveType::Kill;
+    obj.required = 3;
+    obj.current = 0;
+    REQUIRE(obj.isComplete() == false);
+    obj.progress(2);
+    REQUIRE(obj.current == 2);
+    REQUIRE(obj.isComplete() == false);
+    obj.progress(5);
+    REQUIRE(obj.current == 3);
+    REQUIRE(obj.isComplete() == true);
+}
+
+TEST_CASE("NF::ActiveMission init and objectives", "[g10]") {
+    NF::ActiveMission m;
+    m.init(NF::StringID("mission_01"), "Destroy Pirates");
+    REQUIRE(m.title() == "Destroy Pirates");
+    REQUIRE(m.status() == NF::MissionStatus::Active);
+    REQUIRE(m.objectiveCount() == 0);
+
+    NF::MissionObjective obj;
+    obj.type = NF::MissionObjectiveType::Kill;
+    obj.required = 5;
+    m.addObjective(obj);
+    REQUIRE(m.objectiveCount() == 1);
+    REQUIRE(m.allObjectivesComplete() == false);
+
+    m.objective(0).progress(5);
+    REQUIRE(m.allObjectivesComplete() == true);
+}
+
+TEST_CASE("NF::ActiveMission complete and fail", "[g10]") {
+    NF::ActiveMission m;
+    m.init(NF::StringID("m1"), "Test");
+    m.complete();
+    REQUIRE(m.status() == NF::MissionStatus::Completed);
+
+    NF::ActiveMission m2;
+    m2.init(NF::StringID("m2"), "Test2");
+    m2.fail();
+    REQUIRE(m2.status() == NF::MissionStatus::Failed);
+}
+
+TEST_CASE("NF::MissionReward credits and resources", "[g10]") {
+    NF::MissionReward r;
+    r.credits = 500;
+    r.resources[NF::ResourceType::RefinedIron] = 10;
+    r.reputationFactionId = NF::StringID("pirates");
+    r.reputationAmount = 25.f;
+
+    REQUIRE(r.credits == 500);
+    REQUIRE(r.resources[NF::ResourceType::RefinedIron] == 10);
+    REQUIRE(r.reputationAmount == Catch::Approx(25.f));
+}
+
+TEST_CASE("NF::MissionLog accept and complete", "[g10]") {
+    NF::MissionLog log;
+    NF::ActiveMission m;
+    m.init(NF::StringID("mission_01"), "Clear Pirates");
+    log.acceptMission(m);
+    REQUIRE(log.activeMissionCount() == 1);
+    REQUIRE(log.completedMissionCount() == 0);
+
+    bool ok = log.completeMission(NF::StringID("mission_01"));
+    REQUIRE(ok == true);
+    REQUIRE(log.activeMissionCount() == 0);
+    REQUIRE(log.completedMissionCount() == 1);
+}
+
+TEST_CASE("NF::MissionLog fail mission", "[g10]") {
+    NF::MissionLog log;
+    NF::ActiveMission m;
+    m.init(NF::StringID("m_fail"), "Risky Run");
+    log.acceptMission(m);
+    bool ok = log.failMission(NF::StringID("m_fail"));
+    REQUIRE(ok == true);
+    REQUIRE(log.activeMissionCount() == 0);
+    REQUIRE(log.failedMissionCount() == 1);
+}
+
+TEST_CASE("NF::MissionLog findActive", "[g10]") {
+    NF::MissionLog log;
+    NF::ActiveMission m;
+    m.init(NF::StringID("find_me"), "Find Me");
+    log.acceptMission(m);
+    REQUIRE(log.findActive(NF::StringID("find_me")) != nullptr);
+    REQUIRE(log.findActive(NF::StringID("nope"))    == nullptr);
+}
+
+TEST_CASE("NF::QuestChain advance and isComplete", "[g10]") {
+    NF::QuestChain chain;
+    chain.init("Liberation Chain");
+    chain.addMission(NF::StringID("q1"));
+    chain.addMission(NF::StringID("q2"));
+    chain.addMission(NF::StringID("q3"));
+    REQUIRE(chain.missionCount() == 3);
+    REQUIRE(chain.currentIndex() == 0);
+    REQUIRE(chain.isComplete() == false);
+
+    chain.advance();
+    REQUIRE(chain.currentIndex() == 1);
+    chain.advance();
+    chain.advance();
+    REQUIRE(chain.isComplete() == true);
+}
+
+TEST_CASE("NF::QuestChain currentMissionId", "[g10]") {
+    NF::QuestChain chain;
+    chain.init("Test Chain");
+    chain.addMission(NF::StringID("alpha"));
+    chain.addMission(NF::StringID("beta"));
+    REQUIRE(chain.currentMissionId() == NF::StringID("alpha"));
+    chain.advance();
+    REQUIRE(chain.currentMissionId() == NF::StringID("beta"));
+}
+
+// ── G11: Dialogue System ─────────────────────────────────────────
+
+TEST_CASE("NF::DialogueCondition Always evaluates true", "[g11]") {
+    NF::DialogueCondition c;
+    c.type = NF::DialogueConditionType::Always;
+    REQUIRE(c.evaluate(0.f, 0, false, false) == true);
+}
+
+TEST_CASE("NF::DialogueCondition HasReputation", "[g11]") {
+    NF::DialogueCondition c;
+    c.type = NF::DialogueConditionType::HasReputation;
+    c.minReputation = 50.f;
+    REQUIRE(c.evaluate(49.f, 0, false, false) == false);
+    REQUIRE(c.evaluate(50.f, 0, false, false) == true);
+    REQUIRE(c.evaluate(100.f, 0, false, false) == true);
+}
+
+TEST_CASE("NF::DialogueCondition HasItem", "[g11]") {
+    NF::DialogueCondition c;
+    c.type = NF::DialogueConditionType::HasItem;
+    c.itemAmount = 3;
+    REQUIRE(c.evaluate(0.f, 2, false, false) == false);
+    REQUIRE(c.evaluate(0.f, 3, false, false) == true);
+}
+
+TEST_CASE("NF::DialogueCondition MissionActive and MissionComplete", "[g11]") {
+    NF::DialogueCondition ca;
+    ca.type = NF::DialogueConditionType::MissionActive;
+    REQUIRE(ca.evaluate(0.f, 0, false, false) == false);
+    REQUIRE(ca.evaluate(0.f, 0, true, false) == true);
+
+    NF::DialogueCondition cc;
+    cc.type = NF::DialogueConditionType::MissionComplete;
+    REQUIRE(cc.evaluate(0.f, 0, false, false) == false);
+    REQUIRE(cc.evaluate(0.f, 0, false, true) == true);
+}
+
+TEST_CASE("NF::DialogueGraph addNode and getNode", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+
+    NF::DialogueNode node;
+    node.nodeId = 0;
+    node.speakerName = "Merchant";
+    node.text = "Welcome, traveler.";
+    graph.addNode(node);
+
+    REQUIRE(graph.nodeCount() == 1);
+    const NF::DialogueNode* n = graph.getNode(0);
+    REQUIRE(n != nullptr);
+    REQUIRE(n->speakerName == "Merchant");
+    REQUIRE(graph.getNode(99) == nullptr);
+}
+
+TEST_CASE("NF::DialogueRunner traversal", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+
+    NF::DialogueNode n0;
+    n0.nodeId = 0;
+    n0.speakerName = "Guard";
+    n0.text = "Halt! Who goes there?";
+    NF::DialogueOption opt0;
+    opt0.text = "A friend.";
+    opt0.nextNodeId = 1;
+    n0.options.push_back(opt0);
+    graph.addNode(n0);
+
+    NF::DialogueNode n1;
+    n1.nodeId = 1;
+    n1.speakerName = "Guard";
+    n1.text = "Pass, friend.";
+    NF::DialogueOption opt1;
+    opt1.text = "Thank you.";
+    opt1.nextNodeId = -1;
+    n1.options.push_back(opt1);
+    graph.addNode(n1);
+
+    NF::DialogueRunner runner;
+    runner.init(&graph);
+    REQUIRE(runner.isComplete() == false);
+    REQUIRE(runner.currentNode()->text == "Halt! Who goes there?");
+
+    runner.selectOption(0);
+    REQUIRE(runner.currentNodeId() == 1);
+    REQUIRE(runner.currentNode()->text == "Pass, friend.");
+
+    runner.selectOption(0);
+    REQUIRE(runner.isComplete() == true);
+}
+
+TEST_CASE("NF::DialogueRunner selectOption with effect", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+
+    NF::DialogueNode n0;
+    n0.nodeId = 0;
+    n0.speakerName = "Broker";
+    n0.text = "Deal?";
+    NF::DialogueOption opt;
+    opt.text = "Yes.";
+    opt.nextNodeId = -1;
+    opt.effect.reputationFactionId = NF::StringID("traders");
+    opt.effect.reputationDelta = 10.f;
+    n0.options.push_back(opt);
+    graph.addNode(n0);
+
+    NF::DialogueRunner runner;
+    runner.init(&graph);
+    const NF::DialogueEffect* fx = runner.selectOption(0);
+    REQUIRE(fx != nullptr);
+    REQUIRE(fx->reputationFactionId == NF::StringID("traders"));
+    REQUIRE(fx->reputationDelta == Catch::Approx(10.f));
+    REQUIRE(runner.isComplete() == true);
+}
+
+TEST_CASE("NF::DialogueRunner invalid option returns nullptr", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+    NF::DialogueNode n0;
+    n0.nodeId = 0;
+    n0.text = "Hi.";
+    graph.addNode(n0);
+
+    NF::DialogueRunner runner;
+    runner.init(&graph);
+    REQUIRE(runner.selectOption(5) == nullptr);
+}

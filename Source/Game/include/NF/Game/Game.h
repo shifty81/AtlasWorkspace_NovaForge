@@ -2535,4 +2535,268 @@ private:
     WorldBiasMap m_worldBias;
 };
 
+// ── G10: Quest & Mission System ──────────────────────────────────
+
+enum class MissionObjectiveType {
+    Kill,
+    Collect,
+    Deliver,
+    Explore,
+    Survive,
+    Escort
+};
+
+inline const char* missionObjectiveTypeName(MissionObjectiveType t) {
+    switch (t) {
+        case MissionObjectiveType::Kill:    return "Kill";
+        case MissionObjectiveType::Collect: return "Collect";
+        case MissionObjectiveType::Deliver: return "Deliver";
+        case MissionObjectiveType::Explore: return "Explore";
+        case MissionObjectiveType::Survive: return "Survive";
+        case MissionObjectiveType::Escort:  return "Escort";
+        default:                            return "Unknown";
+    }
+}
+
+struct MissionObjective {
+    MissionObjectiveType type = MissionObjectiveType::Kill;
+    StringID targetId;
+    std::string description;
+    int required = 1;
+    int current = 0;
+
+    bool isComplete() const { return current >= required; }
+    void progress(int amount = 1) { current = std::min(current + amount, required); }
+};
+
+struct MissionReward {
+    int credits = 0;
+    std::map<ResourceType, int> resources;
+    StringID reputationFactionId;
+    float reputationAmount = 0.f;
+};
+
+enum class MissionStatus { Active, Completed, Failed };
+
+class ActiveMission {
+public:
+    void init(StringID missionId, const std::string& title) {
+        m_missionId = missionId;
+        m_title = title;
+        m_status = MissionStatus::Active;
+    }
+
+    StringID missionId() const { return m_missionId; }
+    const std::string& title() const { return m_title; }
+    MissionStatus status() const { return m_status; }
+
+    void addObjective(const MissionObjective& obj) { m_objectives.push_back(obj); }
+    int objectiveCount() const { return (int)m_objectives.size(); }
+    MissionObjective& objective(int i) { return m_objectives[i]; }
+    const MissionObjective& objective(int i) const { return m_objectives[i]; }
+
+    void setReward(const MissionReward& r) { m_reward = r; }
+    const MissionReward& reward() const { return m_reward; }
+
+    bool allObjectivesComplete() const {
+        for (auto& o : m_objectives) if (!o.isComplete()) return false;
+        return !m_objectives.empty();
+    }
+
+    void complete() { if (m_status == MissionStatus::Active) m_status = MissionStatus::Completed; }
+    void fail()     { if (m_status == MissionStatus::Active) m_status = MissionStatus::Failed; }
+
+private:
+    StringID m_missionId;
+    std::string m_title;
+    MissionStatus m_status = MissionStatus::Active;
+    std::vector<MissionObjective> m_objectives;
+    MissionReward m_reward;
+};
+
+class MissionLog {
+public:
+    void acceptMission(const ActiveMission& mission) {
+        m_active.push_back(mission);
+    }
+
+    bool completeMission(StringID missionId) {
+        for (auto it = m_active.begin(); it != m_active.end(); ++it) {
+            if (it->missionId() == missionId) {
+                it->complete();
+                m_completed.push_back(*it);
+                m_active.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool failMission(StringID missionId) {
+        for (auto it = m_active.begin(); it != m_active.end(); ++it) {
+            if (it->missionId() == missionId) {
+                it->fail();
+                m_failed.push_back(*it);
+                m_active.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ActiveMission* findActive(StringID missionId) {
+        for (auto& m : m_active) if (m.missionId() == missionId) return &m;
+        return nullptr;
+    }
+
+    int activeMissionCount()    const { return (int)m_active.size(); }
+    int completedMissionCount() const { return (int)m_completed.size(); }
+    int failedMissionCount()    const { return (int)m_failed.size(); }
+
+    const std::vector<ActiveMission>& activeMissions()    const { return m_active; }
+    const std::vector<ActiveMission>& completedMissions() const { return m_completed; }
+
+private:
+    std::vector<ActiveMission> m_active;
+    std::vector<ActiveMission> m_completed;
+    std::vector<ActiveMission> m_failed;
+};
+
+class QuestChain {
+public:
+    void init(const std::string& name) { m_name = name; m_currentIndex = 0; }
+
+    const std::string& name() const { return m_name; }
+    void addMission(StringID missionId) { m_missionIds.push_back(missionId); }
+    int missionCount() const { return (int)m_missionIds.size(); }
+
+    StringID currentMissionId() const {
+        if (m_currentIndex < (int)m_missionIds.size())
+            return m_missionIds[m_currentIndex];
+        return StringID{};
+    }
+
+    bool advance() {
+        if (m_currentIndex < (int)m_missionIds.size()) {
+            ++m_currentIndex;
+            return true;
+        }
+        return false;
+    }
+
+    bool isComplete() const { return m_currentIndex >= (int)m_missionIds.size(); }
+    int currentIndex() const { return m_currentIndex; }
+
+private:
+    std::string m_name;
+    std::vector<StringID> m_missionIds;
+    int m_currentIndex = 0;
+};
+
+// ── G11: Dialogue System ─────────────────────────────────────────
+
+enum class DialogueConditionType {
+    Always,
+    HasReputation,
+    HasItem,
+    MissionActive,
+    MissionComplete
+};
+
+struct DialogueCondition {
+    DialogueConditionType type = DialogueConditionType::Always;
+    StringID factionId;
+    float minReputation = 0.f;
+    ResourceType itemType = ResourceType::RawStone;
+    int itemAmount = 1;
+    StringID missionId;
+
+    bool evaluate(float reputation, int itemCount, bool missionActive, bool missionComplete) const {
+        switch (type) {
+            case DialogueConditionType::Always:          return true;
+            case DialogueConditionType::HasReputation:   return reputation >= minReputation;
+            case DialogueConditionType::HasItem:         return itemCount >= itemAmount;
+            case DialogueConditionType::MissionActive:   return missionActive;
+            case DialogueConditionType::MissionComplete: return missionComplete;
+            default:                                     return false;
+        }
+    }
+};
+
+struct DialogueEffect {
+    StringID reputationFactionId;
+    float reputationDelta = 0.f;
+    StringID startMissionId;
+    ResourceType giveItemType = ResourceType::RawStone;
+    int giveItemAmount = 0;
+};
+
+struct DialogueOption {
+    std::string text;
+    DialogueCondition condition;
+    DialogueEffect effect;
+    int nextNodeId = -1;
+};
+
+struct DialogueNode {
+    int nodeId = 0;
+    std::string speakerName;
+    std::string text;
+    std::vector<DialogueOption> options;
+};
+
+class DialogueGraph {
+public:
+    void setStartNodeId(int id) { m_startNodeId = id; }
+    int startNodeId() const { return m_startNodeId; }
+
+    void addNode(const DialogueNode& node) { m_nodes[node.nodeId] = node; }
+    const DialogueNode* getNode(int id) const {
+        auto it = m_nodes.find(id);
+        return it != m_nodes.end() ? &it->second : nullptr;
+    }
+    int nodeCount() const { return (int)m_nodes.size(); }
+
+private:
+    int m_startNodeId = 0;
+    std::map<int, DialogueNode> m_nodes;
+};
+
+class DialogueRunner {
+public:
+    void init(const DialogueGraph* graph) {
+        m_graph = graph;
+        m_currentNodeId = graph ? graph->startNodeId() : -1;
+        m_complete = false;
+    }
+
+    const DialogueNode* currentNode() const {
+        return m_graph ? m_graph->getNode(m_currentNodeId) : nullptr;
+    }
+
+    bool isComplete() const { return m_complete; }
+
+    const DialogueEffect* selectOption(int optionIndex) {
+        const DialogueNode* node = currentNode();
+        if (!node || optionIndex < 0 || optionIndex >= (int)node->options.size())
+            return nullptr;
+        const DialogueOption& opt = node->options[optionIndex];
+        m_lastEffect = opt.effect;
+        if (opt.nextNodeId < 0) {
+            m_complete = true;
+        } else {
+            m_currentNodeId = opt.nextNodeId;
+        }
+        return &m_lastEffect;
+    }
+
+    int currentNodeId() const { return m_currentNodeId; }
+
+private:
+    const DialogueGraph* m_graph = nullptr;
+    int m_currentNodeId = -1;
+    bool m_complete = false;
+    DialogueEffect m_lastEffect;
+};
+
 } // namespace NF
