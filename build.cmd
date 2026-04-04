@@ -85,10 +85,12 @@ echo.
 echo === NovaForge %CONFIG% %TARGET% === >> "%LOGFILE%"
 echo. >> "%LOGFILE%"
 
-msbuild "%SLN_PATH%" /t:%TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /m %EXTRA_ARGS% >> "%LOGFILE%" 2>&1
+msbuild "%SLN_PATH%" /t:%TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /m %EXTRA_ARGS%
 set BUILD_EXIT=!ERRORLEVEL!
 
-type "%LOGFILE%"
+:: Also append to log (without blocking the console output above).
+echo Build exit code: !BUILD_EXIT! >> "%LOGFILE%"
+echo Build completed: %DATE% %TIME% >> "%LOGFILE%"
 
 if !BUILD_EXIT! neq 0 (
     echo.
@@ -108,6 +110,5 @@ echo.
 echo [OK] NovaForge %CONFIG% %TARGET% succeeded.
 echo.
 echo [OK] NovaForge %CONFIG% %TARGET% succeeded. >> "%LOGFILE%"
-echo Build completed: %DATE% %TIME% >> "%LOGFILE%"
 echo Build log saved to: %LOGFILE%
 pause

@@ -23,20 +23,20 @@ target_compile_options(NF_CompilerSettings INTERFACE
         /MP             # Multi-processor compilation
     >
 
-    # ── Clang-cl (LLVM front-end on Windows) ─────────────────────────────────
-    $<$<AND:$<CXX_COMPILER_ID:Clang>,$<PLATFORM_ID:Windows>>:
-        /W4
-        /permissive-
-        /utf-8
-    >
-
-    # ── GCC / Clang (non-Windows) ─────────────────────────────────────────────
-    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<NOT:$<PLATFORM_ID:Windows>>>:
+    # ── GCC ──────────────────────────────────────────────────────────────────
+    $<$<CXX_COMPILER_ID:GNU>:
         -Wall
         -Wextra
         -Wpedantic
         -Wshadow
         -Wconversion
+    >
+
+    # ── Clang (any platform, including clang-cl on Windows) ──────────────────
+    $<$<CXX_COMPILER_ID:Clang>:
+        -Wall
+        -Wextra
+        -Wpedantic
     >
 )
 

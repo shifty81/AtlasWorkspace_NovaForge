@@ -20,9 +20,8 @@
   <Target Name="_NF_CheckVCTargets" BeforeTargets="Build;Rebuild;Clean"
           Condition="'$(_NF_VCTargetsMissing)' == 'true'">
     <Error Text="NovaForge requires Visual Studio's MSBuild (not the .NET SDK MSBuild).
-Open a 'Developer Command Prompt for VS 2022' and use:
-  msbuild Builds\vs2022\NovaForge.sln /p:Configuration=Debug /p:Platform=x64
-Or build from the Visual Studio IDE (File &gt; Open &gt; CMake… &gt; CMakeLists.txt).
+Open a 'Developer Command Prompt for VS 2022' then run build.cmd, or use the VS IDE:
+  File &gt; Open &gt; CMake… &gt; CMakeLists.txt
 Do NOT use 'dotnet build' or 'dotnet msbuild' — the .NET SDK MSBuild lacks C++ targets." />
   </Target>
 

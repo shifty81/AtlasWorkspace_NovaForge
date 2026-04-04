@@ -26,7 +26,7 @@ This repository is the **complete unified monorepo**: the engine core, the game-
 | **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding | ✅ Done |
 | **G1–G17** — Game Phases | Full game layer (ships, fleets, economy, quests, progression, crafting, inventory) | ✅ Done |
 
-> **599 Catch2 tests** across 12 modules — Core(55), Engine(25), Physics(19), Renderer(22), Audio(12), Animation(12), Game(243), GraphVM(20), Input(10), Editor(95), Networking(50), AI(40).
+> **599 Catch2 tests** across 12 modules (Core, Engine, Physics, Renderer, Audio, Animation, Game, GraphVM, Input, Editor, Networking, AI).
 
 > See [`Docs/roadmap.md`](Docs/roadmap.md) for next milestones and [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) for the full phase history.
 

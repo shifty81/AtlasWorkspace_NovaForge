@@ -38,8 +38,6 @@
 - Hierarchy and Inspector panels are visible (empty/stub OK)
 - No crash on startup or shutdown
 
----
-
 ## M2 — Dev World Editing
 
 **Goal:** An empty scene/world that you can actually edit — place and remove voxel blocks, spawn entities, edit component properties, and undo/redo your changes.

@@ -89,6 +89,8 @@ jobs:
   build-windows:
     name: Windows (VS 2022 / MSVC)
     runs-on: windows-2022
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -107,6 +109,8 @@ jobs:
   build-windows-release:
     name: Windows Release (VS 2022 / MSVC)
     runs-on: windows-2022
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
