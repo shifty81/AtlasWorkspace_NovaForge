@@ -39,6 +39,26 @@
 | **G16** — Crafting System | Recipes, ingredients, FIFO crafting queue, level-gated | ✅ Done |
 | **G17** — Inventory & Equipment | Stackable items, rarity, slot-based equipment, stat bonuses | ✅ Done |
 
+## Workspace Suite Milestones (S-series)
+
+> All tools report back to the suite through the shared pipeline.
+> The editor is the only thing the user launches; all other tools run
+> headlessly or are embedded as panels.
+
+| Milestone | Goal | Status |
+|-----------|------|--------|
+| **S0** — Pipeline Core | `NF::Pipeline` module: PipelineWatcher, Manifest, WatchLog, ChangeEvent. 17 tests. | ✅ Done |
+| **M1** — Usable Editor | Real GLFW/ImGui window, viewport clear, basic panels | 🔜 Next |
+| **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | 📋 Planned |
+| **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | 📋 Planned |
+| **M4 / S3** — Asset Pipeline | AssetDatabase (GUID), mesh/texture importers, content browser hot-reload | 📋 Planned |
+| **S4** — Blender Bridge | novaforge_bridge.py add-on (BG-1→5), engine-side auto-import | 📋 Planned |
+| **S5** — Character & Animation Suite | FPSHandRig, TwoJointIK, AnimationBlendGraph, CharacterGroundingSystem | 📋 Planned |
+| **S6** — PCG World Tuning | BiomePainter, structure seed overrides, ore-seam editor, PCG preview | 📋 Planned |
+| **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | 📋 Planned |
+| **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | 📋 Planned |
+| **S9** — AtlasAI Integration | Pipeline intelligence, proactive suggestions, tool orchestration | 📋 Far future |
+
 ## Status Key
 
 | Icon | Meaning |

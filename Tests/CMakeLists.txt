@@ -98,3 +98,10 @@ target_link_libraries(NF_EditorTests PRIVATE
     Catch2::Catch2WithMain
 )
 catch_discover_tests(NF_EditorTests)
+
+# Pipeline tests
+add_executable(NF_PipelineTests
+    Pipeline/test_pipeline.cpp
+)
+target_link_libraries(NF_PipelineTests PRIVATE NF::Pipeline NF::Core Catch2::Catch2WithMain)
+catch_discover_tests(NF_PipelineTests)

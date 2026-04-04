@@ -48,6 +48,7 @@ add_subdirectory(Source/Game)
 add_subdirectory(Source/GraphVM)
 add_subdirectory(Source/AI)
 add_subdirectory(Source/World)
+add_subdirectory(Source/Pipeline)
 
 if(NF_BUILD_EDITOR)
     add_subdirectory(Source/Editor)
