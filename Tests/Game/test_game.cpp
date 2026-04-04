@@ -1255,3 +1255,317 @@ TEST_CASE("PlayerController init and update", "[Game][PlayerController][G3]") {
     float len = ctrl.lookDirection().length();
     REQUIRE(len == Catch::Approx(1.f).margin(1e-4));
 }
+
+// ── G4: Ship Systems ─────────────────────────────────────────────
+
+TEST_CASE("ShipClass name conversion", "[Game][Ship][G4]") {
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Fighter))   == "Fighter");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Corvette))  == "Corvette");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Frigate))   == "Frigate");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Cruiser))   == "Cruiser");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Freighter)) == "Freighter");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Count))     == "Unknown");
+}
+
+TEST_CASE("ModuleSlotType name conversion", "[Game][Ship][G4]") {
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Weapon))  == "Weapon");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Shield))  == "Shield");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Engine))  == "Engine");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Reactor)) == "Reactor");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Cargo))   == "Cargo");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Utility)) == "Utility");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Count))   == "Unknown");
+}
+
+TEST_CASE("ShipModule defaults and damage", "[Game][Ship][G4]") {
+    NF::ShipModule mod;
+    REQUIRE(mod.health == Catch::Approx(100.f));
+    REQUIRE(mod.active == true);
+    REQUIRE_FALSE(mod.isDestroyed());
+
+    mod.takeDamage(60.f);
+    REQUIRE(mod.health == Catch::Approx(40.f));
+    REQUIRE_FALSE(mod.isDestroyed());
+
+    mod.takeDamage(50.f);
+    REQUIRE(mod.health == Catch::Approx(0.f));
+    REQUIRE(mod.isDestroyed());
+    REQUIRE(mod.active == false);
+}
+
+TEST_CASE("ShipModule repair", "[Game][Ship][G4]") {
+    NF::ShipModule mod;
+    mod.takeDamage(100.f);
+    REQUIRE(mod.isDestroyed());
+    REQUIRE(mod.active == false);
+
+    mod.repair(50.f);
+    REQUIRE(mod.health == Catch::Approx(50.f));
+    REQUIRE(mod.active == true);
+    REQUIRE_FALSE(mod.isDestroyed());
+
+    mod.repair(200.f);
+    REQUIRE(mod.health == Catch::Approx(100.f));
+}
+
+TEST_CASE("Ship init by class — Fighter", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("TestFighter"));
+    REQUIRE(ship.shipClass() == NF::ShipClass::Fighter);
+    REQUIRE(ship.maxHull() == Catch::Approx(100.f));
+    REQUIRE(ship.maxShield() == Catch::Approx(50.f));
+    REQUIRE(ship.maxModules() == 4);
+    REQUIRE(ship.hull() == Catch::Approx(100.f));
+    REQUIRE(ship.shield() == Catch::Approx(50.f));
+}
+
+TEST_CASE("Ship init by class — Corvette", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Corvette, NF::StringID("TestCorvette"));
+    REQUIRE(ship.maxHull() == Catch::Approx(200.f));
+    REQUIRE(ship.maxShield() == Catch::Approx(100.f));
+    REQUIRE(ship.maxModules() == 6);
+}
+
+TEST_CASE("Ship init by class — Frigate", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Frigate, NF::StringID("TestFrigate"));
+    REQUIRE(ship.maxHull() == Catch::Approx(400.f));
+    REQUIRE(ship.maxShield() == Catch::Approx(200.f));
+    REQUIRE(ship.maxModules() == 8);
+}
+
+TEST_CASE("Ship add/remove modules", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Modular"));
+    REQUIRE(ship.moduleCount() == 0);
+
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 50.f;
+    REQUIRE(ship.addModule(eng));
+    REQUIRE(ship.moduleCount() == 1);
+    REQUIRE(ship.module(0)->slotType == NF::ModuleSlotType::Engine);
+
+    ship.removeModule(0);
+    REQUIRE(ship.moduleCount() == 0);
+}
+
+TEST_CASE("Ship max modules limit", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Full"));
+
+    NF::ShipModule mod;
+    for (int i = 0; i < 4; ++i)
+        REQUIRE(ship.addModule(mod));
+    REQUIRE(ship.moduleCount() == 4);
+    REQUIRE_FALSE(ship.addModule(mod));
+    REQUIRE(ship.moduleCount() == 4);
+}
+
+TEST_CASE("Ship hull damage — shield absorbs first", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("DmgTest"));
+    REQUIRE(ship.shield() == Catch::Approx(50.f));
+    REQUIRE(ship.hull() == Catch::Approx(100.f));
+
+    ship.takeDamage(30.f);
+    REQUIRE(ship.shield() == Catch::Approx(20.f));
+    REQUIRE(ship.hull() == Catch::Approx(100.f));
+
+    ship.takeDamage(40.f);
+    REQUIRE(ship.shield() == Catch::Approx(0.f));
+    REQUIRE(ship.hull() == Catch::Approx(80.f));
+}
+
+TEST_CASE("Ship destroyed state", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Doomed"));
+    REQUIRE_FALSE(ship.isDestroyed());
+
+    ship.takeDamage(50.f + 100.f);
+    REQUIRE(ship.isDestroyed());
+    REQUIRE(ship.hull() == Catch::Approx(0.f));
+}
+
+TEST_CASE("Ship computeStats", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Corvette, NF::StringID("Stats"));
+
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 40.f;
+    ship.addModule(eng);
+
+    NF::ShipModule reactor;
+    reactor.slotType = NF::ModuleSlotType::Reactor;
+    reactor.powerOutput = 100.f;
+    ship.addModule(reactor);
+
+    NF::ShipModule weapon;
+    weapon.slotType = NF::ModuleSlotType::Weapon;
+    weapon.damage = 10.f;
+    weapon.fireRate = 2.f;
+    ship.addModule(weapon);
+
+    NF::ShipStats stats = ship.computeStats();
+    REQUIRE(stats.totalThrust == Catch::Approx(40.f));
+    REQUIRE(stats.totalPowerOutput == Catch::Approx(100.f));
+    REQUIRE(stats.maxWeaponDPS == Catch::Approx(20.f));
+    REQUIRE(stats.activeModuleCount == 3);
+    REQUIRE(stats.destroyedModuleCount == 0);
+}
+
+TEST_CASE("Ship shield recharge", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Regen"));
+    ship.takeDamage(30.f);
+    REQUIRE(ship.shield() == Catch::Approx(20.f));
+
+    ship.rechargeShield(1.f);
+    REQUIRE(ship.shield() == Catch::Approx(25.f));
+
+    ship.rechargeShield(100.f);
+    REQUIRE(ship.shield() == Catch::Approx(50.f));
+}
+
+TEST_CASE("FlightState defaults", "[Game][Flight][G4]") {
+    NF::FlightState fs;
+    REQUIRE(fs.speed == Catch::Approx(0.f));
+    REQUIRE(fs.maxSpeed == Catch::Approx(100.f));
+    REQUIRE(fs.turnRate == Catch::Approx(90.f));
+    REQUIRE(fs.boostMultiplier == Catch::Approx(2.f));
+    REQUIRE(fs.boosting == false);
+    REQUIRE(fs.forward.z == Catch::Approx(1.f));
+}
+
+TEST_CASE("FlightController init", "[Game][Flight][G4]") {
+    NF::FlightController fc;
+    fc.init({10, 20, 30});
+    REQUIRE(fc.position().x == Catch::Approx(10.f));
+    REQUIRE(fc.position().y == Catch::Approx(20.f));
+    REQUIRE(fc.position().z == Catch::Approx(30.f));
+    REQUIRE(fc.speed() == Catch::Approx(0.f));
+}
+
+TEST_CASE("FlightController update throttle", "[Game][Flight][G4]") {
+    NF::FlightController fc;
+    fc.init({0, 0, 0});
+
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Fly"));
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 50.f;
+    ship.addModule(eng);
+
+    NF::FlightInput input;
+    input.throttle = 1.f;
+
+    fc.update(1.f, input, ship);
+    REQUIRE(fc.speed() > 0.f);
+    REQUIRE(fc.position().z > 0.f);
+}
+
+TEST_CASE("FlightController boost", "[Game][Flight][G4]") {
+    NF::FlightController fc;
+    fc.init({0, 0, 0});
+
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Boost"));
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 50.f;
+    ship.addModule(eng);
+
+    NF::FlightInput input;
+    input.throttle = 1.f;
+    input.boost = true;
+
+    fc.update(1.f, input, ship);
+    REQUIRE(fc.state().boosting == true);
+    REQUIRE(fc.speed() > 0.f);
+}
+
+TEST_CASE("WeaponState cooldown", "[Game][Combat][G4]") {
+    NF::WeaponState ws;
+    ws.cooldown = 1.f;
+    REQUIRE_FALSE(ws.isReady());
+
+    ws.tick(0.5f);
+    REQUIRE(ws.cooldown == Catch::Approx(0.5f));
+    REQUIRE_FALSE(ws.isReady());
+
+    ws.tick(0.6f);
+    REQUIRE(ws.cooldown == Catch::Approx(0.f));
+    REQUIRE(ws.isReady());
+}
+
+TEST_CASE("CombatSystem calculate damage", "[Game][Combat][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Gunner"));
+
+    NF::ShipModule weapon;
+    weapon.slotType = NF::ModuleSlotType::Weapon;
+    weapon.damage = 25.f;
+    weapon.fireRate = 2.f;
+    ship.addModule(weapon);
+
+    NF::CombatSystem cs;
+    cs.init();
+
+    float dmg = cs.calculateDamage(ship, 0);
+    REQUIRE(dmg == Catch::Approx(25.f));
+
+    float noDmg = cs.calculateDamage(ship, 5);
+    REQUIRE(noDmg == Catch::Approx(0.f));
+}
+
+TEST_CASE("CombatSystem evaluate target in range", "[Game][Combat][G4]") {
+    NF::CombatSystem cs;
+    cs.init();
+
+    NF::Vec3 shipPos{0, 0, 0};
+    NF::Vec3 shipFwd{0, 0, 1};
+    NF::Vec3 targetPos{0, 0, 50};
+
+    NF::CombatTarget ct = cs.evaluateTarget(shipPos, shipFwd, targetPos, 100.f, 30.f);
+    REQUIRE(ct.inRange == true);
+    REQUIRE(ct.inFiringArc == true);
+    REQUIRE(ct.distance == Catch::Approx(50.f));
+}
+
+TEST_CASE("CombatSystem evaluate target out of range", "[Game][Combat][G4]") {
+    NF::CombatSystem cs;
+    cs.init();
+
+    NF::Vec3 shipPos{0, 0, 0};
+    NF::Vec3 shipFwd{0, 0, 1};
+    NF::Vec3 targetPos{200, 0, 0};
+
+    NF::CombatTarget ct = cs.evaluateTarget(shipPos, shipFwd, targetPos, 100.f, 30.f);
+    REQUIRE(ct.inRange == false);
+    REQUIRE(ct.inFiringArc == false);
+}
+
+TEST_CASE("CombatSystem apply damage", "[Game][Combat][G4]") {
+    NF::Ship attacker;
+    attacker.init(NF::ShipClass::Fighter, NF::StringID("Attacker"));
+    NF::ShipModule weapon;
+    weapon.slotType = NF::ModuleSlotType::Weapon;
+    weapon.damage = 30.f;
+    weapon.fireRate = 1.f;
+    attacker.addModule(weapon);
+
+    NF::Ship target;
+    target.init(NF::ShipClass::Fighter, NF::StringID("Target"));
+    float initialShield = target.shield();
+
+    NF::CombatSystem cs;
+    cs.init();
+
+    float applied = cs.applyDamage(attacker, target, 0);
+    REQUIRE(applied == Catch::Approx(30.f));
+    REQUIRE(target.shield() == Catch::Approx(initialShield - 30.f));
+    REQUIRE(target.hull() == Catch::Approx(100.f));
+}

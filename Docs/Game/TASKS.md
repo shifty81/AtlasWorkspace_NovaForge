@@ -209,3 +209,20 @@
 - [x] PlayerController class (ties camera, movement, collider together)
 - [x] PlayerController update (mouse look → movement → collision → eye height)
 - [x] Comprehensive test coverage (15 new tests, 417 total)
+
+## Game Phase G4 — Ship Systems
+
+- [x] ShipClass enum (Fighter, Corvette, Frigate, Cruiser, Freighter) with shipClassName()
+- [x] ModuleSlotType enum (Weapon, Shield, Engine, Reactor, Cargo, Utility) with moduleSlotTypeName()
+- [x] ShipModule struct (health, damage, takeDamage, repair, tier, slot-specific stats)
+- [x] ShipStats struct (computed totals: thrust, power, shield, cargo, DPS, module counts)
+- [x] Ship class (init by class, module management, hull/shield damage, shield recharge, computeStats)
+- [x] Ship damage model (shield absorbs first, overflow to hull)
+- [x] Ship class stats (Fighter/Corvette/Frigate/Cruiser/Freighter hull/shield/maxModules)
+- [x] FlightInput struct (throttle, pitch, yaw, roll, boost)
+- [x] FlightState struct (position, velocity, forward/up/right, speed, maxSpeed, turnRate, boostMultiplier)
+- [x] FlightController class (init, update with rotation + thrust + boost, position/velocity/speed accessors)
+- [x] WeaponState struct (cooldown, range, isReady, tick)
+- [x] CombatTarget struct (position, distance, inRange, inFiringArc)
+- [x] CombatSystem class (calculateDamage, tickWeapons, evaluateTarget with arc check, applyDamage)
+- [x] Comprehensive test coverage (22 new tests, 439 total)

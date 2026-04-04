@@ -1381,4 +1381,406 @@ private:
     VoxelCollider m_collider;
 };
 
+// ── G4: Ship Systems ─────────────────────────────────────────────
+
+enum class ShipClass : uint8_t {
+    Fighter,
+    Corvette,
+    Frigate,
+    Cruiser,
+    Freighter,
+    Count
+};
+
+inline const char* shipClassName(ShipClass c) {
+    switch (c) {
+        case ShipClass::Fighter:   return "Fighter";
+        case ShipClass::Corvette:  return "Corvette";
+        case ShipClass::Frigate:   return "Frigate";
+        case ShipClass::Cruiser:   return "Cruiser";
+        case ShipClass::Freighter: return "Freighter";
+        default:                   return "Unknown";
+    }
+}
+
+enum class ModuleSlotType : uint8_t {
+    Weapon,
+    Shield,
+    Engine,
+    Reactor,
+    Cargo,
+    Utility,
+    Count
+};
+
+inline const char* moduleSlotTypeName(ModuleSlotType t) {
+    switch (t) {
+        case ModuleSlotType::Weapon:  return "Weapon";
+        case ModuleSlotType::Shield:  return "Shield";
+        case ModuleSlotType::Engine:  return "Engine";
+        case ModuleSlotType::Reactor: return "Reactor";
+        case ModuleSlotType::Cargo:   return "Cargo";
+        case ModuleSlotType::Utility: return "Utility";
+        default:                      return "Unknown";
+    }
+}
+
+struct ShipModule {
+    StringID name;
+    ModuleSlotType slotType = ModuleSlotType::Utility;
+    int tier = 1;
+    float health = 100.f;
+    float maxHealth = 100.f;
+    bool active = true;
+
+    float damage = 0.f;
+    float fireRate = 0.f;
+    float shieldCapacity = 0.f;
+    float shieldRegenRate = 0.f;
+    float thrustPower = 0.f;
+    float powerOutput = 0.f;
+    float cargoCapacity = 0.f;
+
+    bool isDestroyed() const { return health <= 0.f; }
+
+    void takeDamage(float amount) {
+        if (amount <= 0.f) return;
+        health -= amount;
+        if (health <= 0.f) {
+            health = 0.f;
+            active = false;
+        }
+    }
+
+    void repair(float amount) {
+        if (amount <= 0.f) return;
+        health += amount;
+        if (health > maxHealth) health = maxHealth;
+        if (health > 0.f) active = true;
+    }
+};
+
+struct ShipStats {
+    float totalThrust = 0.f;
+    float totalPowerOutput = 0.f;
+    float totalPowerDraw = 0.f;
+    float totalShieldCapacity = 0.f;
+    float totalShieldRegen = 0.f;
+    float totalCargoCapacity = 0.f;
+    float maxWeaponDPS = 0.f;
+    int activeModuleCount = 0;
+    int destroyedModuleCount = 0;
+};
+
+class Ship {
+public:
+    void init(ShipClass shipClass, StringID shipName) {
+        m_class = shipClass;
+        m_name = shipName;
+        m_modules.clear();
+        switch (shipClass) {
+            case ShipClass::Fighter:
+                m_maxHull = 100.f; m_maxShield = 50.f; m_maxModules = 4; break;
+            case ShipClass::Corvette:
+                m_maxHull = 200.f; m_maxShield = 100.f; m_maxModules = 6; break;
+            case ShipClass::Frigate:
+                m_maxHull = 400.f; m_maxShield = 200.f; m_maxModules = 8; break;
+            case ShipClass::Cruiser:
+                m_maxHull = 800.f; m_maxShield = 400.f; m_maxModules = 12; break;
+            case ShipClass::Freighter:
+                m_maxHull = 300.f; m_maxShield = 75.f; m_maxModules = 10; break;
+            default: break;
+        }
+        m_hull = m_maxHull;
+        m_shield = m_maxShield;
+        m_shieldRegenRate = 5.f;
+    }
+
+    bool addModule(const ShipModule& module) {
+        if (static_cast<int>(m_modules.size()) >= m_maxModules) return false;
+        m_modules.push_back(module);
+        return true;
+    }
+
+    void removeModule(int index) {
+        if (index >= 0 && index < static_cast<int>(m_modules.size()))
+            m_modules.erase(m_modules.begin() + index);
+    }
+
+    ShipModule* module(int index) {
+        if (index < 0 || index >= static_cast<int>(m_modules.size())) return nullptr;
+        return &m_modules[static_cast<size_t>(index)];
+    }
+
+    const ShipModule* module(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_modules.size())) return nullptr;
+        return &m_modules[static_cast<size_t>(index)];
+    }
+
+    int moduleCount() const { return static_cast<int>(m_modules.size()); }
+    int maxModules() const { return m_maxModules; }
+
+    float hull() const { return m_hull; }
+    float maxHull() const { return m_maxHull; }
+
+    void takeDamage(float amount) {
+        if (amount <= 0.f) return;
+        float remaining = amount;
+        if (m_shield > 0.f) {
+            if (m_shield >= remaining) {
+                m_shield -= remaining;
+                return;
+            }
+            remaining -= m_shield;
+            m_shield = 0.f;
+        }
+        m_hull -= remaining;
+        if (m_hull < 0.f) m_hull = 0.f;
+    }
+
+    void repair(float amount) {
+        if (amount <= 0.f) return;
+        m_hull += amount;
+        if (m_hull > m_maxHull) m_hull = m_maxHull;
+    }
+
+    bool isDestroyed() const { return m_hull <= 0.f; }
+
+    float shield() const { return m_shield; }
+    float maxShield() const { return m_maxShield; }
+
+    void rechargeShield(float dt) {
+        float totalRegen = m_shieldRegenRate;
+        for (const auto& mod : m_modules) {
+            if (mod.active && mod.slotType == ModuleSlotType::Shield)
+                totalRegen += mod.shieldRegenRate;
+        }
+        m_shield += totalRegen * dt;
+        float maxS = m_maxShield;
+        for (const auto& mod : m_modules) {
+            if (mod.active && mod.slotType == ModuleSlotType::Shield)
+                maxS += mod.shieldCapacity;
+        }
+        if (m_shield > maxS) m_shield = maxS;
+    }
+
+    ShipStats computeStats() const {
+        ShipStats stats;
+        for (const auto& mod : m_modules) {
+            if (mod.isDestroyed()) {
+                stats.destroyedModuleCount++;
+                continue;
+            }
+            if (mod.active) {
+                stats.activeModuleCount++;
+                switch (mod.slotType) {
+                    case ModuleSlotType::Engine:
+                        stats.totalThrust += mod.thrustPower; break;
+                    case ModuleSlotType::Reactor:
+                        stats.totalPowerOutput += mod.powerOutput; break;
+                    case ModuleSlotType::Shield:
+                        stats.totalShieldCapacity += mod.shieldCapacity;
+                        stats.totalShieldRegen += mod.shieldRegenRate; break;
+                    case ModuleSlotType::Cargo:
+                        stats.totalCargoCapacity += mod.cargoCapacity; break;
+                    case ModuleSlotType::Weapon: {
+                        float dps = (mod.fireRate > 0.f) ? mod.damage * mod.fireRate : 0.f;
+                        if (dps > stats.maxWeaponDPS) stats.maxWeaponDPS = dps;
+                        break;
+                    }
+                    default: break;
+                }
+            }
+        }
+        return stats;
+    }
+
+    ShipClass shipClass() const { return m_class; }
+    StringID name() const { return m_name; }
+
+private:
+    ShipClass m_class = ShipClass::Fighter;
+    StringID m_name;
+    float m_hull = 100.f;
+    float m_maxHull = 100.f;
+    float m_shield = 50.f;
+    float m_maxShield = 50.f;
+    float m_shieldRegenRate = 5.f;
+    std::vector<ShipModule> m_modules;
+    int m_maxModules = 4;
+};
+
+// ── G4: Flight ───────────────────────────────────────────────────
+
+struct FlightInput {
+    float throttle = 0.f;
+    float pitch = 0.f;
+    float yaw = 0.f;
+    float roll = 0.f;
+    bool boost = false;
+};
+
+struct FlightState {
+    Vec3 position{0, 0, 0};
+    Vec3 velocity{0, 0, 0};
+    Vec3 forward{0, 0, 1};
+    Vec3 up{0, 1, 0};
+    Vec3 right{1, 0, 0};
+    float speed = 0.f;
+    float maxSpeed = 100.f;
+    float acceleration = 20.f;
+    float turnRate = 90.f;
+    float boostMultiplier = 2.f;
+    bool boosting = false;
+};
+
+class FlightController {
+public:
+    void init(const Vec3& startPos) {
+        m_state = FlightState{};
+        m_state.position = startPos;
+    }
+
+    void update(float dt, const FlightInput& input, const Ship& ship) {
+        constexpr float DEG2RAD = 3.14159265358979323846f / 180.f;
+        float yawAngle   = -input.yaw   * m_state.turnRate * dt * DEG2RAD;
+        float pitchAngle = -input.pitch  * m_state.turnRate * dt * DEG2RAD;
+
+        // Yaw rotation around up axis
+        if (std::fabs(yawAngle) > 1e-7f) {
+            float cy = std::cos(yawAngle), sy = std::sin(yawAngle);
+            Vec3 f = m_state.forward;
+            m_state.forward = Vec3{
+                f.x * cy + m_state.right.x * sy,
+                f.y * cy + m_state.right.y * sy,
+                f.z * cy + m_state.right.z * sy
+            }.normalized();
+            m_state.right = m_state.forward.cross(m_state.up).normalized();
+        }
+
+        // Pitch rotation around right axis
+        if (std::fabs(pitchAngle) > 1e-7f) {
+            float cp = std::cos(pitchAngle), sp = std::sin(pitchAngle);
+            Vec3 f = m_state.forward;
+            m_state.forward = Vec3{
+                f.x * cp + m_state.up.x * sp,
+                f.y * cp + m_state.up.y * sp,
+                f.z * cp + m_state.up.z * sp
+            }.normalized();
+            m_state.up = m_state.right.cross(m_state.forward).normalized();
+        }
+
+        ShipStats stats = ship.computeStats();
+        float thrust = stats.totalThrust > 0.f ? stats.totalThrust : m_state.acceleration;
+        float accel = thrust * input.throttle;
+
+        m_state.boosting = input.boost;
+        if (m_state.boosting)
+            accel *= m_state.boostMultiplier;
+
+        float maxSpd = m_state.maxSpeed;
+        if (m_state.boosting) maxSpd *= m_state.boostMultiplier;
+
+        Vec3 targetVel = m_state.forward * (maxSpd * input.throttle);
+        if (m_state.boosting)
+            targetVel = m_state.forward * (maxSpd * std::fabs(input.throttle));
+
+        Vec3 diff = targetVel - m_state.velocity;
+        float diffLen = diff.length();
+        float step = std::fabs(accel) * dt;
+        if (diffLen > 0.f && step > 0.f) {
+            if (step >= diffLen)
+                m_state.velocity = targetVel;
+            else
+                m_state.velocity = m_state.velocity + diff.normalized() * step;
+        }
+
+        m_state.position = m_state.position + m_state.velocity * dt;
+        m_state.speed = m_state.velocity.length();
+    }
+
+    const FlightState& state() const { return m_state; }
+    FlightState& state() { return m_state; }
+    Vec3 position() const { return m_state.position; }
+    Vec3 velocity() const { return m_state.velocity; }
+    float speed() const { return m_state.speed; }
+
+private:
+    FlightState m_state;
+};
+
+// ── G4: Combat ───────────────────────────────────────────────────
+
+struct WeaponState {
+    int moduleIndex = -1;
+    float cooldown = 0.f;
+    float range = 100.f;
+    bool firing = false;
+
+    bool isReady() const { return cooldown <= 0.f; }
+
+    void tick(float dt) {
+        if (cooldown > 0.f) {
+            cooldown -= dt;
+            if (cooldown < 0.f) cooldown = 0.f;
+        }
+    }
+};
+
+struct CombatTarget {
+    Vec3 position;
+    float distance = 0.f;
+    bool inRange = false;
+    bool inFiringArc = false;
+};
+
+class CombatSystem {
+public:
+    void init() { m_baseDamageVariance = 0.1f; }
+
+    float calculateDamage(const Ship& ship, int weaponModuleIndex) const {
+        const ShipModule* mod = ship.module(weaponModuleIndex);
+        if (!mod || mod->slotType != ModuleSlotType::Weapon || !mod->active || mod->isDestroyed())
+            return 0.f;
+        return mod->damage;
+    }
+
+    void tickWeapons(float dt, std::vector<WeaponState>& weapons) {
+        for (auto& w : weapons)
+            w.tick(dt);
+    }
+
+    CombatTarget evaluateTarget(const Vec3& shipPos, const Vec3& shipForward,
+                                const Vec3& targetPos, float weaponRange,
+                                float firingArc = 30.f) const {
+        CombatTarget ct;
+        ct.position = targetPos;
+        Vec3 toTarget = targetPos - shipPos;
+        ct.distance = toTarget.length();
+        ct.inRange = ct.distance <= weaponRange;
+
+        if (ct.distance > 1e-7f) {
+            Vec3 dir = toTarget.normalized();
+            float dotVal = shipForward.dot(dir);
+            if (dotVal > 1.f) dotVal = 1.f;
+            if (dotVal < -1.f) dotVal = -1.f;
+            float angle = std::acos(dotVal) * (180.f / 3.14159265358979323846f);
+            ct.inFiringArc = angle <= firingArc;
+        } else {
+            ct.inFiringArc = true;
+        }
+        return ct;
+    }
+
+    float applyDamage(Ship& attacker, Ship& target, int weaponModuleIndex) {
+        float dmg = calculateDamage(attacker, weaponModuleIndex);
+        if (dmg <= 0.f) return 0.f;
+        target.takeDamage(dmg);
+        return dmg;
+    }
+
+private:
+    float m_baseDamageVariance = 0.1f;
+};
+
 } // namespace NF
