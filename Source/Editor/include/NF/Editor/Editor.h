@@ -1530,7 +1530,7 @@ public:
         // Draw nodes as simple labelled rectangles
         for (const auto& node : m_currentGraph->nodes()) {
             Rect nr{node.position.x + bounds.x, node.position.y + bounds.y, 120.f, 60.f};
-            uint32_t nodeColor = (node.id == m_selectedNodeId)
+            uint32_t nodeColor = (m_selectedNodeId >= 0 && node.id == static_cast<uint32_t>(m_selectedNodeId))
                                  ? theme.selectionHighlight : theme.toolbarBackground;
             mutableUi.drawRect(nr, nodeColor);
             mutableUi.drawRectOutline(nr, theme.panelText, 1.f);

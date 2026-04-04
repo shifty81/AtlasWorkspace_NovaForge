@@ -1912,7 +1912,8 @@ public:
 
     CaptainOrder evaluate(float hullPct, float shieldPct, float enemyDist,
                           int alliesNearby, int enemiesNearby) const {
-        if (m_personality.willFlee() && hullPct < 0.3f) return CaptainOrder::Retreat;
+        if (m_personality.willFlee() && (hullPct < 0.3f || shieldPct < 0.2f))
+            return CaptainOrder::Retreat;
         if (m_personality.willCharge() && enemyDist < 200.f) return CaptainOrder::AttackTarget;
         if (enemiesNearby > alliesNearby * 2 && m_personality.caution > 0.5f)
             return CaptainOrder::DefendTarget;
@@ -1969,7 +1970,7 @@ public:
     int leaderIndex() const { return m_leaderIndex; }
     FleetShip* leader() { return ship(m_leaderIndex); }
 
-    void tick(float dt) {
+    void tick(float /*dt*/) {
         for (auto& s : m_ships) {
             if (!s.active) continue;
             float hullPct = s.ship.hull() / s.ship.maxHull();
@@ -2462,7 +2463,7 @@ public:
         return it != m_biases.end() ? &it->second : nullptr;
     }
 
-    void updateFromReputation(StringID faction, float reputationDelta) {
+    void updateFromReputation(StringID /*faction*/, float reputationDelta) {
         for (auto& [name, bias] : m_biases)
             bias.loyaltyToPlayer += reputationDelta * 0.01f;
     }
