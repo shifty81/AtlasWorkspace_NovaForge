@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "NF/Game/Game.h"
 
 TEST_CASE("Chunk voxel get/set", "[Game][Voxel]") {
@@ -49,6 +50,11 @@ TEST_CASE("RigState defaults", "[Game][Rig]") {
     REQUIRE(rig.health == 100.f);
     REQUIRE(rig.energy == 100.f);
     REQUIRE(rig.activeTool == 0);
+    REQUIRE(rig.maxHealth == 100.f);
+    REQUIRE(rig.maxEnergy == 100.f);
+    REQUIRE(rig.oxygen == 100.f);
+    REQUIRE(rig.stamina == 100.f);
+    REQUIRE(rig.isAlive());
 }
 
 // ── Chunk dirty flag separation ──────────────────────────────────
@@ -489,4 +495,430 @@ TEST_CASE("VoxelPickService respects maxDist", "[Game][Pick]") {
     // maxDist long enough
     auto hit2 = NF::VoxelPickService::raycast(world, origin, dir, 200.f);
     REQUIRE(hit2.has_value());
+}
+
+// ── G1: RigState expanded tests ─────────────────────────────────
+
+TEST_CASE("RigState tick regens energy and stamina", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.energy = 50.f;
+    rig.stamina = 50.f;
+    rig.tick(1.f);
+    REQUIRE(rig.energy == Catch::Approx(52.f));
+    REQUIRE(rig.stamina == Catch::Approx(55.f));
+}
+
+TEST_CASE("RigState tick drains oxygen", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.tick(10.f);
+    REQUIRE(rig.oxygen == Catch::Approx(90.f));
+}
+
+TEST_CASE("RigState oxygen depletion damages health", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.oxygen = 0.f;
+    rig.tick(1.f);
+    REQUIRE(rig.health < 100.f);
+    REQUIRE(rig.isAlive());
+}
+
+TEST_CASE("RigState takeDamage and heal", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.takeDamage(30.f);
+    REQUIRE(rig.health == Catch::Approx(70.f));
+    rig.heal(50.f);
+    REQUIRE(rig.health == Catch::Approx(100.f)); // clamped to max
+}
+
+TEST_CASE("RigState death stops ticking", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.takeDamage(100.f);
+    REQUIRE_FALSE(rig.isAlive());
+    float prevEnergy = rig.energy;
+    rig.tick(1.f);
+    REQUIRE(rig.energy == prevEnergy); // no regen when dead
+}
+
+TEST_CASE("RigState consumeEnergy and consumeStamina", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.consumeEnergy(60.f);
+    REQUIRE(rig.energy == Catch::Approx(40.f));
+    rig.consumeStamina(80.f);
+    REQUIRE(rig.stamina == Catch::Approx(20.f));
+    rig.consumeEnergy(999.f);
+    REQUIRE(rig.energy == Catch::Approx(0.f)); // clamped at 0
+}
+
+// ── G1: ResourceType tests ──────────────────────────────────────
+
+TEST_CASE("ResourceType name round-trip", "[Game][Resource][G1]") {
+    REQUIRE(NF::resourceTypeFromName("RawStone") == NF::ResourceType::RawStone);
+    REQUIRE(NF::resourceTypeFromName("RawIron") == NF::ResourceType::RawIron);
+    REQUIRE(NF::resourceTypeFromName("RefinedGold") == NF::ResourceType::RefinedGold);
+    REQUIRE(NF::resourceTypeFromName("SteelPlate") == NF::ResourceType::SteelPlate);
+    REQUIRE(NF::resourceTypeFromName("EnergyCell") == NF::ResourceType::EnergyCell);
+    REQUIRE(std::string(NF::resourceTypeName(NF::ResourceType::CircuitBoard)) == "CircuitBoard");
+    REQUIRE(std::string(NF::resourceTypeName(NF::ResourceType::RawCrystal)) == "RawCrystal");
+}
+
+// ── G1: Resource Drop Table tests ───────────────────────────────
+
+TEST_CASE("ResourceDrop table returns correct drops", "[Game][Resource][G1]") {
+    auto stoneDrops = NF::getResourceDrops(NF::VoxelType::Stone);
+    REQUIRE(stoneDrops.size() == 1);
+    REQUIRE(stoneDrops[0].resource == NF::ResourceType::RawStone);
+
+    auto ironDrops = NF::getResourceDrops(NF::VoxelType::Ore_Iron);
+    REQUIRE(ironDrops.size() == 1);
+    REQUIRE(ironDrops[0].minAmount == 1);
+    REQUIRE(ironDrops[0].maxAmount == 2);
+
+    auto crystalDrops = NF::getResourceDrops(NF::VoxelType::Ore_Crystal);
+    REQUIRE(crystalDrops[0].maxAmount == 3);
+
+    auto airDrops = NF::getResourceDrops(NF::VoxelType::Air);
+    REQUIRE(airDrops.empty());
+
+    auto glassDrops = NF::getResourceDrops(NF::VoxelType::Glass);
+    REQUIRE(glassDrops.empty());
+}
+
+// ── G1: ResourceInventory tests ─────────────────────────────────
+
+TEST_CASE("ResourceInventory add and remove", "[Game][Resource][G1]") {
+    NF::ResourceInventory inv;
+    REQUIRE(inv.isEmpty());
+    REQUIRE(inv.totalItems() == 0);
+
+    inv.add(NF::ResourceType::RawIron, 5);
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 5);
+    REQUIRE(inv.totalItems() == 5);
+    REQUIRE_FALSE(inv.isEmpty());
+
+    REQUIRE(inv.remove(NF::ResourceType::RawIron, 3));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 2);
+
+    REQUIRE_FALSE(inv.remove(NF::ResourceType::RawIron, 5));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 2);
+}
+
+TEST_CASE("ResourceInventory totalItems across types", "[Game][Resource][G1]") {
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawStone, 3);
+    inv.add(NF::ResourceType::RefinedIron, 2);
+    inv.add(NF::ResourceType::EnergyCell, 1);
+    REQUIRE(inv.totalItems() == 6);
+}
+
+// ── G1: ToolState tests ─────────────────────────────────────────
+
+TEST_CASE("ToolState isReady and use", "[Game][Tool][G1]") {
+    NF::ToolState tool;
+    tool.cooldownRate = 0.5f;
+    REQUIRE(tool.isReady());
+
+    tool.use();
+    REQUIRE_FALSE(tool.isReady());
+    REQUIRE(tool.cooldown == Catch::Approx(0.5f));
+    REQUIRE(tool.durability == Catch::Approx(99.f));
+
+    tool.tick(0.5f);
+    REQUIRE(tool.isReady());
+}
+
+TEST_CASE("ToolState zero durability not ready", "[Game][Tool][G1]") {
+    NF::ToolState tool;
+    tool.durability = 0.f;
+    REQUIRE_FALSE(tool.isReady());
+}
+
+TEST_CASE("ToolType name", "[Game][Tool][G1]") {
+    REQUIRE(std::string(NF::toolTypeName(NF::ToolType::MiningLaser)) == "MiningLaser");
+    REQUIRE(std::string(NF::toolTypeName(NF::ToolType::Scanner)) == "Scanner");
+}
+
+// ── G1: ToolBelt tests ──────────────────────────────────────────
+
+TEST_CASE("ToolBelt init and slot access", "[Game][Tool][G1]") {
+    NF::ToolBelt belt;
+    belt.init();
+
+    REQUIRE(belt.slotCount() == 4);
+    REQUIRE(belt.activeSlot() == 0);
+    REQUIRE(belt.activeTool().type == NF::ToolType::MiningLaser);
+    REQUIRE(belt.slot(1).type == NF::ToolType::PlacementTool);
+    REQUIRE(belt.slot(2).type == NF::ToolType::RepairTool);
+    REQUIRE(belt.slot(3).type == NF::ToolType::Scanner);
+}
+
+TEST_CASE("ToolBelt selectSlot clamps", "[Game][Tool][G1]") {
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(-1);
+    REQUIRE(belt.activeSlot() == 0);
+    belt.selectSlot(99);
+    REQUIRE(belt.activeSlot() == 3);
+    belt.selectSlot(2);
+    REQUIRE(belt.activeSlot() == 2);
+}
+
+TEST_CASE("ToolBelt nextTool and prevTool cycle", "[Game][Tool][G1]") {
+    NF::ToolBelt belt;
+    belt.init();
+    belt.nextTool();
+    REQUIRE(belt.activeSlot() == 1);
+    belt.nextTool();
+    belt.nextTool();
+    belt.nextTool();
+    REQUIRE(belt.activeSlot() == 0); // wrapped around
+
+    belt.prevTool();
+    REQUIRE(belt.activeSlot() == 3); // wrapped backward
+}
+
+// ── G1: HUDState tests ──────────────────────────────────────────
+
+TEST_CASE("HUDState defaults", "[Game][HUD][G1]") {
+    NF::HUDState hud;
+    REQUIRE(hud.showCrosshair);
+    REQUIRE_FALSE(hud.targetLocked);
+    REQUIRE(hud.targetVoxel == NF::VoxelType::Air);
+    REQUIRE(hud.notifications.empty());
+}
+
+TEST_CASE("HUDState add and expire notifications", "[Game][HUD][G1]") {
+    NF::HUDState hud;
+    hud.addNotification("Mined stone!", 2.f);
+    hud.addNotification("Low energy", 5.f);
+    REQUIRE(hud.notifications.size() == 2);
+
+    hud.tick(3.f);
+    REQUIRE(hud.notifications.size() == 1);
+    REQUIRE(hud.notifications[0].message == "Low energy");
+
+    hud.tick(3.f);
+    REQUIRE(hud.notifications.empty());
+}
+
+TEST_CASE("HUDState clearNotifications", "[Game][HUD][G1]") {
+    NF::HUDState hud;
+    hud.addNotification("test1");
+    hud.addNotification("test2");
+    hud.clearNotifications();
+    REQUIRE(hud.notifications.empty());
+}
+
+// ── G1: InteractionSystem mining tests ──────────────────────────
+
+TEST_CASE("InteractionSystem tryMine success", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    NF::Vec3 origin{5.5f, 10.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv, origin, dir);
+    REQUIRE(result.success);
+    REQUIRE(result.minedType == NF::VoxelType::Stone);
+    REQUIRE(world.getWorld(5, 5, 5) == NF::VoxelType::Air);
+    REQUIRE(voxelInv.count(NF::VoxelType::Stone) == 1);
+    REQUIRE(resInv.count(NF::ResourceType::RawStone) == 1);
+    REQUIRE(rig.energy < 100.f);
+}
+
+TEST_CASE("InteractionSystem tryMine fails wrong tool", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(1); // placement tool
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv,
+                                      {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE_FALSE(result.success);
+}
+
+TEST_CASE("InteractionSystem tryMine fails no energy", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    rig.energy = 0.f;
+    NF::ToolBelt belt;
+    belt.init();
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv,
+                                      {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE_FALSE(result.success);
+}
+
+TEST_CASE("InteractionSystem tryMine ore drops resources", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Ore_Iron);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv,
+                                      {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE(result.success);
+    REQUIRE_FALSE(result.drops.empty());
+    REQUIRE(resInv.count(NF::ResourceType::RawIron) >= 1);
+}
+
+// ── G1: InteractionSystem placement tests ───────────────────────
+
+TEST_CASE("InteractionSystem tryPlace success", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(1); // placement tool
+    NF::Inventory voxelInv;
+    voxelInv.add(NF::VoxelType::Dirt, 5);
+
+    NF::InteractionSystem interaction;
+    NF::Vec3 origin{5.5f, 10.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto result = interaction.tryPlace(world, rig, belt, voxelInv, origin, dir, NF::VoxelType::Dirt);
+    REQUIRE(result.success);
+    REQUIRE(result.placedType == NF::VoxelType::Dirt);
+    REQUIRE(voxelInv.count(NF::VoxelType::Dirt) == 4);
+    // Placed adjacent to stone (on top), at (5,6,5)
+    REQUIRE(world.getWorld(5, 6, 5) == NF::VoxelType::Dirt);
+}
+
+TEST_CASE("InteractionSystem tryPlace fails no inventory", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(1);
+    NF::Inventory voxelInv; // empty
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryPlace(world, rig, belt, voxelInv,
+                                       {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f},
+                                       NF::VoxelType::Dirt);
+    REQUIRE_FALSE(result.success);
+}
+
+// ── G1: InteractionSystem scan tests ────────────────────────────
+
+TEST_CASE("InteractionSystem tryScan returns voxel info", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Ore_Gold);
+
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(3); // scanner
+
+    NF::InteractionSystem interaction;
+    auto hit = interaction.tryScan(world, belt, {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE(hit.has_value());
+    REQUIRE(hit->type == NF::VoxelType::Ore_Gold);
+}
+
+TEST_CASE("InteractionSystem tryScan fails wrong tool", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::ToolBelt belt;
+    belt.init(); // active is mining laser
+
+    NF::InteractionSystem interaction;
+    auto hit = interaction.tryScan(world, belt, {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE_FALSE(hit.has_value());
+}
+
+TEST_CASE("InteractionSystem maxReach config", "[Game][Interaction][G1]") {
+    NF::InteractionSystem interaction;
+    REQUIRE(interaction.maxReach() == Catch::Approx(8.f));
+    interaction.setMaxReach(12.f);
+    REQUIRE(interaction.maxReach() == Catch::Approx(12.f));
+}
+
+// ── G1: GameSession tests ───────────────────────────────────────
+
+TEST_CASE("GameSession init and shutdown", "[Game][Session][G1]") {
+    NF::GameSession session;
+    REQUIRE_FALSE(session.isActive());
+
+    session.init();
+    REQUIRE(session.isActive());
+    REQUIRE(session.rig().health == 100.f);
+    REQUIRE(session.toolBelt().slotCount() == 4);
+    REQUIRE(session.voxelInventory().count(NF::VoxelType::Stone) == 0);
+    REQUIRE(session.resourceInventory().isEmpty());
+
+    session.shutdown();
+    REQUIRE_FALSE(session.isActive());
+}
+
+TEST_CASE("GameSession tick updates rig and tools", "[Game][Session][G1]") {
+    NF::GameSession session;
+    session.init();
+
+    session.rig().energy = 50.f;
+    session.toolBelt().activeTool().use(); // put on cooldown
+    float cd = session.toolBelt().activeTool().cooldown;
+    REQUIRE(cd > 0.f);
+
+    session.tick(1.f);
+    REQUIRE(session.rig().energy > 50.f); // regen
+    REQUIRE(session.toolBelt().activeTool().cooldown < cd); // reduced
+}
+
+TEST_CASE("GameSession tick expires HUD notifications", "[Game][Session][G1]") {
+    NF::GameSession session;
+    session.init();
+    session.hud().addNotification("test", 1.f);
+    REQUIRE(session.hud().notifications.size() == 1);
+
+    session.tick(2.f);
+    REQUIRE(session.hud().notifications.empty());
+}
+
+TEST_CASE("GameSession full mine interaction", "[Game][Session][G1]") {
+    NF::GameSession session;
+    session.init();
+
+    session.world().setWorld(5, 5, 5, NF::VoxelType::Ore_Crystal);
+
+    NF::Vec3 origin{5.5f, 10.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto result = session.interaction().tryMine(
+        session.world(), session.rig(), session.toolBelt(),
+        session.voxelInventory(), session.resourceInventory(),
+        origin, dir);
+
+    REQUIRE(result.success);
+    REQUIRE(session.voxelInventory().count(NF::VoxelType::Ore_Crystal) == 1);
+    REQUIRE(session.resourceInventory().count(NF::ResourceType::RawCrystal) >= 1);
+    REQUIRE(session.world().getWorld(5, 5, 5) == NF::VoxelType::Air);
 }

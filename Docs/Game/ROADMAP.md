@@ -21,7 +21,7 @@
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **G1** — First Interaction Loop | R.I.G. state, mining tool, resources, inventory, HUD | 📋 Planned |
+| **G1** — First Interaction Loop | R.I.G. state, mining tool, resources, inventory, HUD | ✅ Done |
 | **G2** — Voxel Mesh Rendering | Mesher, GPU cache, Phong shader, lit terrain | 📋 Planned |
 | **G3** — Movement & FPS Camera | WASD + mouse look, jump, sprint, voxel collision | 📋 Planned |
 | **G4** — Ship Systems | Ship classes, modules, combat, flight controls | 📋 Planned |

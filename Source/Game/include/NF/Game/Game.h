@@ -188,8 +188,43 @@ private:
 
 struct RigState {
     float health = 100.f;
+    float maxHealth = 100.f;
     float energy = 100.f;
-    int activeTool = 0;  // 0=mine, 1=place, 2=repair
+    float maxEnergy = 100.f;
+    float oxygen = 100.f;
+    float maxOxygen = 100.f;
+    float stamina = 100.f;
+    float maxStamina = 100.f;
+    float energyRegenRate = 2.f;
+    float staminaRegenRate = 5.f;
+    float oxygenDrainRate = 1.f;
+    int activeTool = 0;
+
+    [[nodiscard]] bool isAlive() const { return health > 0.f; }
+
+    void tick(float dt) {
+        if (!isAlive()) return;
+        energy = std::min(energy + energyRegenRate * dt, maxEnergy);
+        stamina = std::min(stamina + staminaRegenRate * dt, maxStamina);
+        oxygen = std::max(oxygen - oxygenDrainRate * dt, 0.f);
+        if (oxygen <= 0.f) health = std::max(health - 10.f * dt, 0.f);
+    }
+
+    void takeDamage(float amount) {
+        health = std::max(health - amount, 0.f);
+    }
+
+    void heal(float amount) {
+        health = std::min(health + amount, maxHealth);
+    }
+
+    void consumeEnergy(float amount) {
+        energy = std::max(energy - amount, 0.f);
+    }
+
+    void consumeStamina(float amount) {
+        stamina = std::max(stamina - amount, 0.f);
+    }
 };
 
 // ── Inventory ────────────────────────────────────────────────────
@@ -584,6 +619,349 @@ public:
 
         return std::nullopt;
     }
+};
+
+// ── G1: Resource Types ──────────────────────────────────────────
+
+enum class ResourceType : uint8_t {
+    RawStone = 0,
+    RawDirt,
+    RawIron,
+    RawGold,
+    RawCrystal,
+    RefinedIron,
+    RefinedGold,
+    RefinedCrystal,
+    SteelPlate,
+    CircuitBoard,
+    EnergyCell,
+    Count
+};
+
+inline const char* resourceTypeName(ResourceType type) {
+    switch (type) {
+        case ResourceType::RawStone:       return "RawStone";
+        case ResourceType::RawDirt:        return "RawDirt";
+        case ResourceType::RawIron:        return "RawIron";
+        case ResourceType::RawGold:        return "RawGold";
+        case ResourceType::RawCrystal:     return "RawCrystal";
+        case ResourceType::RefinedIron:    return "RefinedIron";
+        case ResourceType::RefinedGold:    return "RefinedGold";
+        case ResourceType::RefinedCrystal: return "RefinedCrystal";
+        case ResourceType::SteelPlate:     return "SteelPlate";
+        case ResourceType::CircuitBoard:   return "CircuitBoard";
+        case ResourceType::EnergyCell:     return "EnergyCell";
+        default:                           return "Unknown";
+    }
+}
+
+inline ResourceType resourceTypeFromName(std::string_view name) {
+    if (name == "RawStone")       return ResourceType::RawStone;
+    if (name == "RawDirt")        return ResourceType::RawDirt;
+    if (name == "RawIron")        return ResourceType::RawIron;
+    if (name == "RawGold")        return ResourceType::RawGold;
+    if (name == "RawCrystal")     return ResourceType::RawCrystal;
+    if (name == "RefinedIron")    return ResourceType::RefinedIron;
+    if (name == "RefinedGold")    return ResourceType::RefinedGold;
+    if (name == "RefinedCrystal") return ResourceType::RefinedCrystal;
+    if (name == "SteelPlate")     return ResourceType::SteelPlate;
+    if (name == "CircuitBoard")   return ResourceType::CircuitBoard;
+    if (name == "EnergyCell")     return ResourceType::EnergyCell;
+    return ResourceType::RawStone;
+}
+
+// ── G1: Resource Drop Table ─────────────────────────────────────
+
+struct ResourceDrop {
+    ResourceType resource;
+    int minAmount;
+    int maxAmount;
+};
+
+inline std::vector<ResourceDrop> getResourceDrops(VoxelType type) {
+    switch (type) {
+        case VoxelType::Stone:       return {{ResourceType::RawStone, 1, 1}};
+        case VoxelType::Dirt:        return {{ResourceType::RawDirt, 1, 1}};
+        case VoxelType::Ore_Iron:    return {{ResourceType::RawIron, 1, 2}};
+        case VoxelType::Ore_Gold:    return {{ResourceType::RawGold, 1, 2}};
+        case VoxelType::Ore_Crystal: return {{ResourceType::RawCrystal, 1, 3}};
+        default:                     return {};
+    }
+}
+
+// ── G1: Resource Inventory ──────────────────────────────────────
+
+struct ResourceInventory {
+    int counts[static_cast<size_t>(ResourceType::Count)] = {};
+
+    void add(ResourceType type, int amount = 1) {
+        counts[static_cast<size_t>(type)] += amount;
+    }
+
+    bool remove(ResourceType type, int amount = 1) {
+        auto& c = counts[static_cast<size_t>(type)];
+        if (c < amount) return false;
+        c -= amount;
+        return true;
+    }
+
+    [[nodiscard]] int count(ResourceType type) const {
+        return counts[static_cast<size_t>(type)];
+    }
+
+    [[nodiscard]] int totalItems() const {
+        int total = 0;
+        for (int i = 0; i < static_cast<int>(ResourceType::Count); ++i)
+            total += counts[i];
+        return total;
+    }
+
+    [[nodiscard]] bool isEmpty() const {
+        return totalItems() == 0;
+    }
+};
+
+// ── G1: Tool System ─────────────────────────────────────────────
+
+enum class ToolType : uint8_t { MiningLaser = 0, PlacementTool, RepairTool, Scanner, Count };
+
+inline const char* toolTypeName(ToolType type) {
+    switch (type) {
+        case ToolType::MiningLaser:   return "MiningLaser";
+        case ToolType::PlacementTool: return "PlacementTool";
+        case ToolType::RepairTool:    return "RepairTool";
+        case ToolType::Scanner:       return "Scanner";
+        default:                      return "Unknown";
+    }
+}
+
+struct ToolState {
+    ToolType type = ToolType::MiningLaser;
+    float durability = 100.f;
+    float energyCost = 5.f;
+    float cooldown = 0.f;
+    float cooldownRate = 0.5f;
+    float miningDamage = 25.f;
+
+    [[nodiscard]] bool isReady() const { return cooldown <= 0.f && durability > 0.f; }
+
+    void tick(float dt) {
+        if (cooldown > 0.f) cooldown = std::max(cooldown - dt, 0.f);
+    }
+
+    void use() {
+        cooldown = cooldownRate;
+        durability = std::max(durability - 1.f, 0.f);
+    }
+};
+
+// ── G1: Tool Belt ───────────────────────────────────────────────
+
+class ToolBelt {
+    static constexpr int MAX_SLOTS = 4;
+    ToolState m_slots[MAX_SLOTS];
+    int m_activeSlot = 0;
+public:
+    void init() {
+        m_slots[0] = {ToolType::MiningLaser,   100.f, 5.f, 0.f, 0.5f, 25.f};
+        m_slots[1] = {ToolType::PlacementTool,  100.f, 2.f, 0.f, 0.3f, 0.f};
+        m_slots[2] = {ToolType::RepairTool,     100.f, 8.f, 0.f, 1.0f, 0.f};
+        m_slots[3] = {ToolType::Scanner,        100.f, 3.f, 0.f, 0.2f, 0.f};
+        m_activeSlot = 0;
+    }
+
+    ToolState& activeTool() { return m_slots[m_activeSlot]; }
+    const ToolState& activeTool() const { return m_slots[m_activeSlot]; }
+
+    void selectSlot(int slot) {
+        m_activeSlot = std::max(0, std::min(slot, MAX_SLOTS - 1));
+    }
+
+    [[nodiscard]] int activeSlot() const { return m_activeSlot; }
+
+    void nextTool() { m_activeSlot = (m_activeSlot + 1) % MAX_SLOTS; }
+    void prevTool() { m_activeSlot = (m_activeSlot + MAX_SLOTS - 1) % MAX_SLOTS; }
+
+    ToolState& slot(int i) { return m_slots[std::max(0, std::min(i, MAX_SLOTS - 1))]; }
+    const ToolState& slot(int i) const { return m_slots[std::max(0, std::min(i, MAX_SLOTS - 1))]; }
+
+    [[nodiscard]] int slotCount() const { return MAX_SLOTS; }
+};
+
+// ── G1: HUD State ───────────────────────────────────────────────
+
+struct HUDNotification {
+    std::string message;
+    float timeRemaining = 3.f;
+};
+
+struct HUDState {
+    bool showCrosshair = true;
+    bool targetLocked = false;
+    VoxelType targetVoxel = VoxelType::Air;
+
+    std::vector<HUDNotification> notifications;
+
+    void addNotification(const std::string& msg, float duration = 3.f) {
+        notifications.push_back({msg, duration});
+    }
+
+    void tick(float dt) {
+        for (auto& n : notifications) n.timeRemaining -= dt;
+        notifications.erase(
+            std::remove_if(notifications.begin(), notifications.end(),
+                           [](const HUDNotification& n) { return n.timeRemaining <= 0.f; }),
+            notifications.end());
+    }
+
+    void clearNotifications() { notifications.clear(); }
+};
+
+// ── G1: Interaction System ──────────────────────────────────────
+
+struct MineResult {
+    bool success = false;
+    VoxelType minedType = VoxelType::Air;
+    std::vector<ResourceDrop> drops;
+    float energyUsed = 0.f;
+};
+
+struct PlaceResult {
+    bool success = false;
+    VoxelType placedType = VoxelType::Air;
+};
+
+class InteractionSystem {
+public:
+    MineResult tryMine(WorldState& world, RigState& rig, ToolBelt& belt,
+                       Inventory& voxelInv, ResourceInventory& resInv,
+                       const Vec3& origin, const Vec3& direction) {
+        MineResult result;
+        auto& tool = belt.activeTool();
+        if (tool.type != ToolType::MiningLaser) return result;
+        if (!tool.isReady()) return result;
+        if (rig.energy < tool.energyCost) return result;
+
+        auto hit = VoxelPickService::raycast(world, origin, direction, m_maxReach);
+        if (!hit.has_value()) return result;
+
+        result.minedType = hit->type;
+        world.setWorld(hit->wx, hit->wy, hit->wz, VoxelType::Air);
+
+        rig.consumeEnergy(tool.energyCost);
+        tool.use();
+
+        voxelInv.add(result.minedType);
+
+        auto drops = getResourceDrops(result.minedType);
+        for (auto& drop : drops) {
+            resInv.add(drop.resource, drop.minAmount);
+            result.drops.push_back(drop);
+        }
+
+        result.success = true;
+        result.energyUsed = tool.energyCost;
+        return result;
+    }
+
+    PlaceResult tryPlace(WorldState& world, RigState& rig, ToolBelt& belt,
+                         Inventory& voxelInv,
+                         const Vec3& origin, const Vec3& direction,
+                         VoxelType typeToPlace) {
+        PlaceResult result;
+        auto& tool = belt.activeTool();
+        if (tool.type != ToolType::PlacementTool) return result;
+        if (!tool.isReady()) return result;
+        if (rig.energy < tool.energyCost) return result;
+        if (!voxelInv.remove(typeToPlace)) return result;
+
+        auto hit = VoxelPickService::raycast(world, origin, direction, m_maxReach);
+        if (!hit.has_value()) {
+            voxelInv.add(typeToPlace);
+            return result;
+        }
+
+        auto adj = hit->adjacentVoxel();
+        if (world.getWorld(adj.x, adj.y, adj.z) != VoxelType::Air) {
+            voxelInv.add(typeToPlace);
+            return result;
+        }
+
+        world.setWorld(adj.x, adj.y, adj.z, typeToPlace);
+        rig.consumeEnergy(tool.energyCost);
+        tool.use();
+
+        result.success = true;
+        result.placedType = typeToPlace;
+        return result;
+    }
+
+    std::optional<VoxelHit> tryScan(const WorldState& world, const ToolBelt& belt,
+                                     const Vec3& origin, const Vec3& direction) {
+        const auto& tool = belt.activeTool();
+        if (tool.type != ToolType::Scanner) return std::nullopt;
+        if (!tool.isReady()) return std::nullopt;
+        return VoxelPickService::raycast(world, origin, direction, m_maxReach);
+    }
+
+    [[nodiscard]] float maxReach() const { return m_maxReach; }
+    void setMaxReach(float r) { m_maxReach = r; }
+
+private:
+    float m_maxReach = 8.f;
+};
+
+// ── G1: Game Session ────────────────────────────────────────────
+
+class GameSession {
+public:
+    void init(uint32_t /*seed*/ = 42) {
+        m_rig = RigState{};
+        m_voxelInv = Inventory{};
+        m_resourceInv = ResourceInventory{};
+        m_toolBelt.init();
+        m_world.clear();
+        m_hud = HUDState{};
+        m_interaction = InteractionSystem{};
+        m_active = true;
+    }
+
+    void shutdown() { m_active = false; }
+
+    void tick(float dt) {
+        if (!m_active) return;
+        m_rig.tick(dt);
+        for (int i = 0; i < m_toolBelt.slotCount(); ++i)
+            m_toolBelt.slot(i).tick(dt);
+        m_hud.tick(dt);
+    }
+
+    RigState& rig() { return m_rig; }
+    const RigState& rig() const { return m_rig; }
+    Inventory& voxelInventory() { return m_voxelInv; }
+    const Inventory& voxelInventory() const { return m_voxelInv; }
+    ResourceInventory& resourceInventory() { return m_resourceInv; }
+    const ResourceInventory& resourceInventory() const { return m_resourceInv; }
+    ToolBelt& toolBelt() { return m_toolBelt; }
+    const ToolBelt& toolBelt() const { return m_toolBelt; }
+    WorldState& world() { return m_world; }
+    const WorldState& world() const { return m_world; }
+    HUDState& hud() { return m_hud; }
+    const HUDState& hud() const { return m_hud; }
+    InteractionSystem& interaction() { return m_interaction; }
+    const InteractionSystem& interaction() const { return m_interaction; }
+
+    [[nodiscard]] bool isActive() const { return m_active; }
+
+private:
+    RigState m_rig;
+    Inventory m_voxelInv;
+    ResourceInventory m_resourceInv;
+    ToolBelt m_toolBelt;
+    WorldState m_world;
+    HUDState m_hud;
+    InteractionSystem m_interaction;
+    bool m_active = false;
 };
 
 } // namespace NF

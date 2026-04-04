@@ -161,3 +161,20 @@
 - [x] Modding guide (ship, module, skill, mission JSON format + voxel + graph scripting)
 - [x] Architecture documentation updated (Networking dependency correction)
 - [ ] Final audit
+
+## Game Phase G1 — First Interaction Loop
+
+- [x] ResourceType enum (RawStone, RawDirt, RawIron, RawGold, RawCrystal, RefinedIron, RefinedGold, RefinedCrystal, SteelPlate, CircuitBoard, EnergyCell)
+- [x] resourceTypeName / resourceTypeFromName round-trip functions
+- [x] ResourceDrop table (getResourceDrops maps VoxelType → ResourceDrop vector)
+- [x] ResourceInventory (add, remove, count, totalItems, isEmpty)
+- [x] ToolType enum (MiningLaser, PlacementTool, RepairTool, Scanner)
+- [x] ToolState (durability, energyCost, cooldown, cooldownRate, miningDamage, isReady, tick, use)
+- [x] toolTypeName function
+- [x] ToolBelt (4 slots, init, selectSlot, nextTool, prevTool, activeTool)
+- [x] Expanded RigState (health, maxHealth, energy, maxEnergy, oxygen, stamina, regen rates, isAlive, tick, takeDamage, heal, consumeEnergy, consumeStamina)
+- [x] HUDNotification and HUDState (crosshair, notifications, addNotification, tick, clearNotifications)
+- [x] MineResult and PlaceResult structs
+- [x] InteractionSystem (tryMine, tryPlace, tryScan, maxReach)
+- [x] GameSession (init, shutdown, tick, all accessors, isActive)
+- [x] Comprehensive test coverage (32 new tests, 383 total)
