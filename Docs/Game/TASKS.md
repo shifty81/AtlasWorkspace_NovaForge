@@ -320,3 +320,21 @@
 - [x] WorldEventSystem class (init, spawnEvent, endEvent, tick, getActiveEvents, getEventsInSector, findEvent, activeEventCount)
 - [x] Severity-scaled EventEffect building (buildEffect per event type)
 - [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G14 — Tech Tree
+
+- [x] TechCategory enum (Weapons, Shields, Propulsion, Mining, Construction, Biology, Computing) with techCategoryName()
+- [x] TechNode struct (id, displayName, category, tier, cost, prerequisites, researched, damage/shield/speed/miningBonus)
+- [x] TechTree class (addNode, canResearch, unlock, isUnlocked, findNode, getAvailable, getResearched, getByTier)
+- [x] TechTree computeBonuses (aggregate damage/shield/speed/mining from researched nodes)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G15 — Player Progression
+
+- [x] XPSource enum (Combat, Mining, Exploration, Trade, Quest, Crafting) with xpSourceName()
+- [x] PlayerLevel class (init, addXP, currentLevel, xpThisLevel, totalXP, xpToNextLevel, progressToNextLevel, isMaxLevel, kMaxLevel=50)
+- [x] Quadratic XP curve: level*(level-1)*50 cumulative XP
+- [x] SkillNode struct (id, requiredLevel, pointCost, unlocked, health/energy/damage/miningBonus)
+- [x] SkillTree class (addSkill, unlockSkill, isUnlocked, findSkill, getAvailable, computeBonuses, unlockedCount)
+- [x] ProgressionSystem class (init, awardXP → skill points on level-up, spendSkillPoint, bonuses())
+- [x] Comprehensive test coverage (8 new tests)

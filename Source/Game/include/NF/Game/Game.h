@@ -3172,4 +3172,326 @@ private:
     int m_nextEventId = 1;
 };
 
+// ── Game Phase G14 — Tech Tree ────────────────────────────────────
+
+enum class TechCategory : uint8_t {
+    Weapons,
+    Shields,
+    Propulsion,
+    Mining,
+    Construction,
+    Biology,
+    Computing
+};
+
+inline std::string techCategoryName(TechCategory c) {
+    switch (c) {
+        case TechCategory::Weapons:      return "Weapons";
+        case TechCategory::Shields:      return "Shields";
+        case TechCategory::Propulsion:   return "Propulsion";
+        case TechCategory::Mining:       return "Mining";
+        case TechCategory::Construction: return "Construction";
+        case TechCategory::Biology:      return "Biology";
+        case TechCategory::Computing:    return "Computing";
+        default: return "Unknown";
+    }
+}
+
+struct TechNode {
+    std::string          id;
+    std::string          displayName;
+    TechCategory         category   = TechCategory::Weapons;
+    int                  tier       = 1;           // 1 = root, higher = deeper
+    int                  cost       = 100;         // research points required
+    std::vector<std::string> prerequisites;        // ids of required nodes
+    bool                 researched = false;
+
+    // Bonus values unlocked by this node (domain-specific)
+    float damageBonus    = 0.f;
+    float shieldBonus    = 0.f;
+    float speedBonus     = 0.f;
+    float miningBonus    = 0.f;
+};
+
+class TechTree {
+public:
+    void addNode(const TechNode& node) {
+        m_nodes[node.id] = node;
+    }
+
+    // Returns true if the node exists and all its prerequisites are researched.
+    [[nodiscard]] bool canResearch(const std::string& id) const {
+        auto it = m_nodes.find(id);
+        if (it == m_nodes.end()) return false;
+        if (it->second.researched) return false;
+        for (const auto& prereq : it->second.prerequisites) {
+            auto pit = m_nodes.find(prereq);
+            if (pit == m_nodes.end() || !pit->second.researched) return false;
+        }
+        return true;
+    }
+
+    // Unlock the given node. Returns false if prerequisites unmet or already researched.
+    bool unlock(const std::string& id) {
+        if (!canResearch(id)) return false;
+        m_nodes[id].researched = true;
+        m_researchedCount++;
+        NF_LOG_INFO("TechTree", "Unlocked: " + id);
+        return true;
+    }
+
+    [[nodiscard]] bool isUnlocked(const std::string& id) const {
+        auto it = m_nodes.find(id);
+        return it != m_nodes.end() && it->second.researched;
+    }
+
+    [[nodiscard]] const TechNode* findNode(const std::string& id) const {
+        auto it = m_nodes.find(id);
+        return it != m_nodes.end() ? &it->second : nullptr;
+    }
+
+    // Returns all nodes that can be researched right now.
+    [[nodiscard]] std::vector<std::string> getAvailable() const {
+        std::vector<std::string> out;
+        for (const auto& [id, node] : m_nodes)
+            if (canResearch(id)) out.push_back(id);
+        return out;
+    }
+
+    // Returns all researched node ids.
+    [[nodiscard]] std::vector<std::string> getResearched() const {
+        std::vector<std::string> out;
+        for (const auto& [id, node] : m_nodes)
+            if (node.researched) out.push_back(id);
+        return out;
+    }
+
+    // Returns nodes of a specific tier.
+    [[nodiscard]] std::vector<std::string> getByTier(int tier) const {
+        std::vector<std::string> out;
+        for (const auto& [id, node] : m_nodes)
+            if (node.tier == tier) out.push_back(id);
+        return out;
+    }
+
+    // Compute aggregate bonuses from all researched nodes.
+    struct AggregateBonus {
+        float damage  = 0.f;
+        float shield  = 0.f;
+        float speed   = 0.f;
+        float mining  = 0.f;
+    };
+
+    [[nodiscard]] AggregateBonus computeBonuses() const {
+        AggregateBonus b;
+        for (const auto& [id, node] : m_nodes) {
+            if (!node.researched) continue;
+            b.damage  += node.damageBonus;
+            b.shield  += node.shieldBonus;
+            b.speed   += node.speedBonus;
+            b.mining  += node.miningBonus;
+        }
+        return b;
+    }
+
+    int nodeCount()       const { return (int)m_nodes.size(); }
+    int researchedCount() const { return m_researchedCount; }
+
+private:
+    std::map<std::string, TechNode> m_nodes;
+    int m_researchedCount = 0;
+};
+
+// ── Game Phase G15 — Player Progression ──────────────────────────
+
+enum class XPSource : uint8_t {
+    Combat,
+    Mining,
+    Exploration,
+    Trade,
+    Quest,
+    Crafting
+};
+
+inline std::string xpSourceName(XPSource s) {
+    switch (s) {
+        case XPSource::Combat:      return "Combat";
+        case XPSource::Mining:      return "Mining";
+        case XPSource::Exploration: return "Exploration";
+        case XPSource::Trade:       return "Trade";
+        case XPSource::Quest:       return "Quest";
+        case XPSource::Crafting:    return "Crafting";
+        default: return "Unknown";
+    }
+}
+
+class PlayerLevel {
+public:
+    static constexpr int kMaxLevel = 50;
+
+    void init(int startLevel = 1) {
+        m_level = std::max(1, std::min(startLevel, kMaxLevel));
+        m_totalXP = xpForLevel(m_level);
+        m_xpThisLevel = 0;
+        NF_LOG_INFO("PlayerLevel", "Initialized at level " + std::to_string(m_level));
+    }
+
+    // Add XP; returns number of levels gained (0 if none).
+    int addXP(int amount, XPSource /*source*/ = XPSource::Combat) {
+        if (m_level >= kMaxLevel) return 0;
+        m_totalXP     += amount;
+        m_xpThisLevel += amount;
+        int levelsGained = 0;
+        while (m_level < kMaxLevel && m_xpThisLevel >= xpToNextLevel()) {
+            m_xpThisLevel -= xpToNextLevel();
+            ++m_level;
+            ++levelsGained;
+            NF_LOG_INFO("PlayerLevel", "Level up! Now level " + std::to_string(m_level));
+        }
+        return levelsGained;
+    }
+
+    [[nodiscard]] int  currentLevel()  const { return m_level; }
+    [[nodiscard]] int  xpThisLevel()   const { return m_xpThisLevel; }
+    [[nodiscard]] int  totalXP()       const { return m_totalXP; }
+    [[nodiscard]] bool isMaxLevel()    const { return m_level >= kMaxLevel; }
+
+    // XP needed to advance from current level to next.
+    [[nodiscard]] int xpToNextLevel() const {
+        if (m_level >= kMaxLevel) return 0;
+        return xpForLevel(m_level + 1) - xpForLevel(m_level);
+    }
+
+    [[nodiscard]] float progressToNextLevel() const {
+        int needed = xpToNextLevel();
+        return needed > 0 ? static_cast<float>(m_xpThisLevel) / static_cast<float>(needed) : 1.f;
+    }
+
+private:
+    // Cumulative XP required to *reach* `level` from level 1.
+    static int xpForLevel(int level) {
+        // Quadratic: level * (level - 1) * 50
+        return level * (level - 1) * 50;
+    }
+
+    int m_level       = 1;
+    int m_totalXP     = 0;
+    int m_xpThisLevel = 0;
+};
+
+struct SkillNode {
+    std::string id;
+    std::string displayName;
+    int         requiredLevel = 1;   // minimum player level to unlock
+    int         pointCost     = 1;   // skill points required
+    bool        unlocked      = false;
+
+    // Passive bonuses granted when unlocked
+    float healthBonus   = 0.f;
+    float energyBonus   = 0.f;
+    float damageBonus   = 0.f;
+    float miningBonus   = 0.f;
+};
+
+class SkillTree {
+public:
+    void addSkill(const SkillNode& node) { m_skills[node.id] = node; }
+
+    bool unlockSkill(const std::string& id, int playerLevel, int& availablePoints) {
+        auto it = m_skills.find(id);
+        if (it == m_skills.end()) return false;
+        auto& sk = it->second;
+        if (sk.unlocked) return false;
+        if (playerLevel < sk.requiredLevel) return false;
+        if (availablePoints < sk.pointCost) return false;
+        availablePoints -= sk.pointCost;
+        sk.unlocked = true;
+        NF_LOG_INFO("SkillTree", "Skill unlocked: " + id);
+        return true;
+    }
+
+    [[nodiscard]] bool isUnlocked(const std::string& id) const {
+        auto it = m_skills.find(id);
+        return it != m_skills.end() && it->second.unlocked;
+    }
+
+    [[nodiscard]] const SkillNode* findSkill(const std::string& id) const {
+        auto it = m_skills.find(id);
+        return it != m_skills.end() ? &it->second : nullptr;
+    }
+
+    // Returns ids of skills available to unlock at the given player level.
+    [[nodiscard]] std::vector<std::string> getAvailable(int playerLevel) const {
+        std::vector<std::string> out;
+        for (const auto& [id, sk] : m_skills)
+            if (!sk.unlocked && playerLevel >= sk.requiredLevel)
+                out.push_back(id);
+        return out;
+    }
+
+    struct SkillBonuses {
+        float health = 0.f;
+        float energy = 0.f;
+        float damage = 0.f;
+        float mining = 0.f;
+    };
+
+    [[nodiscard]] SkillBonuses computeBonuses() const {
+        SkillBonuses b;
+        for (const auto& [id, sk] : m_skills) {
+            if (!sk.unlocked) continue;
+            b.health += sk.healthBonus;
+            b.energy += sk.energyBonus;
+            b.damage += sk.damageBonus;
+            b.mining += sk.miningBonus;
+        }
+        return b;
+    }
+
+    int skillCount()    const { return (int)m_skills.size(); }
+    int unlockedCount() const {
+        int n = 0;
+        for (const auto& [id, sk] : m_skills) if (sk.unlocked) ++n;
+        return n;
+    }
+
+private:
+    std::map<std::string, SkillNode> m_skills;
+};
+
+class ProgressionSystem {
+public:
+    void init(int startLevel = 1) {
+        m_level.init(startLevel);
+        m_skillPoints = 0;
+        NF_LOG_INFO("Progression", "ProgressionSystem initialized");
+    }
+
+    // Award XP, potentially granting skill points on level-up.
+    void awardXP(int amount, XPSource source = XPSource::Combat) {
+        int gained = m_level.addXP(amount, source);
+        m_skillPoints += gained;  // 1 skill point per level gained
+    }
+
+    bool spendSkillPoint(const std::string& skillId) {
+        return m_skillTree.unlockSkill(skillId, m_level.currentLevel(), m_skillPoints);
+    }
+
+    [[nodiscard]] PlayerLevel&       level()      { return m_level; }
+    [[nodiscard]] const PlayerLevel& level() const { return m_level; }
+    [[nodiscard]] SkillTree&         skillTree()  { return m_skillTree; }
+    [[nodiscard]] const SkillTree&   skillTree()  const { return m_skillTree; }
+    [[nodiscard]] int                skillPoints() const { return m_skillPoints; }
+
+    // Combined stat modifiers from skills.
+    [[nodiscard]] SkillTree::SkillBonuses bonuses() const {
+        return m_skillTree.computeBonuses();
+    }
+
+private:
+    PlayerLevel m_level;
+    SkillTree   m_skillTree;
+    int         m_skillPoints = 0;
+};
+
 } // namespace NF

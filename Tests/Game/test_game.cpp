@@ -2812,3 +2812,249 @@ TEST_CASE("WorldEvent remainingTime decreases on tick", "[Game][WorldEvents]") {
     REQUIRE(ev != nullptr);
     REQUIRE(ev->remainingTime() == Catch::Approx(20.f));
 }
+
+// ── G14: Tech Tree ───────────────────────────────────────────────
+
+TEST_CASE("TechTree addNode and canResearch root node", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode n;
+    n.id = "basic_weapons";
+    n.displayName = "Basic Weapons";
+    n.category = NF::TechCategory::Weapons;
+    n.tier = 1;
+    n.cost = 50;
+    tree.addNode(n);
+
+    // Root node (no prereqs) should be researchable immediately
+    REQUIRE(tree.canResearch("basic_weapons"));
+    REQUIRE(tree.nodeCount() == 1);
+    REQUIRE(tree.researchedCount() == 0);
+}
+
+TEST_CASE("TechTree unlock node and prerequisite chain", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode root;
+    root.id = "shields_t1";
+    root.tier = 1;
+    tree.addNode(root);
+
+    NF::TechNode child;
+    child.id = "shields_t2";
+    child.tier = 2;
+    child.prerequisites.push_back("shields_t1");
+    tree.addNode(child);
+
+    // Child not researchable yet
+    REQUIRE_FALSE(tree.canResearch("shields_t2"));
+
+    // Unlock root
+    REQUIRE(tree.unlock("shields_t1"));
+    REQUIRE(tree.isUnlocked("shields_t1"));
+    REQUIRE(tree.researchedCount() == 1);
+
+    // Now child is researchable
+    REQUIRE(tree.canResearch("shields_t2"));
+    REQUIRE(tree.unlock("shields_t2"));
+    REQUIRE(tree.isUnlocked("shields_t2"));
+    REQUIRE(tree.researchedCount() == 2);
+}
+
+TEST_CASE("TechTree unlock already-researched node returns false", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode n;
+    n.id = "prop_basic";
+    tree.addNode(n);
+
+    REQUIRE(tree.unlock("prop_basic"));
+    REQUIRE_FALSE(tree.unlock("prop_basic"));  // already researched
+}
+
+TEST_CASE("TechTree getAvailable lists only researchable nodes", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode a;
+    a.id = "a";
+    tree.addNode(a);
+
+    NF::TechNode b;
+    b.id = "b";
+    b.prerequisites.push_back("a");
+    tree.addNode(b);
+
+    auto avail = tree.getAvailable();
+    REQUIRE(avail.size() == 1);
+    REQUIRE(avail[0] == "a");
+
+    tree.unlock("a");
+    avail = tree.getAvailable();
+    REQUIRE(avail.size() == 1);
+    REQUIRE(avail[0] == "b");
+}
+
+TEST_CASE("TechTree computeBonuses aggregates researched nodes", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode n1;
+    n1.id = "dmg1";
+    n1.damageBonus = 5.f;
+    tree.addNode(n1);
+
+    NF::TechNode n2;
+    n2.id = "dmg2";
+    n2.damageBonus = 3.f;
+    n2.miningBonus = 2.f;
+    tree.addNode(n2);
+
+    // Nothing researched yet
+    auto b = tree.computeBonuses();
+    REQUIRE(b.damage == Catch::Approx(0.f));
+
+    tree.unlock("dmg1");
+    tree.unlock("dmg2");
+
+    b = tree.computeBonuses();
+    REQUIRE(b.damage == Catch::Approx(8.f));
+    REQUIRE(b.mining == Catch::Approx(2.f));
+}
+
+TEST_CASE("TechTree getByTier filters correctly", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode t1a; t1a.id = "t1a"; t1a.tier = 1; tree.addNode(t1a);
+    NF::TechNode t1b; t1b.id = "t1b"; t1b.tier = 1; tree.addNode(t1b);
+    NF::TechNode t2a; t2a.id = "t2a"; t2a.tier = 2; tree.addNode(t2a);
+
+    REQUIRE(tree.getByTier(1).size() == 2);
+    REQUIRE(tree.getByTier(2).size() == 1);
+    REQUIRE(tree.getByTier(3).empty());
+}
+
+TEST_CASE("TechCategory name round-trip", "[Game][TechTree]") {
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Weapons)      == "Weapons");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Shields)      == "Shields");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Propulsion)   == "Propulsion");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Mining)       == "Mining");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Construction) == "Construction");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Biology)      == "Biology");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Computing)    == "Computing");
+}
+
+// ── G15: Player Progression ───────────────────────────────────────
+
+TEST_CASE("PlayerLevel init starts at given level", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(1);
+    REQUIRE(pl.currentLevel() == 1);
+    REQUIRE(pl.xpThisLevel() == 0);
+    REQUIRE_FALSE(pl.isMaxLevel());
+}
+
+TEST_CASE("PlayerLevel addXP causes level up", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(1);
+
+    int needed = pl.xpToNextLevel();
+    REQUIRE(needed > 0);
+
+    int gained = pl.addXP(needed);
+    REQUIRE(gained == 1);
+    REQUIRE(pl.currentLevel() == 2);
+}
+
+TEST_CASE("PlayerLevel progressToNextLevel returns 0-1 fraction", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(1);
+
+    int needed = pl.xpToNextLevel();
+    pl.addXP(needed / 2);
+
+    float progress = pl.progressToNextLevel();
+    REQUIRE(progress > 0.f);
+    REQUIRE(progress < 1.f);
+}
+
+TEST_CASE("PlayerLevel caps at max level", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(NF::PlayerLevel::kMaxLevel);
+    REQUIRE(pl.isMaxLevel());
+    REQUIRE(pl.xpToNextLevel() == 0);
+
+    int gained = pl.addXP(10000);
+    REQUIRE(gained == 0);  // no more levels
+}
+
+TEST_CASE("SkillTree unlockSkill respects level requirement", "[Game][Progression]") {
+    NF::SkillTree st;
+
+    NF::SkillNode sk;
+    sk.id = "heavy_mining";
+    sk.requiredLevel = 5;
+    sk.pointCost = 1;
+    sk.miningBonus = 10.f;
+    st.addSkill(sk);
+
+    int points = 5;
+    // Level too low
+    REQUIRE_FALSE(st.unlockSkill("heavy_mining", 3, points));
+    REQUIRE(points == 5);
+
+    // Level sufficient
+    REQUIRE(st.unlockSkill("heavy_mining", 5, points));
+    REQUIRE(points == 4);
+    REQUIRE(st.isUnlocked("heavy_mining"));
+}
+
+TEST_CASE("SkillTree computeBonuses aggregates unlocked skills", "[Game][Progression]") {
+    NF::SkillTree st;
+
+    NF::SkillNode s1; s1.id = "hp1"; s1.healthBonus = 20.f; s1.requiredLevel = 1; s1.pointCost = 1;
+    NF::SkillNode s2; s2.id = "hp2"; s2.healthBonus = 15.f; s2.requiredLevel = 1; s2.pointCost = 1;
+    st.addSkill(s1);
+    st.addSkill(s2);
+
+    int pts = 10;
+    st.unlockSkill("hp1", 1, pts);
+    st.unlockSkill("hp2", 1, pts);
+
+    auto b = st.computeBonuses();
+    REQUIRE(b.health == Catch::Approx(35.f));
+}
+
+TEST_CASE("ProgressionSystem awardXP grants skill points on level-up", "[Game][Progression]") {
+    NF::ProgressionSystem prog;
+    prog.init(1);
+
+    REQUIRE(prog.skillPoints() == 0);
+
+    int needed = prog.level().xpToNextLevel();
+    prog.awardXP(needed);
+
+    REQUIRE(prog.level().currentLevel() == 2);
+    REQUIRE(prog.skillPoints() == 1);
+}
+
+TEST_CASE("ProgressionSystem spendSkillPoint unlocks skill", "[Game][Progression]") {
+    NF::ProgressionSystem prog;
+    prog.init(1);
+
+    NF::SkillNode sk;
+    sk.id = "fast_drill";
+    sk.requiredLevel = 1;
+    sk.pointCost = 1;
+    sk.miningBonus = 5.f;
+    prog.skillTree().addSkill(sk);
+
+    // No skill points yet
+    REQUIRE_FALSE(prog.spendSkillPoint("fast_drill"));
+
+    // Level up to get a skill point
+    prog.awardXP(prog.level().xpToNextLevel());
+    REQUIRE(prog.skillPoints() == 1);
+
+    REQUIRE(prog.spendSkillPoint("fast_drill"));
+    REQUIRE(prog.skillPoints() == 0);
+    REQUIRE(prog.bonuses().mining == Catch::Approx(5.f));
+}
