@@ -4,6 +4,7 @@
 #include "NF/Engine/Engine.h"
 #include "NF/Renderer/Renderer.h"
 #include "NF/Physics/Physics.h"
+#include <map>
 
 namespace NF {
 
@@ -1781,6 +1782,757 @@ public:
 
 private:
     float m_baseDamageVariance = 0.1f;
+};
+
+// ── G5: Fleet AI ─────────────────────────────────────────────────
+
+enum class FormationType : uint8_t { Line, Wedge, Column, Spread, Defensive, Count };
+inline const char* formationTypeName(FormationType t) {
+    switch(t) {
+        case FormationType::Line: return "Line";
+        case FormationType::Wedge: return "Wedge";
+        case FormationType::Column: return "Column";
+        case FormationType::Spread: return "Spread";
+        case FormationType::Defensive: return "Defensive";
+        default: return "Unknown";
+    }
+}
+
+struct FormationSlot {
+    int shipIndex = -1;
+    Vec3 offset{0,0,0};
+    bool occupied = false;
+};
+
+class Formation {
+public:
+    void init(FormationType type, int shipCount, float spacing = 20.f) {
+        m_type = type; m_spacing = spacing;
+        m_slots.resize(shipCount);
+        generateSlotOffsets();
+    }
+    FormationType type() const { return m_type; }
+    int slotCount() const { return (int)m_slots.size(); }
+    FormationSlot& slot(int i) { return m_slots[i]; }
+    const FormationSlot& slot(int i) const { return m_slots[i]; }
+    void setSpacing(float s) { m_spacing = s; generateSlotOffsets(); }
+    float spacing() const { return m_spacing; }
+
+    Vec3 getSlotWorldPosition(int idx, const Vec3& leaderPos, const Vec3& leaderFwd) const {
+        if (idx < 0 || idx >= (int)m_slots.size()) return leaderPos;
+        Vec3 up{0,1,0};
+        Vec3 right = leaderFwd.cross(up).normalized();
+        const Vec3& off = m_slots[idx].offset;
+        return {leaderPos.x + right.x*off.x + leaderFwd.x*off.z,
+                leaderPos.y + off.y,
+                leaderPos.z + right.z*off.x + leaderFwd.z*off.z};
+    }
+
+private:
+    FormationType m_type = FormationType::Line;
+    std::vector<FormationSlot> m_slots;
+    float m_spacing = 20.f;
+
+    void generateSlotOffsets() {
+        int n = (int)m_slots.size();
+        for (int i = 0; i < n; ++i) {
+            switch (m_type) {
+                case FormationType::Line:
+                    m_slots[i].offset = {(i - n/2) * m_spacing, 0, 0};
+                    break;
+                case FormationType::Wedge:
+                    m_slots[i].offset = {(i - n/2) * m_spacing, 0, -(float)std::abs(i - n/2) * m_spacing};
+                    break;
+                case FormationType::Column:
+                    m_slots[i].offset = {0, 0, -(float)i * m_spacing};
+                    break;
+                case FormationType::Spread:
+                    m_slots[i].offset = {((i%3)-1) * m_spacing, 0, -(i/3) * m_spacing};
+                    break;
+                case FormationType::Defensive: {
+                    float angle = (2.f * 3.14159265f * i) / (float)(n > 0 ? n : 1);
+                    m_slots[i].offset = {std::cos(angle)*m_spacing, 0, std::sin(angle)*m_spacing};
+                    break;
+                }
+                default: m_slots[i].offset = {0,0,0}; break;
+            }
+        }
+    }
+};
+
+struct CaptainPersonality {
+    float aggression = 0.5f;
+    float caution = 0.5f;
+    float loyalty = 0.5f;
+    float initiative = 0.5f;
+    float morale = 1.0f;
+    float confidence = 1.0f;
+
+    void adjustMorale(float delta) {
+        morale += delta;
+        if (morale < 0.f) morale = 0.f;
+        if (morale > 1.f) morale = 1.f;
+    }
+    void adjustConfidence(float delta) {
+        confidence += delta;
+        if (confidence < 0.f) confidence = 0.f;
+        if (confidence > 1.f) confidence = 1.f;
+    }
+    bool willFlee() const { return morale < 0.2f && caution > 0.6f; }
+    bool willCharge() const { return aggression > 0.7f && confidence > 0.5f; }
+};
+
+enum class CaptainOrder : uint8_t {
+    HoldPosition, AttackTarget, DefendTarget, FollowLeader, Patrol, Retreat, FreeEngage, Count
+};
+inline const char* captainOrderName(CaptainOrder o) {
+    switch(o) {
+        case CaptainOrder::HoldPosition: return "HoldPosition";
+        case CaptainOrder::AttackTarget: return "AttackTarget";
+        case CaptainOrder::DefendTarget: return "DefendTarget";
+        case CaptainOrder::FollowLeader: return "FollowLeader";
+        case CaptainOrder::Patrol: return "Patrol";
+        case CaptainOrder::Retreat: return "Retreat";
+        case CaptainOrder::FreeEngage: return "FreeEngage";
+        default: return "Unknown";
+    }
+}
+
+class AICaptain {
+public:
+    void init(StringID name, const CaptainPersonality& p) { m_name = name; m_personality = p; }
+    StringID name() const { return m_name; }
+    const CaptainPersonality& personality() const { return m_personality; }
+    CaptainPersonality& personality() { return m_personality; }
+    CaptainOrder currentOrder() const { return m_hasOverride ? m_overrideOrder : m_currentOrder; }
+    void setOrder(CaptainOrder o) { m_currentOrder = o; }
+    void overrideOrder(CaptainOrder o) { m_overrideOrder = o; m_hasOverride = true; }
+    bool hasOverride() const { return m_hasOverride; }
+    void clearOverride() { m_hasOverride = false; }
+
+    CaptainOrder evaluate(float hullPct, float shieldPct, float enemyDist,
+                          int alliesNearby, int enemiesNearby) const {
+        if (m_personality.willFlee() && hullPct < 0.3f) return CaptainOrder::Retreat;
+        if (m_personality.willCharge() && enemyDist < 200.f) return CaptainOrder::AttackTarget;
+        if (enemiesNearby > alliesNearby * 2 && m_personality.caution > 0.5f)
+            return CaptainOrder::DefendTarget;
+        return m_hasOverride ? m_overrideOrder : m_currentOrder;
+    }
+
+private:
+    StringID m_name;
+    CaptainPersonality m_personality;
+    CaptainOrder m_currentOrder = CaptainOrder::FollowLeader;
+    CaptainOrder m_overrideOrder = CaptainOrder::FollowLeader;
+    bool m_hasOverride = false;
+};
+
+struct FleetShip {
+    Ship ship;
+    AICaptain captain;
+    FlightController flight;
+    int formationSlot = -1;
+    bool active = true;
+};
+
+class Fleet {
+public:
+    void init(StringID name) { m_name = name; }
+
+    int addShip(FleetShip s) {
+        int idx = (int)m_ships.size();
+        m_ships.push_back(std::move(s));
+        return idx;
+    }
+    void removeShip(int idx) {
+        if (idx >= 0 && idx < (int)m_ships.size()) m_ships[idx].active = false;
+    }
+    FleetShip* ship(int i) { return (i>=0&&i<(int)m_ships.size()) ? &m_ships[i] : nullptr; }
+    const FleetShip* ship(int i) const { return (i>=0&&i<(int)m_ships.size()) ? &m_ships[i] : nullptr; }
+    int shipCount() const { return (int)m_ships.size(); }
+    int activeShipCount() const {
+        int c = 0; for (auto& s : m_ships) if (s.active) ++c; return c;
+    }
+
+    void setFormation(FormationType t, float spacing = 20.f) {
+        m_formation.init(t, (int)m_ships.size(), spacing);
+    }
+    const Formation& formation() const { return m_formation; }
+    Formation& formation() { return m_formation; }
+
+    void issueOrder(CaptainOrder o) { for (auto& s : m_ships) s.captain.setOrder(o); }
+    void issueOrderTo(int idx, CaptainOrder o) {
+        if (auto* s = ship(idx)) s->captain.setOrder(o);
+    }
+
+    void setLeader(int idx) { m_leaderIndex = idx; }
+    int leaderIndex() const { return m_leaderIndex; }
+    FleetShip* leader() { return ship(m_leaderIndex); }
+
+    void tick(float dt) {
+        for (auto& s : m_ships) {
+            if (!s.active) continue;
+            float hullPct = s.ship.hull() / s.ship.maxHull();
+            float shieldPct = s.ship.shield() / s.ship.maxShield();
+            CaptainOrder ord = s.captain.evaluate(hullPct, shieldPct, 500.f, 1, 0);
+            s.captain.setOrder(ord);
+        }
+    }
+
+    float fleetMorale() const {
+        if (m_ships.empty()) return 1.f;
+        float sum = 0.f; int c = 0;
+        for (auto& s : m_ships) if (s.active) { sum += s.captain.personality().morale; ++c; }
+        return c > 0 ? sum / c : 1.f;
+    }
+    float fleetStrength() const {
+        float sum = 0.f;
+        for (auto& s : m_ships)
+            if (s.active) sum += s.ship.hull() / s.ship.maxHull();
+        return sum;
+    }
+
+    StringID name() const { return m_name; }
+
+private:
+    StringID m_name;
+    std::vector<FleetShip> m_ships;
+    Formation m_formation;
+    int m_leaderIndex = 0;
+};
+
+// ── G6: Economy ───────────────────────────────────────────────────
+
+struct MarketItem {
+    ResourceType resource;
+    int quantity = 0;
+    float buyPrice = 10.f;
+    float sellPrice = 8.f;
+};
+
+class Market {
+public:
+    void init() { m_items.clear(); }
+
+    void listItem(ResourceType res, int qty, float buyPrice, float sellPrice) {
+        for (auto& item : m_items) {
+            if (item.resource == res) { item.quantity += qty; return; }
+        }
+        m_items.push_back({res, qty, buyPrice, sellPrice});
+    }
+
+    bool buy(ResourceInventory& inv, ResourceType res, int amount, float& credits) {
+        for (auto& item : m_items) {
+            if (item.resource != res) continue;
+            if (item.quantity < amount) return false;
+            float cost = item.buyPrice * amount;
+            if (credits < cost) return false;
+            credits -= cost;
+            item.quantity -= amount;
+            inv.add(res, amount);
+            return true;
+        }
+        return false;
+    }
+
+    bool sell(ResourceInventory& inv, ResourceType res, int amount, float& credits) {
+        if (inv.count(res) < amount) return false;
+        float gain = 0.f;
+        for (auto& item : m_items) {
+            if (item.resource == res) { gain = item.sellPrice * amount; break; }
+        }
+        if (gain == 0.f) {
+            gain = 5.f * amount;
+        }
+        inv.remove(res, amount);
+        credits += gain;
+        return true;
+    }
+
+    const MarketItem* findItem(ResourceType res) const {
+        for (auto& item : m_items) if (item.resource == res) return &item;
+        return nullptr;
+    }
+
+    int itemCount() const { return (int)m_items.size(); }
+
+private:
+    std::vector<MarketItem> m_items;
+};
+
+struct RefiningRecipe {
+    ResourceType input;
+    int inputAmount;
+    ResourceType output;
+    int outputAmount;
+    float timeRequired;
+};
+
+class Refinery {
+public:
+    void addRecipe(const RefiningRecipe& r) { m_recipes.push_back(r); }
+
+    const RefiningRecipe* findRecipe(ResourceType input) const {
+        for (auto& r : m_recipes) if (r.input == input) return &r;
+        return nullptr;
+    }
+
+    float startRefining(ResourceInventory& inv, ResourceType input, int amount) {
+        const RefiningRecipe* r = findRecipe(input);
+        if (!r) return 0.f;
+        int batches = amount / r->inputAmount;
+        if (batches <= 0) return 0.f;
+        if (!inv.remove(input, batches * r->inputAmount)) return 0.f;
+        m_pendingOutput.push_back({r->output, batches * r->outputAmount});
+        return r->timeRequired * batches;
+    }
+
+    void collectOutput(ResourceInventory& inv) {
+        for (auto& p : m_pendingOutput) inv.add(p.first, p.second);
+        m_pendingOutput.clear();
+    }
+
+    int recipeCount() const { return (int)m_recipes.size(); }
+
+private:
+    std::vector<RefiningRecipe> m_recipes;
+    std::vector<std::pair<ResourceType, int>> m_pendingOutput;
+};
+
+struct ManufacturingRecipe {
+    StringID name;
+    std::vector<std::pair<ResourceType, int>> inputs;
+    ResourceType output;
+    int outputAmount;
+    float timeRequired;
+};
+
+class Manufacturer {
+public:
+    void addRecipe(const ManufacturingRecipe& r) { m_recipes.push_back(r); }
+
+    const ManufacturingRecipe* findRecipe(StringID name) const {
+        for (auto& r : m_recipes) if (r.name == name) return &r;
+        return nullptr;
+    }
+
+    bool canCraft(const ResourceInventory& inv, StringID recipeName) const {
+        const ManufacturingRecipe* r = findRecipe(recipeName);
+        if (!r) return false;
+        for (auto& [res, amt] : r->inputs)
+            if (inv.count(res) < amt) return false;
+        return true;
+    }
+
+    float craft(ResourceInventory& inv, StringID recipeName) {
+        const ManufacturingRecipe* r = findRecipe(recipeName);
+        if (!r || !canCraft(inv, recipeName)) return 0.f;
+        for (auto& [res, amt] : r->inputs) inv.remove(res, amt);
+        inv.add(r->output, r->outputAmount);
+        return r->timeRequired;
+    }
+
+    int recipeCount() const { return (int)m_recipes.size(); }
+
+private:
+    std::vector<ManufacturingRecipe> m_recipes;
+};
+
+// ── G7: Exploration ───────────────────────────────────────────────
+
+enum class SectorType : uint8_t { Normal, Nebula, AsteroidField, DeepSpace, AncientRuins, Count };
+inline const char* sectorTypeName(SectorType t) {
+    switch(t) {
+        case SectorType::Normal: return "Normal";
+        case SectorType::Nebula: return "Nebula";
+        case SectorType::AsteroidField: return "AsteroidField";
+        case SectorType::DeepSpace: return "DeepSpace";
+        case SectorType::AncientRuins: return "AncientRuins";
+        default: return "Unknown";
+    }
+}
+
+struct SectorInfo {
+    StringID name;
+    SectorType type = SectorType::Normal;
+    Vec3 position{0,0,0};
+    float scanProgress = 0.f;
+    bool fullyScanned = false;
+    bool hasWormhole = false;
+    bool hasAncientTech = false;
+};
+
+class ProbeScanner {
+public:
+    void init(float scanRate = 0.1f) { m_scanRate = scanRate; m_active = false; }
+
+    void startScan(SectorInfo& sector) {
+        m_targetSector = &sector;
+        m_active = true;
+    }
+    void stopScan() { m_active = false; m_targetSector = nullptr; }
+    bool isActive() const { return m_active; }
+
+    bool tick(float dt) {
+        if (!m_active || !m_targetSector) return false;
+        m_targetSector->scanProgress += m_scanRate * dt;
+        if (m_targetSector->scanProgress >= 1.f) {
+            m_targetSector->scanProgress = 1.f;
+            m_targetSector->fullyScanned = true;
+            m_active = false;
+            m_targetSector = nullptr;
+            return true;
+        }
+        return false;
+    }
+
+    float scanRate() const { return m_scanRate; }
+    void setScanRate(float r) { m_scanRate = r; }
+
+private:
+    float m_scanRate = 0.1f;
+    bool m_active = false;
+    SectorInfo* m_targetSector = nullptr;
+};
+
+struct WormholeLink {
+    StringID fromSector;
+    StringID toSector;
+    float stability = 1.f;
+    bool twoWay = true;
+
+    bool isTraversable() const { return stability > 0.1f; }
+    void degrade(float amount) {
+        stability -= amount;
+        if (stability < 0.f) stability = 0.f;
+    }
+};
+
+class StarMap {
+public:
+    void addSector(const SectorInfo& sector) {
+        m_sectors[sector.name] = sector;
+    }
+    SectorInfo* findSector(StringID name) {
+        auto it = m_sectors.find(name);
+        return it != m_sectors.end() ? &it->second : nullptr;
+    }
+    const SectorInfo* findSector(StringID name) const {
+        auto it = m_sectors.find(name);
+        return it != m_sectors.end() ? &it->second : nullptr;
+    }
+
+    void addWormhole(const WormholeLink& link) { m_wormholes.push_back(link); }
+
+    std::vector<StringID> getReachableSectors(StringID from) const {
+        std::vector<StringID> result;
+        for (auto& wh : m_wormholes) {
+            if (!wh.isTraversable()) continue;
+            if (wh.fromSector == from) result.push_back(wh.toSector);
+            else if (wh.twoWay && wh.toSector == from) result.push_back(wh.fromSector);
+        }
+        return result;
+    }
+
+    int sectorCount() const { return (int)m_sectors.size(); }
+    int wormholeCount() const { return (int)m_wormholes.size(); }
+
+    std::vector<StringID> getAncientTechSectors() const {
+        std::vector<StringID> result;
+        for (auto& [name, s] : m_sectors)
+            if (s.hasAncientTech) result.push_back(name);
+        return result;
+    }
+
+private:
+    std::map<StringID, SectorInfo> m_sectors;
+    std::vector<WormholeLink> m_wormholes;
+};
+
+struct AncientTechFragment {
+    StringID name;
+    StringID sectorFound;
+    int tier = 1;
+    bool analyzed = false;
+    float damageBonus = 0.f;
+    float shieldBonus = 0.f;
+    float speedBonus = 0.f;
+};
+
+class AncientTechRegistry {
+public:
+    void add(const AncientTechFragment& f) { m_fragments.push_back(f); }
+    AncientTechFragment* find(StringID name) {
+        for (auto& f : m_fragments) if (f.name == name) return &f;
+        return nullptr;
+    }
+    void analyze(StringID name) {
+        if (auto* f = find(name)) { f->analyzed = true; f->damageBonus = f->tier * 0.05f; }
+    }
+    int count() const { return (int)m_fragments.size(); }
+    int analyzedCount() const {
+        int c = 0; for (auto& f : m_fragments) if (f.analyzed) ++c; return c;
+    }
+
+private:
+    std::vector<AncientTechFragment> m_fragments;
+};
+
+// ── G8: FPS Interiors ─────────────────────────────────────────────
+
+enum class RoomType : uint8_t { Bridge, Engineering, MedBay, Cargo, Airlock, Corridor, Count };
+inline const char* roomTypeName(RoomType t) {
+    switch(t) {
+        case RoomType::Bridge: return "Bridge";
+        case RoomType::Engineering: return "Engineering";
+        case RoomType::MedBay: return "MedBay";
+        case RoomType::Cargo: return "Cargo";
+        case RoomType::Airlock: return "Airlock";
+        case RoomType::Corridor: return "Corridor";
+        default: return "Unknown";
+    }
+}
+
+struct ShipRoom {
+    StringID name;
+    RoomType type = RoomType::Corridor;
+    float oxygenLevel = 1.f;
+    float temperature = 20.f;
+    bool pressurized = true;
+    std::vector<StringID> connectedRooms;
+
+    void connect(StringID other) { connectedRooms.push_back(other); }
+    bool isConnectedTo(StringID other) const {
+        for (auto& r : connectedRooms) if (r == other) return true;
+        return false;
+    }
+    bool isHabitable() const { return pressurized && oxygenLevel > 0.2f && temperature > -10.f; }
+};
+
+class ShipInterior {
+public:
+    void addRoom(const ShipRoom& room) { m_rooms[room.name] = room; }
+    ShipRoom* findRoom(StringID name) {
+        auto it = m_rooms.find(name);
+        return it != m_rooms.end() ? &it->second : nullptr;
+    }
+    const ShipRoom* findRoom(StringID name) const {
+        auto it = m_rooms.find(name);
+        return it != m_rooms.end() ? &it->second : nullptr;
+    }
+
+    int roomCount() const { return (int)m_rooms.size(); }
+
+    void decompress(StringID roomName) {
+        if (auto* r = findRoom(roomName)) { r->oxygenLevel = 0.f; r->pressurized = false; }
+    }
+
+    void repressurize(StringID roomName) {
+        if (auto* r = findRoom(roomName)) { r->oxygenLevel = 1.f; r->pressurized = true; }
+    }
+
+    int habitableRoomCount() const {
+        int c = 0;
+        for (auto& [n, r] : m_rooms) if (r.isHabitable()) ++c;
+        return c;
+    }
+
+private:
+    std::map<StringID, ShipRoom> m_rooms;
+};
+
+struct EVAState {
+    bool active = false;
+    float suitIntegrity = 100.f;
+    float oxygenSupply = 300.f;
+    float jetpackFuel = 100.f;
+    Vec3 velocity{0,0,0};
+
+    bool isAlive() const { return suitIntegrity > 0.f && oxygenSupply > 0.f; }
+
+    void tick(float dt) {
+        if (!active) return;
+        oxygenSupply -= dt;
+        if (oxygenSupply < 0.f) oxygenSupply = 0.f;
+    }
+
+    void useThruster(const Vec3& impulse, float fuelCost) {
+        if (jetpackFuel <= 0.f) return;
+        velocity = velocity + impulse;
+        jetpackFuel -= fuelCost;
+        if (jetpackFuel < 0.f) jetpackFuel = 0.f;
+    }
+
+    void takeSuitDamage(float amount) {
+        suitIntegrity -= amount;
+        if (suitIntegrity < 0.f) suitIntegrity = 0.f;
+    }
+};
+
+struct SurvivalStatus {
+    float radiation = 0.f;
+    float temperature = 37.f;
+    bool inVacuum = false;
+    bool onFire = false;
+
+    bool isRadiationDangerous() const { return radiation > 50.f; }
+    bool isHypothermic() const { return temperature < 35.f; }
+    bool isHyperthermic() const { return temperature > 40.f; }
+    bool isInDanger() const { return isRadiationDangerous() || isHypothermic() || isHyperthermic() || inVacuum || onFire; }
+
+    void tick(float dt, const ShipRoom* currentRoom) {
+        if (!currentRoom || !currentRoom->isHabitable()) {
+            inVacuum = true;
+            radiation += dt * 2.f;
+            temperature -= dt * 5.f;
+        } else {
+            inVacuum = false;
+        }
+    }
+};
+
+// ── G9: Legend System ─────────────────────────────────────────────
+
+enum class ReputationTier : uint8_t {
+    Infamous = 0, Outlaw, Neutral, Trusted, Honored, Legend, Count
+};
+inline const char* reputationTierName(ReputationTier t) {
+    switch(t) {
+        case ReputationTier::Infamous: return "Infamous";
+        case ReputationTier::Outlaw: return "Outlaw";
+        case ReputationTier::Neutral: return "Neutral";
+        case ReputationTier::Trusted: return "Trusted";
+        case ReputationTier::Honored: return "Honored";
+        case ReputationTier::Legend: return "Legend";
+        default: return "Unknown";
+    }
+}
+
+inline ReputationTier reputationTierFromScore(float score) {
+    if (score < -500.f) return ReputationTier::Infamous;
+    if (score < -100.f) return ReputationTier::Outlaw;
+    if (score < 100.f)  return ReputationTier::Neutral;
+    if (score < 500.f)  return ReputationTier::Trusted;
+    if (score < 1000.f) return ReputationTier::Honored;
+    return ReputationTier::Legend;
+}
+
+class PlayerReputation {
+public:
+    void adjustReputation(StringID faction, float delta) {
+        m_scores[faction] += delta;
+    }
+    float getReputation(StringID faction) const {
+        auto it = m_scores.find(faction);
+        return it != m_scores.end() ? it->second : 0.f;
+    }
+    ReputationTier getTier(StringID faction) const {
+        return reputationTierFromScore(getReputation(faction));
+    }
+    int factionCount() const { return (int)m_scores.size(); }
+    float globalFame() const {
+        float sum = 0.f;
+        for (auto& [k, v] : m_scores) sum += std::abs(v);
+        return sum;
+    }
+
+private:
+    std::map<StringID, float> m_scores;
+};
+
+struct WorldBias {
+    StringID sectorName;
+    float economyModifier = 1.f;
+    float dangerLevel = 0.f;
+    float loyaltyToPlayer = 0.f;
+
+    bool isFriendly() const { return loyaltyToPlayer > 0.3f; }
+    bool isHostile() const { return loyaltyToPlayer < -0.3f; }
+};
+
+class WorldBiasMap {
+public:
+    void setBias(const WorldBias& bias) { m_biases[bias.sectorName] = bias; }
+    WorldBias* getBias(StringID sectorName) {
+        auto it = m_biases.find(sectorName);
+        return it != m_biases.end() ? &it->second : nullptr;
+    }
+    const WorldBias* getBias(StringID sectorName) const {
+        auto it = m_biases.find(sectorName);
+        return it != m_biases.end() ? &it->second : nullptr;
+    }
+
+    void updateFromReputation(StringID faction, float reputationDelta) {
+        for (auto& [name, bias] : m_biases)
+            bias.loyaltyToPlayer += reputationDelta * 0.01f;
+    }
+
+    int biasCount() const { return (int)m_biases.size(); }
+
+private:
+    std::map<StringID, WorldBias> m_biases;
+};
+
+struct NPCMemoryEntry {
+    StringID eventType;
+    float timestamp = 0.f;
+    float weight = 1.f;
+    bool positive = true;
+};
+
+class NPCMemory {
+public:
+    void remember(const NPCMemoryEntry& entry) { m_entries.push_back(entry); }
+
+    void decay(float dt, float decayRate = 0.01f) {
+        for (auto& e : m_entries) {
+            e.weight -= decayRate * dt;
+            if (e.weight < 0.f) e.weight = 0.f;
+        }
+        m_entries.erase(
+            std::remove_if(m_entries.begin(), m_entries.end(),
+                           [](const NPCMemoryEntry& e){ return e.weight <= 0.f; }),
+            m_entries.end());
+    }
+
+    float dispositionTowardPlayer() const {
+        float sum = 0.f;
+        for (auto& e : m_entries)
+            sum += e.positive ? e.weight : -e.weight;
+        return sum;
+    }
+
+    int entryCount() const { return (int)m_entries.size(); }
+    bool remembers(StringID eventType) const {
+        for (auto& e : m_entries) if (e.eventType == eventType) return true;
+        return false;
+    }
+
+private:
+    std::vector<NPCMemoryEntry> m_entries;
+};
+
+class LegendStatus {
+public:
+    void init() {}
+
+    PlayerReputation& reputation() { return m_reputation; }
+    const PlayerReputation& reputation() const { return m_reputation; }
+    WorldBiasMap& worldBias() { return m_worldBias; }
+    const WorldBiasMap& worldBias() const { return m_worldBias; }
+
+    ReputationTier overallTier() const {
+        float fame = m_reputation.globalFame();
+        return reputationTierFromScore(fame - 500.f);
+    }
+
+    bool isLegend() const {
+        return m_reputation.globalFame() >= 2000.f;
+    }
+
+private:
+    PlayerReputation m_reputation;
+    WorldBiasMap m_worldBias;
 };
 
 } // namespace NF

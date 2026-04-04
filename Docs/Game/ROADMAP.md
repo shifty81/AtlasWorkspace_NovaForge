@@ -25,11 +25,11 @@
 | **G2** — Voxel Mesh Rendering | Mesher, GPU cache, Phong shader, lit terrain | ✅ Done |
 | **G3** — Movement & FPS Camera | WASD + mouse look, jump, sprint, voxel collision | ✅ Done |
 | **G4** — Ship Systems | Ship classes, modules, combat, flight controls | ✅ Done |
-| **G5** — Fleet AI | AI captains, personality, morale, formation | 📋 Planned |
-| **G6** — Economy | Mining, refining, manufacturing, market | 📋 Planned |
-| **G7** — Exploration | Probe scanning, wormholes, ancient tech | 📋 Planned |
-| **G8** — FPS Interiors | Walkable ships, EVA, survival mechanics | 📋 Planned |
-| **G9** — Legend System | Player reputation, world bias, NPC memory | 📋 Planned |
+| **G5** — Fleet AI | AI captains, personality, morale, formation | ✅ Done |
+| **G6** — Economy | Mining, refining, manufacturing, market | ✅ Done |
+| **G7** — Exploration | Probe scanning, wormholes, ancient tech | ✅ Done |
+| **G8** — FPS Interiors | Walkable ships, EVA, survival mechanics | ✅ Done |
+| **G9** — Legend System | Player reputation, world bias, NPC memory | ✅ Done |
 
 ## Status Key
 

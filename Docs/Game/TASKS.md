@@ -226,3 +226,57 @@
 - [x] CombatTarget struct (position, distance, inRange, inFiringArc)
 - [x] CombatSystem class (calculateDamage, tickWeapons, evaluateTarget with arc check, applyDamage)
 - [x] Comprehensive test coverage (22 new tests, 439 total)
+
+## Game Phase G5 — Fleet AI
+
+- [x] FormationType enum (Line, Wedge, Column, Spread, Defensive) with formationTypeName()
+- [x] FormationSlot struct (shipIndex, offset, occupied)
+- [x] Formation class (init, slotCount, slot, setSpacing, getSlotWorldPosition, generateSlotOffsets)
+- [x] CaptainPersonality struct (aggression, caution, loyalty, initiative, morale, confidence, adjustMorale, adjustConfidence, willFlee, willCharge)
+- [x] CaptainOrder enum (HoldPosition, AttackTarget, DefendTarget, FollowLeader, Patrol, Retreat, FreeEngage) with captainOrderName()
+- [x] AICaptain class (init, name, personality, currentOrder, setOrder, overrideOrder, clearOverride, evaluate)
+- [x] FleetShip struct (ship, captain, flight, formationSlot, active)
+- [x] Fleet class (init, addShip, removeShip, ship, shipCount, activeShipCount, setFormation, issueOrder, issueOrderTo, setLeader, tick, fleetMorale, fleetStrength)
+- [x] Comprehensive test coverage (20 new tests)
+
+## Game Phase G6 — Economy
+
+- [x] MarketItem struct (resource, quantity, buyPrice, sellPrice)
+- [x] Market class (init, listItem, buy, sell, findItem, itemCount)
+- [x] RefiningRecipe struct (input, inputAmount, output, outputAmount, timeRequired)
+- [x] Refinery class (addRecipe, findRecipe, startRefining, collectOutput, recipeCount)
+- [x] ManufacturingRecipe struct (name, inputs, output, outputAmount, timeRequired)
+- [x] Manufacturer class (addRecipe, findRecipe, canCraft, craft, recipeCount)
+- [x] Comprehensive test coverage (14 new tests)
+
+## Game Phase G7 — Exploration
+
+- [x] SectorType enum (Normal, Nebula, AsteroidField, DeepSpace, AncientRuins) with sectorTypeName()
+- [x] SectorInfo struct (name, type, position, scanProgress, fullyScanned, hasWormhole, hasAncientTech)
+- [x] ProbeScanner class (init, startScan, stopScan, isActive, tick, scanRate, setScanRate)
+- [x] WormholeLink struct (fromSector, toSector, stability, twoWay, isTraversable, degrade)
+- [x] StarMap class (addSector, findSector, addWormhole, getReachableSectors, sectorCount, wormholeCount, getAncientTechSectors)
+- [x] AncientTechFragment struct (name, sectorFound, tier, analyzed, damageBonus, shieldBonus, speedBonus)
+- [x] AncientTechRegistry class (add, find, analyze, count, analyzedCount)
+- [x] Comprehensive test coverage (13 new tests)
+
+## Game Phase G8 — FPS Interiors
+
+- [x] RoomType enum (Bridge, Engineering, MedBay, Cargo, Airlock, Corridor) with roomTypeName()
+- [x] ShipRoom struct (name, type, oxygenLevel, temperature, pressurized, connectedRooms, connect, isConnectedTo, isHabitable)
+- [x] ShipInterior class (addRoom, findRoom, roomCount, decompress, repressurize, habitableRoomCount)
+- [x] EVAState struct (active, suitIntegrity, oxygenSupply, jetpackFuel, velocity, isAlive, tick, useThruster, takeSuitDamage)
+- [x] SurvivalStatus struct (radiation, temperature, inVacuum, onFire, isRadiationDangerous, isHypothermic, isHyperthermic, isInDanger, tick)
+- [x] Comprehensive test coverage (11 new tests)
+
+## Game Phase G9 — Legend System
+
+- [x] ReputationTier enum (Infamous, Outlaw, Neutral, Trusted, Honored, Legend) with reputationTierName()
+- [x] reputationTierFromScore() free function
+- [x] PlayerReputation class (adjustReputation, getReputation, getTier, factionCount, globalFame)
+- [x] WorldBias struct (sectorName, economyModifier, dangerLevel, loyaltyToPlayer, isFriendly, isHostile)
+- [x] WorldBiasMap class (setBias, getBias, updateFromReputation, biasCount)
+- [x] NPCMemoryEntry struct (eventType, timestamp, weight, positive)
+- [x] NPCMemory class (remember, decay, dispositionTowardPlayer, entryCount, remembers)
+- [x] LegendStatus class (init, reputation, worldBias, overallTier, isLegend)
+- [x] Comprehensive test coverage (12 new tests)
