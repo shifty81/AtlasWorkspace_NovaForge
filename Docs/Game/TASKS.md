@@ -191,3 +191,21 @@
 - [x] Renderer tests (12 new: lighting, shader, frustum)
 - [x] Game tests (8 new: render cache, chunk renderer, culling)
 - [x] Comprehensive test coverage (19 new tests, 402 total)
+
+## Game Phase G3 — Movement & FPS Camera
+
+- [x] FPSCamera class (init, processMouseLook, yaw/pitch, forward/right/up vectors)
+- [x] FPSCamera updateVectors (yaw/pitch to direction vectors via trig)
+- [x] FPSCamera toCamera conversion (builds Renderer Camera struct)
+- [x] FPSCamera pitch clamping (setPitchLimits, default ±89°)
+- [x] FPSCamera sensitivity setting
+- [x] MovementInput struct (forward, backward, left, right, jump, sprint, crouch)
+- [x] PlayerMovement class (walk, sprint, crouch speeds, gravity, jump)
+- [x] PlayerMovement update (camera-relative XZ movement, gravity, ground plane)
+- [x] PlayerAABB struct (fromPosition factory, half-width AABB)
+- [x] VoxelCollider class (axis-separated collision resolution)
+- [x] VoxelCollider wouldCollide (AABB vs solid voxel overlap test)
+- [x] VoxelCollider isOnGround (check voxel below feet)
+- [x] PlayerController class (ties camera, movement, collider together)
+- [x] PlayerController update (mouse look → movement → collision → eye height)
+- [x] Comprehensive test coverage (15 new tests, 417 total)

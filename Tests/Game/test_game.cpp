@@ -1058,3 +1058,200 @@ TEST_CASE("ChunkRenderer frustum culling", "[Game][ChunkRenderer][G2]") {
     int visible = renderer.countVisible(world, cam, 1.f);
     REQUIRE(visible < static_cast<int>(world.chunkCount()));
 }
+
+// ── G3: FPSCamera tests ─────────────────────────────────────────
+
+TEST_CASE("FPSCamera init and defaults", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 5, 0});
+    REQUIRE(cam.position().x == Catch::Approx(0.f));
+    REQUIRE(cam.position().y == Catch::Approx(5.f));
+    REQUIRE(cam.yaw() == Catch::Approx(-90.f));
+    REQUIRE(cam.pitch() == Catch::Approx(0.f));
+    REQUIRE(cam.sensitivity() == Catch::Approx(0.1f));
+}
+
+TEST_CASE("FPSCamera mouse look yaw", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    float initialYaw = cam.yaw();
+    cam.processMouseLook(100.f, 0.f); // move mouse right
+    REQUIRE(cam.yaw() > initialYaw);
+    REQUIRE(cam.pitch() == Catch::Approx(0.f));
+}
+
+TEST_CASE("FPSCamera mouse look pitch clamping", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    cam.processMouseLook(0.f, 10000.f); // extreme up
+    REQUIRE(cam.pitch() <= 89.f);
+    cam.processMouseLook(0.f, -20000.f); // extreme down
+    REQUIRE(cam.pitch() >= -89.f);
+}
+
+TEST_CASE("FPSCamera forward vector calculation", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0}, -90.f, 0.f); // looking along -Z
+    NF::Vec3 fwd = cam.forward();
+    REQUIRE(fwd.x == Catch::Approx(0.f).margin(1e-5));
+    REQUIRE(fwd.y == Catch::Approx(0.f).margin(1e-5));
+    REQUIRE(fwd.z == Catch::Approx(-1.f).margin(1e-5));
+}
+
+TEST_CASE("FPSCamera toCamera conversion", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera fpsCam;
+    fpsCam.init({1, 2, 3});
+    NF::Camera cam = fpsCam.toCamera(90.f, 0.5f, 500.f);
+    REQUIRE(cam.position.x == Catch::Approx(1.f));
+    REQUIRE(cam.position.y == Catch::Approx(2.f));
+    REQUIRE(cam.position.z == Catch::Approx(3.f));
+    REQUIRE(cam.fov == Catch::Approx(90.f));
+    REQUIRE(cam.nearPlane == Catch::Approx(0.5f));
+    REQUIRE(cam.farPlane == Catch::Approx(500.f));
+    // target should be position + forward
+    NF::Vec3 diff = cam.target - cam.position;
+    float len = diff.length();
+    REQUIRE(len == Catch::Approx(1.f).margin(1e-4));
+}
+
+TEST_CASE("FPSCamera sensitivity", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    cam.setSensitivity(0.5f);
+    REQUIRE(cam.sensitivity() == Catch::Approx(0.5f));
+    float yawBefore = cam.yaw();
+    cam.processMouseLook(10.f, 0.f);
+    REQUIRE(cam.yaw() == Catch::Approx(yawBefore + 10.f * 0.5f));
+}
+
+// ── G3: PlayerMovement tests ────────────────────────────────────
+
+TEST_CASE("PlayerMovement init and defaults", "[Game][PlayerMovement][G3]") {
+    NF::PlayerMovement pm;
+    pm.init({1, 2, 3});
+    REQUIRE(pm.position().x == Catch::Approx(1.f));
+    REQUIRE(pm.position().y == Catch::Approx(2.f));
+    REQUIRE(pm.walkSpeed() == Catch::Approx(5.f));
+    REQUIRE(pm.sprintSpeed() == Catch::Approx(8.f));
+    REQUIRE(pm.crouchSpeed() == Catch::Approx(2.5f));
+    REQUIRE(pm.jumpForce() == Catch::Approx(7.f));
+    REQUIRE(pm.gravity() == Catch::Approx(-20.f));
+}
+
+TEST_CASE("PlayerMovement forward movement", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0}, -90.f, 0.f); // looking along -Z
+    NF::PlayerMovement pm;
+    pm.init({0, 0, 0});
+
+    NF::MovementInput input;
+    input.forward = true;
+
+    // Start grounded
+    pm.setGravity(0.f);
+    pm.update(1.f, input, cam);
+
+    // Should have moved in -Z direction
+    REQUIRE(pm.position().z < 0.f);
+}
+
+TEST_CASE("PlayerMovement sprint speed", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0}, -90.f, 0.f);
+    NF::PlayerMovement pm;
+    pm.init({0, 0, 0});
+    pm.setGravity(0.f);
+
+    NF::MovementInput input;
+    input.forward = true;
+    input.sprint = true;
+
+    pm.update(1.f, input, cam);
+    REQUIRE(pm.isSprinting());
+    REQUIRE(pm.currentSpeed() == Catch::Approx(8.f).margin(0.1f));
+}
+
+TEST_CASE("PlayerMovement gravity and falling", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 10, 0});
+    NF::PlayerMovement pm;
+    pm.init({0, 10, 0});
+
+    NF::MovementInput input; // no input, just gravity
+    pm.update(0.1f, input, cam);
+
+    REQUIRE(pm.position().y < 10.f);
+    REQUIRE(pm.velocity().y < 0.f);
+}
+
+TEST_CASE("PlayerMovement jump", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    NF::PlayerMovement pm;
+    pm.init({0, 0, 0});
+
+    // First land on ground
+    NF::MovementInput input;
+    pm.update(0.1f, input, cam); // gravity pulls to y<0, snaps to 0, grounded=true
+    REQUIRE(pm.isGrounded());
+
+    // Now jump
+    input.jump = true;
+    pm.update(0.016f, input, cam);
+    REQUIRE(pm.velocity().y > 0.f);
+}
+
+// ── G3: VoxelCollider tests ─────────────────────────────────────
+
+TEST_CASE("VoxelCollider wouldCollide empty world", "[Game][VoxelCollider][G3]") {
+    NF::WorldState world;
+    NF::VoxelCollider collider;
+    REQUIRE_FALSE(collider.wouldCollide(world, {5.f, 5.f, 5.f}));
+}
+
+TEST_CASE("VoxelCollider isOnGround", "[Game][VoxelCollider][G3]") {
+    NF::WorldState world;
+    // Place a solid voxel at y=0
+    world.setWorld(5, 0, 5, NF::VoxelType::Stone);
+    NF::VoxelCollider collider;
+    // Player standing at y=1 (feet at y=1, voxel at y=0 is just below)
+    REQUIRE(collider.isOnGround(world, {5.5f, 1.f, 5.5f}));
+    // Player far above
+    REQUIRE_FALSE(collider.isOnGround(world, {5.5f, 10.f, 5.5f}));
+}
+
+TEST_CASE("VoxelCollider resolveCollision", "[Game][VoxelCollider][G3]") {
+    NF::WorldState world;
+    // Wall of stone at x=3
+    for (int y = 0; y < 3; ++y)
+        for (int z = 0; z < 3; ++z)
+            world.setWorld(3, y, z, NF::VoxelType::Stone);
+
+    NF::VoxelCollider collider;
+    NF::Vec3 pos{2.f, 0.5f, 1.f};
+    NF::Vec3 vel{10.f, 0.f, 0.f}; // moving into the wall
+
+    NF::Vec3 resolved = collider.resolveCollision(world, pos, vel, 0.1f);
+    // X should be blocked (reverted), so resolved.x should equal original
+    REQUIRE(resolved.x == Catch::Approx(pos.x));
+}
+
+// ── G3: PlayerController test ───────────────────────────────────
+
+TEST_CASE("PlayerController init and update", "[Game][PlayerController][G3]") {
+    NF::PlayerController ctrl;
+    ctrl.init({0, 0, 0});
+    REQUIRE(ctrl.position().x == Catch::Approx(0.f));
+
+    NF::WorldState world;
+    NF::MovementInput input;
+    input.forward = true;
+
+    ctrl.update(0.016f, input, 0.f, 0.f, world);
+
+    // Camera should be at eye height
+    REQUIRE(ctrl.camera().position().y > 0.f);
+    // Look direction should be valid
+    float len = ctrl.lookDirection().length();
+    REQUIRE(len == Catch::Approx(1.f).margin(1e-4));
+}

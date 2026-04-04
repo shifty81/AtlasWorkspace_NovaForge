@@ -23,7 +23,7 @@
 |-------|------|--------|
 | **G1** — First Interaction Loop | R.I.G. state, mining tool, resources, inventory, HUD | ✅ Done |
 | **G2** — Voxel Mesh Rendering | Mesher, GPU cache, Phong shader, lit terrain | ✅ Done |
-| **G3** — Movement & FPS Camera | WASD + mouse look, jump, sprint, voxel collision | 📋 Planned |
+| **G3** — Movement & FPS Camera | WASD + mouse look, jump, sprint, voxel collision | ✅ Done |
 | **G4** — Ship Systems | Ship classes, modules, combat, flight controls | 📋 Planned |
 | **G5** — Fleet AI | AI captains, personality, morale, formation | 📋 Planned |
 | **G6** — Economy | Mining, refining, manufacturing, market | 📋 Planned |

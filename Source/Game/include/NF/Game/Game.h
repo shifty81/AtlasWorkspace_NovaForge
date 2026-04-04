@@ -1093,4 +1093,292 @@ private:
     bool m_initialized = false;
 };
 
+// ── G3: Movement & FPS Camera ────────────────────────────────────
+
+class FPSCamera {
+public:
+    void init(const Vec3& position, float yaw = -90.f, float pitch = 0.f) {
+        m_position = position;
+        m_yaw = yaw;
+        m_pitch = pitch;
+        updateVectors();
+    }
+
+    void processMouseLook(float deltaX, float deltaY) {
+        m_yaw += deltaX * m_sensitivity;
+        m_pitch += deltaY * m_sensitivity;
+        if (m_pitch > m_maxPitch) m_pitch = m_maxPitch;
+        if (m_pitch < m_minPitch) m_pitch = m_minPitch;
+        updateVectors();
+    }
+
+    [[nodiscard]] Vec3 position() const { return m_position; }
+    [[nodiscard]] Vec3 forward() const { return m_forward; }
+    [[nodiscard]] Vec3 right() const { return m_right; }
+    [[nodiscard]] Vec3 up() const { return m_up; }
+    [[nodiscard]] float yaw() const { return m_yaw; }
+    [[nodiscard]] float pitch() const { return m_pitch; }
+
+    void setPosition(const Vec3& pos) { m_position = pos; }
+    void setSensitivity(float s) { m_sensitivity = s; }
+    [[nodiscard]] float sensitivity() const { return m_sensitivity; }
+
+    void setPitchLimits(float minPitch, float maxPitch) {
+        m_minPitch = minPitch;
+        m_maxPitch = maxPitch;
+    }
+
+    [[nodiscard]] Camera toCamera(float fov = 60.f, float near = 0.1f, float far = 1000.f) const {
+        Camera cam;
+        cam.position = m_position;
+        cam.target = m_position + m_forward;
+        cam.up = m_up;
+        cam.fov = fov;
+        cam.nearPlane = near;
+        cam.farPlane = far;
+        return cam;
+    }
+
+private:
+    Vec3 m_position{0, 0, 0};
+    float m_yaw = -90.f;
+    float m_pitch = 0.f;
+    float m_sensitivity = 0.1f;
+    float m_minPitch = -89.f;
+    float m_maxPitch = 89.f;
+    Vec3 m_forward{0, 0, -1};
+    Vec3 m_right{1, 0, 0};
+    Vec3 m_up{0, 1, 0};
+
+    void updateVectors() {
+        constexpr float DEG2RAD = 3.14159265358979f / 180.f;
+        float yawRad = m_yaw * DEG2RAD;
+        float pitchRad = m_pitch * DEG2RAD;
+        Vec3 fwd;
+        fwd.x = std::cos(yawRad) * std::cos(pitchRad);
+        fwd.y = std::sin(pitchRad);
+        fwd.z = std::sin(yawRad) * std::cos(pitchRad);
+        m_forward = fwd.normalized();
+        const Vec3 worldUp{0.f, 1.f, 0.f};
+        m_right = m_forward.cross(worldUp).normalized();
+        m_up = m_right.cross(m_forward).normalized();
+    }
+};
+
+struct MovementInput {
+    bool forward = false;
+    bool backward = false;
+    bool left = false;
+    bool right = false;
+    bool jump = false;
+    bool sprint = false;
+    bool crouch = false;
+};
+
+class PlayerMovement {
+public:
+    void init(const Vec3& startPosition) {
+        m_position = startPosition;
+        m_velocity = {0, 0, 0};
+        m_grounded = false;
+        m_sprinting = false;
+        m_crouching = false;
+    }
+
+    void update(float dt, const MovementInput& input, const FPSCamera& camera) {
+        // Flatten camera vectors to XZ plane
+        Vec3 camFwd = camera.forward();
+        camFwd.y = 0.f;
+        camFwd = camFwd.normalized();
+        Vec3 camRight = camera.right();
+        camRight.y = 0.f;
+        camRight = camRight.normalized();
+
+        Vec3 moveDir{0, 0, 0};
+        if (input.forward)  moveDir = moveDir + camFwd;
+        if (input.backward) moveDir = moveDir - camFwd;
+        if (input.right)    moveDir = moveDir + camRight;
+        if (input.left)     moveDir = moveDir - camRight;
+
+        if (moveDir.lengthSq() > 1e-6f) moveDir = moveDir.normalized();
+
+        m_sprinting = input.sprint && !input.crouch;
+        m_crouching = input.crouch && !input.sprint;
+        float speed = m_walkSpeed;
+        if (m_sprinting) speed = m_sprintSpeed;
+        else if (m_crouching) speed = m_crouchSpeed;
+
+        m_velocity.x = moveDir.x * speed;
+        m_velocity.z = moveDir.z * speed;
+
+        // Gravity
+        m_velocity.y += m_gravity * dt;
+
+        // Jump
+        if (m_grounded && input.jump) {
+            m_velocity.y = m_jumpForce;
+            m_grounded = false;
+        }
+
+        // Integrate
+        m_position.x += m_velocity.x * dt;
+        m_position.y += m_velocity.y * dt;
+        m_position.z += m_velocity.z * dt;
+
+        // Ground plane
+        if (m_position.y < 0.f) {
+            m_position.y = 0.f;
+            m_velocity.y = 0.f;
+            m_grounded = true;
+        }
+    }
+
+    [[nodiscard]] Vec3 position() const { return m_position; }
+    [[nodiscard]] Vec3 velocity() const { return m_velocity; }
+    [[nodiscard]] bool isGrounded() const { return m_grounded; }
+    [[nodiscard]] bool isSprinting() const { return m_sprinting; }
+    [[nodiscard]] bool isCrouching() const { return m_crouching; }
+    [[nodiscard]] float currentSpeed() const {
+        return std::sqrt(m_velocity.x * m_velocity.x + m_velocity.z * m_velocity.z);
+    }
+
+    void setWalkSpeed(float s) { m_walkSpeed = s; }
+    void setSprintSpeed(float s) { m_sprintSpeed = s; }
+    void setCrouchSpeed(float s) { m_crouchSpeed = s; }
+    void setJumpForce(float f) { m_jumpForce = f; }
+    void setGravity(float g) { m_gravity = g; }
+    [[nodiscard]] float walkSpeed() const { return m_walkSpeed; }
+    [[nodiscard]] float sprintSpeed() const { return m_sprintSpeed; }
+    [[nodiscard]] float crouchSpeed() const { return m_crouchSpeed; }
+    [[nodiscard]] float jumpForce() const { return m_jumpForce; }
+    [[nodiscard]] float gravity() const { return m_gravity; }
+
+private:
+    Vec3 m_position{0, 0, 0};
+    Vec3 m_velocity{0, 0, 0};
+    float m_walkSpeed = 5.f;
+    float m_sprintSpeed = 8.f;
+    float m_crouchSpeed = 2.5f;
+    float m_jumpForce = 7.f;
+    float m_gravity = -20.f;
+    bool m_grounded = false;
+    bool m_sprinting = false;
+    bool m_crouching = false;
+};
+
+struct PlayerAABB {
+    Vec3 min;
+    Vec3 max;
+
+    static PlayerAABB fromPosition(const Vec3& pos, float width = 0.6f, float height = 1.8f) {
+        float hw = width * 0.5f;
+        return {{pos.x - hw, pos.y, pos.z - hw},
+                {pos.x + hw, pos.y + height, pos.z + hw}};
+    }
+};
+
+class VoxelCollider {
+public:
+    Vec3 resolveCollision(const WorldState& world, const Vec3& position,
+                          const Vec3& velocity, float dt,
+                          float playerWidth = 0.6f, float playerHeight = 1.8f) {
+        Vec3 pos = position;
+
+        // X axis
+        Vec3 tryX = pos;
+        tryX.x += velocity.x * dt;
+        if (aabbOverlapsSolid(world, PlayerAABB::fromPosition(tryX, playerWidth, playerHeight))) {
+            tryX.x = pos.x;
+        }
+        pos = tryX;
+
+        // Y axis
+        Vec3 tryY = pos;
+        tryY.y += velocity.y * dt;
+        if (aabbOverlapsSolid(world, PlayerAABB::fromPosition(tryY, playerWidth, playerHeight))) {
+            tryY.y = pos.y;
+        }
+        pos = tryY;
+
+        // Z axis
+        Vec3 tryZ = pos;
+        tryZ.z += velocity.z * dt;
+        if (aabbOverlapsSolid(world, PlayerAABB::fromPosition(tryZ, playerWidth, playerHeight))) {
+            tryZ.z = pos.z;
+        }
+        pos = tryZ;
+
+        return pos;
+    }
+
+    [[nodiscard]] bool wouldCollide(const WorldState& world, const Vec3& position,
+                                    float playerWidth = 0.6f, float playerHeight = 1.8f) const {
+        return aabbOverlapsSolid(world, PlayerAABB::fromPosition(position, playerWidth, playerHeight));
+    }
+
+    [[nodiscard]] bool isOnGround(const WorldState& world, const Vec3& position,
+                                  float playerWidth = 0.6f) const {
+        float hw = playerWidth * 0.5f;
+        float belowY = position.y - 0.05f;
+        int minVX = static_cast<int>(std::floor(position.x - hw));
+        int maxVX = static_cast<int>(std::floor(position.x + hw));
+        int minVZ = static_cast<int>(std::floor(position.z - hw));
+        int maxVZ = static_cast<int>(std::floor(position.z + hw));
+        int vy = static_cast<int>(std::floor(belowY));
+        for (int vx = minVX; vx <= maxVX; ++vx)
+            for (int vz = minVZ; vz <= maxVZ; ++vz)
+                if (world.getWorld(vx, vy, vz) != VoxelType::Air) return true;
+        return false;
+    }
+
+private:
+    [[nodiscard]] bool aabbOverlapsSolid(const WorldState& world, const PlayerAABB& aabb) const {
+        int minVX = static_cast<int>(std::floor(aabb.min.x));
+        int maxVX = static_cast<int>(std::floor(aabb.max.x));
+        int minVY = static_cast<int>(std::floor(aabb.min.y));
+        int maxVY = static_cast<int>(std::floor(aabb.max.y));
+        int minVZ = static_cast<int>(std::floor(aabb.min.z));
+        int maxVZ = static_cast<int>(std::floor(aabb.max.z));
+        for (int vx = minVX; vx <= maxVX; ++vx)
+            for (int vy = minVY; vy <= maxVY; ++vy)
+                for (int vz = minVZ; vz <= maxVZ; ++vz)
+                    if (world.getWorld(vx, vy, vz) != VoxelType::Air) return true;
+        return false;
+    }
+};
+
+class PlayerController {
+public:
+    void init(const Vec3& startPosition) {
+        m_movement.init(startPosition);
+        m_camera.init(startPosition + Vec3{0, 1.6f, 0});
+    }
+
+    void update(float dt, const MovementInput& moveInput,
+                float mouseDeltaX, float mouseDeltaY,
+                WorldState& world) {
+        m_camera.processMouseLook(mouseDeltaX, mouseDeltaY);
+        m_movement.update(dt, moveInput, m_camera);
+
+        Vec3 pos = m_movement.position();
+        pos = m_collider.resolveCollision(world, pos, m_movement.velocity(), dt);
+
+        m_camera.setPosition(pos + Vec3{0, 1.6f, 0});
+    }
+
+    FPSCamera& camera() { return m_camera; }
+    const FPSCamera& camera() const { return m_camera; }
+    PlayerMovement& movement() { return m_movement; }
+    const PlayerMovement& movement() const { return m_movement; }
+    VoxelCollider& collider() { return m_collider; }
+
+    [[nodiscard]] Vec3 position() const { return m_movement.position(); }
+    [[nodiscard]] Vec3 lookDirection() const { return m_camera.forward(); }
+
+private:
+    FPSCamera m_camera;
+    PlayerMovement m_movement;
+    VoxelCollider m_collider;
+};
+
 } // namespace NF
