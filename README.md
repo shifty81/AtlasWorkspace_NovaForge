@@ -1,29 +1,34 @@
 # NovaForge
 
-> A voxel-first open-world PvE space simulator built in C++20 — engine, editor, game, and tooling in one unified monorepo.
+> An editor-first C++20 game engine and toolset — engine runtime, world editor, visual scripting, AI, networking, and a full game layer in one unified monorepo.
 
 NovaForge is a first-person, voxel-authoritative survival and construction game set in a procedurally generated galaxy. You pilot a **R.I.G. (Rig Interface Gear)** exo-frame, mine asteroids and terrain, salvage wrecks, build structures, and eventually command fleets across faction-contested sectors.
 
 This repository is the **complete unified monorepo**: the engine core, the game-specific editor, the standalone game client, the dedicated server, the Graph VM for visual scripting, AI systems, development tooling, and the Blender pipeline — all context-aware across the full ecosystem.
 
+**Primary development platform: Windows 10/11 (Visual Studio 2022).** Cross-platform (Linux, macOS) is architecturally maintained but not continuously tested.
+
 ---
 
-## Current Status — Phase 0 Complete
+## Current Status — All Phases Complete
 
 | Phase | Goal | Status |
 |-------|------|--------|
 | **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
 | **Phase 1** — Core Engine | Core, Engine, Input modules with tests | ✅ Done |
 | **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | ✅ Done |
-| **Phase 3** — Voxel Runtime | Chunk data, edit API, game loop | 📋 Planned |
-| **Phase 4** — Editor | Docking layout, panels, viewport, editor services | 📋 Planned |
-| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types | 📋 Planned |
-| **Phase 6** — Multiplayer | Server authority, replication, lockstep/rollback | 📋 Planned |
-| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender pipeline | 📋 Planned |
-| **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | 📋 Planned |
-| **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding | 📋 Planned |
+| **Phase 3** — Voxel Runtime | Chunk data, edit API, serialization, game loop | ✅ Done |
+| **Phase 4** — Editor | Docking layout, panels, viewport, editor services | ✅ Done |
+| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types | ✅ Done |
+| **Phase 6** — Multiplayer | Server authority, replication, lockstep/rollback | ✅ Done |
+| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender pipeline | ✅ Done |
+| **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | ✅ Done |
+| **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding | ✅ Done |
+| **G1–G17** — Game Phases | Full game layer (ships, fleets, economy, quests, progression, crafting, inventory) | ✅ Done |
 
-> See [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) and [`Docs/Game/TASKS.md`](Docs/Game/TASKS.md) for the full backlog.
+> **599 Catch2 tests** across 12 modules — Core(55), Engine(25), Physics(19), Renderer(22), Audio(12), Animation(12), Game(243), GraphVM(20), Input(10), Editor(95), Networking(50), AI(40).
+
+> See [`Docs/roadmap.md`](Docs/roadmap.md) for next milestones and [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) for the full phase history.
 
 ---
 
@@ -93,20 +98,76 @@ NovaForgeServer → NF::Game + NF::Networking + NF::AI + NF::World
 
 ## Build Requirements
 
-| Tool | Minimum Version |
-|------|----------------|
-| CMake | 3.22 |
-| C++ Compiler | GCC 13 · Clang 15 · MSVC 2022 (C++20) |
-| OpenGL | 3.3 core (system driver) |
+| Tool | Minimum Version | Notes |
+|------|----------------|-------|
+| CMake | 3.22 | CMakePresets v6 |
+| Visual Studio | 2022 (17.x) | Primary — C++ Desktop workload required |
+| MSVC | 19.30+ (VS 2022) | C++20, `/std:c++20` |
+| GCC | 13+ | Linux/CI only |
+| Clang | 15+ | Optional |
+| OpenGL | 3.3 core | System driver |
 
 GLAD and GLFW are fetched automatically via CMake FetchContent if not found locally.
 
 ---
 
-## Quick Start
+## Quick Start — Windows (Primary)
+
+### Prerequisites
+- **Visual Studio 2022** with the **"Desktop development with C++"** workload
+- **CMake 3.22+** (bundled with VS 2022 or install separately)
+- **Git**
+
+### Option A — Visual Studio IDE (Recommended)
+
+1. Clone the repo:
+   ```
+   git clone https://github.com/shifty81/tempnovaforge.git NovaForge
+   cd NovaForge
+   ```
+2. Open Visual Studio → **File → Open → CMake…** → select `CMakeLists.txt`
+3. VS reads `CMakePresets.json` automatically — pick **"Windows x64 Debug (VS 2022)"**
+4. Select `NovaForgeEditor` as the startup project and press **F5**
+
+### Option B — Command Line (Developer Command Prompt)
+
+```bat
+:: Open "Developer Command Prompt for VS 2022"
+git clone https://github.com/shifty81/tempnovaforge.git NovaForge
+cd NovaForge
+
+:: Generate .sln and build Debug
+cmake --preset windows-x64-debug
+cmake --build --preset windows-x64-debug
+
+:: Run the editor
+Builds\windows-x64-debug\bin\Debug\NovaForgeEditor.exe
+```
+
+### Option C — Convenience Scripts
+
+```bat
+:: Generate VS 2022 solution then build via MSBuild
+.\Scripts\generate_vs_solution.bat
+build.cmd Debug
+
+:: Or using PowerShell
+.\Scripts\generate_vs_solution.ps1
+```
+
+### Build with Tests
+
+```bat
+cmake --preset windows-x64-debug-tests
+cmake --build --preset windows-x64-debug-tests
+ctest --preset windows-x64-debug-tests
+```
+
+---
+
+## Quick Start — Linux / macOS
 
 ```bash
-# Clone
 git clone https://github.com/shifty81/tempnovaforge.git NovaForge
 cd NovaForge
 
@@ -124,9 +185,6 @@ ctest --preset debug
 
 # Run the Game Client
 ./Builds/debug/bin/NovaForgeGame
-
-# Run the Server
-./Builds/debug/bin/NovaForgeServer
 ```
 
 ### Using the Makefile
@@ -142,35 +200,19 @@ make clean           # Remove all build artifacts
 make help            # Show all targets
 ```
 
-### Using the build script
+---
 
-```bash
-./Scripts/build_all.sh Debug         # Debug build
-./Scripts/build_all.sh Release       # Release build
-./Scripts/build_all.sh Debug --test  # Build + run tests
-```
+## Available CMake Presets
 
-### Visual Studio Solution (Windows)
-
-NovaForge supports generating Visual Studio `.sln` files via CMake presets:
-
-```powershell
-# Generate VS 2022 solution
-cmake --preset vs2022
-
-# Or use the convenience script
-.\Scripts\generate_vs_solution.ps1
-
-# Or batch file
-.\Scripts\generate_vs_solution.bat
-```
-
-Open `Builds/vs2022/NovaForge.sln` in Visual Studio. Multi-configuration builds
-(Debug/Release) are supported — select the configuration from the toolbar.
-
-You can also open the project directly using **File → Open → CMake…** and
-selecting the root `CMakeLists.txt`. Visual Studio 2019+ reads `CMakePresets.json`
-natively.
+| Preset | Generator | Config | Tests | Purpose |
+|--------|-----------|--------|-------|---------|
+| `windows-x64-debug` | VS 2022 | Debug | Off | Local Windows dev (**primary**) |
+| `windows-x64-debug-tests` | VS 2022 | Debug | On | Windows dev + test suite |
+| `windows-x64` | VS 2022 | Release | Off | Windows release build |
+| `vs2022` | VS 2022 | Multi | On | VS IDE / `.sln` generation |
+| `vs2019` | VS 2019 | Multi | On | VS 2019 fallback |
+| `debug` | Ninja | Debug | On | Linux/macOS CI debug |
+| `release` | Ninja | Release | Off | Linux/macOS CI release |
 
 ### CMake Build Options
 
@@ -226,7 +268,8 @@ Nova Forge is a **PvE space simulation** where you command ships, build fleets, 
 
 | Document | Description |
 |----------|-------------|
-| [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) | Phase-by-phase delivery plan |
+| [`Docs/roadmap.md`](Docs/roadmap.md) | Editor-first next milestones |
+| [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) | Phase-by-phase delivery plan (full history) |
 | [`Docs/Game/TASKS.md`](Docs/Game/TASKS.md) | Checked task list per phase |
 | [`Docs/Game/ARCHITECTURE.md`](Docs/Game/ARCHITECTURE.md) | Module layout and design |
 | [`Docs/Game/PROJECT_RULES.md`](Docs/Game/PROJECT_RULES.md) | Hard boundaries and coding rules |

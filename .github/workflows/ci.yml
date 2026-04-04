@@ -85,3 +85,36 @@ jobs:
 
       - name: Verify server binary
         run: docker run --rm novaforge-server:ci --version || true
+
+  build-windows:
+    name: Windows (VS 2022 / MSVC)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Configure (VS 2022 preset)
+        run: cmake --preset vs2022
+
+      - name: Build Debug
+        run: cmake --build --preset vs2022-debug
+
+      - name: Test (Debug)
+        run: ctest --preset vs2022
+
+  build-windows-release:
+    name: Windows Release (VS 2022 / MSVC)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Configure (windows-x64 preset)
+        run: cmake --preset windows-x64
+
+      - name: Build Release
+        run: cmake --build --preset windows-x64-release
