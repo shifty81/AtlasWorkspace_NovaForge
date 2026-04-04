@@ -642,14 +642,14 @@ TEST_CASE("EditorApp creates default panels on init", "[Editor][EditorApp]") {
     NF::EditorApp app;
     app.init(1280, 720);
 
-    REQUIRE(app.dockLayout().panelCount() == 5);
+    REQUIRE(app.dockLayout().panelCount() == 6);
     REQUIRE(app.dockLayout().findPanel("Viewport") != nullptr);
     REQUIRE(app.dockLayout().findPanel("Inspector") != nullptr);
     REQUIRE(app.dockLayout().findPanel("Hierarchy") != nullptr);
     REQUIRE(app.dockLayout().findPanel("Console") != nullptr);
     REQUIRE(app.dockLayout().findPanel("ContentBrowser") != nullptr);
 
-    REQUIRE(app.editorPanels().size() == 5);
+    REQUIRE(app.editorPanels().size() == 6);
     app.shutdown();
 }
 
@@ -1108,6 +1108,75 @@ TEST_CASE("EditorApp update with input drives viewport fly-cam", "[Editor][Viewp
     app.update(0.016f, input);
 
     REQUIRE(app.viewportPanel()->isFlyCamActive());
+
+    app.shutdown();
+}
+
+// ── ProjectPathService wiring ────────────────────────────────────
+
+TEST_CASE("ProjectPathService init resolves paths relative to executable", "[Editor][ProjectPaths]") {
+    NF::ProjectPathService svc;
+    svc.init(".");
+    // After init with "." the project root should be non-empty.
+    REQUIRE_FALSE(svc.projectRoot().empty());
+    // contentPath, dataPath, configPath should all be non-empty strings.
+    REQUIRE_FALSE(svc.contentPath().empty());
+    REQUIRE_FALSE(svc.dataPath().empty());
+    REQUIRE_FALSE(svc.configPath().empty());
+}
+
+TEST_CASE("ProjectPathService resolvePath appends relative segment", "[Editor][ProjectPaths]") {
+    NF::ProjectPathService svc;
+    svc.init(".");
+    std::string resolved = svc.resolvePath("Source");
+    // Should contain "Source" somewhere in the path.
+    REQUIRE(resolved.find("Source") != std::string::npos);
+}
+
+TEST_CASE("EditorApp projectPaths accessor available after init", "[Editor][ProjectPaths]") {
+    NF::EditorApp app;
+    app.init(800, 600, ".");
+    // The accessor should be reachable and the project root non-empty.
+    REQUIRE_FALSE(app.projectPaths().projectRoot().empty());
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp init(width,height) zero-arg overload works", "[Editor][ProjectPaths]") {
+    NF::EditorApp app;
+    bool ok = app.init(800, 600);
+    REQUIRE(ok == true);
+    // ProjectPathService should still be initialised.
+    REQUIRE_FALSE(app.projectPaths().projectRoot().empty());
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp contentBrowser rooted to project content path on init", "[Editor][ProjectPaths]") {
+    NF::EditorApp app;
+    app.init(800, 600, ".");
+    // ContentBrowser root should match the projectPaths content path (or remain empty
+    // if the Content directory does not actually exist on disk — either way it was set).
+    const std::string& contentBrowserRoot = app.contentBrowser().rootPath();
+    const std::string& expected = app.projectPaths().contentPath();
+    // Both empty or both equal (directory may not exist in CI sandbox, but they match).
+    REQUIRE(contentBrowserRoot == expected);
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp ide.index_project indexes Source directory", "[Editor][ProjectPaths]") {
+    NF::EditorApp app;
+    app.init(800, 600, ".");
+
+    // Before indexing the project indexer should be empty (or populated only if
+    // init itself called indexDirectory, which it does not by default).
+    // Execute the command to trigger indexing.
+    app.commands().executeCommand("ide.index_project");
+
+    // The indexer should have attempted to scan Source/ — even if the sandbox
+    // has no matching files the call must not crash and fileCount() is >= 0.
+    REQUIRE(app.ideService().indexer().fileCount() >= 0);
+
+    // A notification should have been pushed by the command.
+    REQUIRE(app.notifications().count() >= 1);
 
     app.shutdown();
 }

@@ -1374,15 +1374,16 @@ struct EditorCameraOrbit {
         target = target + up    * ( dy * distance * 0.001f);
     }
 
+    // aspectRatio is not stored on Camera; it is passed per-frame to projectionMatrix().
     Camera buildCamera(float aspectRatio) const {
         Camera cam;
         cam.position = computePosition();
         cam.target   = target;
         cam.up       = Vec3{0.f, 1.f, 0.f};
-        cam.fovDeg   = fovDeg;
-        cam.aspect   = aspectRatio;
+        cam.fov      = fovDeg;
         cam.nearPlane = nearPlane;
         cam.farPlane  = farPlane;
+        (void)aspectRatio;  // stored externally by caller for use with projectionMatrix()
         return cam;
     }
 };
@@ -1577,7 +1578,17 @@ private:
 
 class EditorApp {
 public:
-    bool init(int width, int height) {
+    // Full init with an explicit executable path so the editor can locate the project root.
+    bool init(int width, int height, const std::string& executablePath) {
+        // Initialise project path service first so commands can reference paths.
+        m_projectPaths.init(executablePath);
+
+        // Wire ContentBrowser to the project's Content directory.
+        if (!m_projectPaths.contentPath().empty()) {
+            m_contentBrowser.setRootPath(m_projectPaths.contentPath());
+            m_contentBrowser.refresh();
+        }
+
         m_renderer.init(width, height);
         m_ui.init();
 
@@ -1675,7 +1686,31 @@ public:
         }, "Go Back", "Alt+Left");
 
         m_commands.registerCommand("ide.index_project", [this]() {
-            NF_LOG_INFO("IDE", "Index project");
+            // Index Source/, Content/, and Config/ so the entire repo is searchable.
+            auto& indexer = m_ideService.indexer();
+            indexer.clear();
+            for (const std::string rel : {"Source", "Content", "Config"}) {
+                std::string dir = m_projectPaths.resolvePath(rel);
+                indexer.indexDirectory(dir);
+            }
+            // Populate CodeNavigator from all indexed symbols.
+            auto& nav = m_ideService.navigator();
+            nav.clear();
+            for (auto& f : indexer.allFiles()) {
+                for (auto& sym : f.symbols) {
+                    NavigationEntry entry;
+                    entry.symbol = sym;
+                    entry.kind = SymbolKind::Unknown;
+                    entry.filePath = f.path;
+                    entry.line = 0;
+                    nav.addEntry(std::move(entry));
+                }
+            }
+            NF_LOG_INFO("IDE", "Project indexed: " +
+                std::to_string(indexer.fileCount()) + " files, " +
+                std::to_string(nav.entryCount()) + " symbols");
+            m_notifications.push(NotificationType::Success,
+                "Project indexed: " + std::to_string(indexer.fileCount()) + " files");
         }, "Index Project", "");
 
         // Entity commands
@@ -1788,6 +1823,9 @@ public:
         return true;
     }
 
+    // Convenience overload: uses current working directory as the project root.
+    bool init(int width, int height) { return init(width, height, "."); }
+
     void shutdown() {
         m_ideService.shutdown();
         m_editorPanels.clear();
@@ -1850,6 +1888,8 @@ public:
     ContentBrowser& contentBrowser() { return m_contentBrowser; }
     RecentFilesList& recentFiles() { return m_recentFiles; }
     LaunchService& launchService() { return m_launchService; }
+    ProjectPathService& projectPaths() { return m_projectPaths; }
+    const ProjectPathService& projectPaths() const { return m_projectPaths; }
     DockLayout& dockLayout() { return m_dockLayout; }
     EditorToolbar& toolbar() { return m_toolbar; }
     MenuBar& menuBar() { return m_menuBar; }
@@ -1950,6 +1990,7 @@ private:
     ContentBrowser m_contentBrowser;
     RecentFilesList m_recentFiles;
     LaunchService m_launchService;
+    ProjectPathService m_projectPaths;
     DockLayout m_dockLayout;
     EditorToolbar m_toolbar;
     std::vector<std::unique_ptr<EditorPanel>> m_editorPanels;
