@@ -2535,4 +2535,1338 @@ private:
     WorldBiasMap m_worldBias;
 };
 
+// ── G10: Quest & Mission System ──────────────────────────────────
+
+enum class MissionObjectiveType {
+    Kill,
+    Collect,
+    Deliver,
+    Explore,
+    Survive,
+    Escort
+};
+
+inline const char* missionObjectiveTypeName(MissionObjectiveType t) {
+    switch (t) {
+        case MissionObjectiveType::Kill:    return "Kill";
+        case MissionObjectiveType::Collect: return "Collect";
+        case MissionObjectiveType::Deliver: return "Deliver";
+        case MissionObjectiveType::Explore: return "Explore";
+        case MissionObjectiveType::Survive: return "Survive";
+        case MissionObjectiveType::Escort:  return "Escort";
+        default:                            return "Unknown";
+    }
+}
+
+struct MissionObjective {
+    MissionObjectiveType type = MissionObjectiveType::Kill;
+    StringID targetId;
+    std::string description;
+    int required = 1;
+    int current = 0;
+
+    bool isComplete() const { return current >= required; }
+    void progress(int amount = 1) { current = std::min(current + amount, required); }
+};
+
+struct MissionReward {
+    int credits = 0;
+    std::map<ResourceType, int> resources;
+    StringID reputationFactionId;
+    float reputationAmount = 0.f;
+};
+
+enum class MissionStatus { Active, Completed, Failed };
+
+class ActiveMission {
+public:
+    void init(StringID missionId, const std::string& title) {
+        m_missionId = missionId;
+        m_title = title;
+        m_status = MissionStatus::Active;
+    }
+
+    StringID missionId() const { return m_missionId; }
+    const std::string& title() const { return m_title; }
+    MissionStatus status() const { return m_status; }
+
+    void addObjective(const MissionObjective& obj) { m_objectives.push_back(obj); }
+    int objectiveCount() const { return (int)m_objectives.size(); }
+    MissionObjective& objective(int i) { return m_objectives[i]; }
+    const MissionObjective& objective(int i) const { return m_objectives[i]; }
+
+    void setReward(const MissionReward& r) { m_reward = r; }
+    const MissionReward& reward() const { return m_reward; }
+
+    bool allObjectivesComplete() const {
+        for (auto& o : m_objectives) if (!o.isComplete()) return false;
+        return !m_objectives.empty();
+    }
+
+    void complete() { if (m_status == MissionStatus::Active) m_status = MissionStatus::Completed; }
+    void fail()     { if (m_status == MissionStatus::Active) m_status = MissionStatus::Failed; }
+
+private:
+    StringID m_missionId;
+    std::string m_title;
+    MissionStatus m_status = MissionStatus::Active;
+    std::vector<MissionObjective> m_objectives;
+    MissionReward m_reward;
+};
+
+class MissionLog {
+public:
+    void acceptMission(const ActiveMission& mission) {
+        m_active.push_back(mission);
+    }
+
+    bool completeMission(StringID missionId) {
+        for (auto it = m_active.begin(); it != m_active.end(); ++it) {
+            if (it->missionId() == missionId) {
+                it->complete();
+                m_completed.push_back(*it);
+                m_active.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool failMission(StringID missionId) {
+        for (auto it = m_active.begin(); it != m_active.end(); ++it) {
+            if (it->missionId() == missionId) {
+                it->fail();
+                m_failed.push_back(*it);
+                m_active.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ActiveMission* findActive(StringID missionId) {
+        for (auto& m : m_active) if (m.missionId() == missionId) return &m;
+        return nullptr;
+    }
+
+    int activeMissionCount()    const { return (int)m_active.size(); }
+    int completedMissionCount() const { return (int)m_completed.size(); }
+    int failedMissionCount()    const { return (int)m_failed.size(); }
+
+    const std::vector<ActiveMission>& activeMissions()    const { return m_active; }
+    const std::vector<ActiveMission>& completedMissions() const { return m_completed; }
+
+private:
+    std::vector<ActiveMission> m_active;
+    std::vector<ActiveMission> m_completed;
+    std::vector<ActiveMission> m_failed;
+};
+
+class QuestChain {
+public:
+    void init(const std::string& name) { m_name = name; m_currentIndex = 0; }
+
+    const std::string& name() const { return m_name; }
+    void addMission(StringID missionId) { m_missionIds.push_back(missionId); }
+    int missionCount() const { return (int)m_missionIds.size(); }
+
+    StringID currentMissionId() const {
+        if (m_currentIndex < (int)m_missionIds.size())
+            return m_missionIds[m_currentIndex];
+        return StringID{};
+    }
+
+    bool advance() {
+        if (m_currentIndex < (int)m_missionIds.size()) {
+            ++m_currentIndex;
+            return true;
+        }
+        return false;
+    }
+
+    bool isComplete() const { return m_currentIndex >= (int)m_missionIds.size(); }
+    int currentIndex() const { return m_currentIndex; }
+
+private:
+    std::string m_name;
+    std::vector<StringID> m_missionIds;
+    int m_currentIndex = 0;
+};
+
+// ── G11: Dialogue System ─────────────────────────────────────────
+
+enum class DialogueConditionType {
+    Always,
+    HasReputation,
+    HasItem,
+    MissionActive,
+    MissionComplete
+};
+
+struct DialogueCondition {
+    DialogueConditionType type = DialogueConditionType::Always;
+    StringID factionId;
+    float minReputation = 0.f;
+    ResourceType itemType = ResourceType::RawStone;
+    int itemAmount = 1;
+    StringID missionId;
+
+    bool evaluate(float reputation, int itemCount, bool missionActive, bool missionComplete) const {
+        switch (type) {
+            case DialogueConditionType::Always:          return true;
+            case DialogueConditionType::HasReputation:   return reputation >= minReputation;
+            case DialogueConditionType::HasItem:         return itemCount >= itemAmount;
+            case DialogueConditionType::MissionActive:   return missionActive;
+            case DialogueConditionType::MissionComplete: return missionComplete;
+            default:                                     return false;
+        }
+    }
+};
+
+struct DialogueEffect {
+    StringID reputationFactionId;
+    float reputationDelta = 0.f;
+    StringID startMissionId;
+    ResourceType giveItemType = ResourceType::RawStone;
+    int giveItemAmount = 0;
+};
+
+struct DialogueOption {
+    std::string text;
+    DialogueCondition condition;
+    DialogueEffect effect;
+    int nextNodeId = -1;
+};
+
+struct DialogueNode {
+    int nodeId = 0;
+    std::string speakerName;
+    std::string text;
+    std::vector<DialogueOption> options;
+};
+
+class DialogueGraph {
+public:
+    void setStartNodeId(int id) { m_startNodeId = id; }
+    int startNodeId() const { return m_startNodeId; }
+
+    void addNode(const DialogueNode& node) { m_nodes[node.nodeId] = node; }
+    const DialogueNode* getNode(int id) const {
+        auto it = m_nodes.find(id);
+        return it != m_nodes.end() ? &it->second : nullptr;
+    }
+    int nodeCount() const { return (int)m_nodes.size(); }
+
+private:
+    int m_startNodeId = 0;
+    std::map<int, DialogueNode> m_nodes;
+};
+
+class DialogueRunner {
+public:
+    void init(const DialogueGraph* graph) {
+        m_graph = graph;
+        m_currentNodeId = graph ? graph->startNodeId() : -1;
+        m_complete = false;
+    }
+
+    const DialogueNode* currentNode() const {
+        return m_graph ? m_graph->getNode(m_currentNodeId) : nullptr;
+    }
+
+    bool isComplete() const { return m_complete; }
+
+    const DialogueEffect* selectOption(int optionIndex) {
+        const DialogueNode* node = currentNode();
+        if (!node || optionIndex < 0 || optionIndex >= (int)node->options.size())
+            return nullptr;
+        const DialogueOption& opt = node->options[optionIndex];
+        m_lastEffect = opt.effect;
+        if (opt.nextNodeId < 0) {
+            m_complete = true;
+        } else {
+            m_currentNodeId = opt.nextNodeId;
+        }
+        return &m_lastEffect;
+    }
+
+    int currentNodeId() const { return m_currentNodeId; }
+
+private:
+    const DialogueGraph* m_graph = nullptr;
+    int m_currentNodeId = -1;
+    bool m_complete = false;
+    DialogueEffect m_lastEffect;
+};
+
+// ── Game Phase G12 — Save/Load System ────────────────────────────
+
+struct SaveSlot {
+    int         slotIndex   = 0;
+    std::string name;
+    std::string timestamp;
+    float       playtimeSeconds = 0.f;
+    bool        isEmpty = true;
+};
+
+struct SaveData {
+    // Player state
+    Vec3  playerPosition{0.f, 0.f, 0.f};
+    float playerHealth    = 100.f;
+    float playerEnergy    = 100.f;
+    float playerOxygen    = 100.f;
+    float playtimeSeconds = 0.f;
+
+    // Inventory
+    std::map<std::string, int> inventory;
+
+    // Active missions (by id)
+    std::vector<std::string> activeMissionIds;
+    std::vector<std::string> completedMissionIds;
+
+    // Reputation per faction
+    std::map<std::string, float> reputation;
+
+    // Current sector name
+    std::string currentSector;
+};
+
+class GameSaveSerializer {
+public:
+    static JsonValue toJson(const SaveData& data) {
+        JsonValue root;
+        // Player state
+        root["playerHealth"]    = JsonValue(data.playerHealth);
+        root["playerEnergy"]    = JsonValue(data.playerEnergy);
+        root["playerOxygen"]    = JsonValue(data.playerOxygen);
+        root["playtimeSeconds"] = JsonValue(data.playtimeSeconds);
+        root["currentSector"]   = JsonValue(data.currentSector);
+
+        // Position
+        JsonValue pos;
+        pos["x"] = JsonValue(data.playerPosition.x);
+        pos["y"] = JsonValue(data.playerPosition.y);
+        pos["z"] = JsonValue(data.playerPosition.z);
+        root["position"] = pos;
+
+        // Inventory
+        JsonValue inv;
+        for (const auto& [key, qty] : data.inventory)
+            inv[key] = JsonValue(qty);
+        root["inventory"] = inv;
+
+        // Missions
+        auto activeMissions = JsonValue::array();
+        for (const auto& id : data.activeMissionIds)
+            activeMissions.push(JsonValue(id));
+        root["activeMissions"] = activeMissions;
+
+        auto completedMissions = JsonValue::array();
+        for (const auto& id : data.completedMissionIds)
+            completedMissions.push(JsonValue(id));
+        root["completedMissions"] = completedMissions;
+
+        // Reputation
+        JsonValue rep;
+        for (const auto& [faction, val] : data.reputation)
+            rep[faction] = JsonValue(val);
+        root["reputation"] = rep;
+
+        return root;
+    }
+
+    static SaveData fromJson(const JsonValue& j) {
+        SaveData data;
+        if (j.hasKey("playerHealth"))    data.playerHealth    = j["playerHealth"].asFloat();
+        if (j.hasKey("playerEnergy"))    data.playerEnergy    = j["playerEnergy"].asFloat();
+        if (j.hasKey("playerOxygen"))    data.playerOxygen    = j["playerOxygen"].asFloat();
+        if (j.hasKey("playtimeSeconds")) data.playtimeSeconds = j["playtimeSeconds"].asFloat();
+        if (j.hasKey("currentSector"))   data.currentSector   = j["currentSector"].asString();
+
+        if (j.hasKey("position")) {
+            const auto& pos = j["position"];
+            data.playerPosition.x = pos.hasKey("x") ? pos["x"].asFloat() : 0.f;
+            data.playerPosition.y = pos.hasKey("y") ? pos["y"].asFloat() : 0.f;
+            data.playerPosition.z = pos.hasKey("z") ? pos["z"].asFloat() : 0.f;
+        }
+
+        if (j.hasKey("inventory")) {
+            const auto& inv = j["inventory"];
+            for (const auto& [key, val] : inv.members())
+                data.inventory[key] = val.asInt();
+        }
+
+        if (j.hasKey("activeMissions")) {
+            const auto& arr = j["activeMissions"];
+            for (size_t i = 0; i < arr.size(); ++i)
+                data.activeMissionIds.push_back(arr[i].asString());
+        }
+
+        if (j.hasKey("completedMissions")) {
+            const auto& arr = j["completedMissions"];
+            for (size_t i = 0; i < arr.size(); ++i)
+                data.completedMissionIds.push_back(arr[i].asString());
+        }
+
+        if (j.hasKey("reputation")) {
+            const auto& rep = j["reputation"];
+            for (const auto& [key, val] : rep.members())
+                data.reputation[key] = val.asFloat();
+        }
+
+        return data;
+    }
+};
+
+class SaveSystem {
+public:
+    static constexpr int kMaxSlots = 5;
+
+    void init() {
+        m_slots.resize(kMaxSlots);
+        for (int i = 0; i < kMaxSlots; ++i) {
+            m_slots[i].slotIndex = i;
+            m_slots[i].isEmpty   = true;
+        }
+        NF_LOG_INFO("SaveSystem", "SaveSystem initialized with " +
+                    std::to_string(kMaxSlots) + " slots");
+    }
+
+    // Persist a SaveData into a slot. Returns false if slotIndex is out of range.
+    bool saveGame(int slotIndex, const SaveData& data, const std::string& saveName) {
+        if (slotIndex < 0 || slotIndex >= kMaxSlots) return false;
+        m_saveData[slotIndex]          = data;
+        m_slots[slotIndex].slotIndex   = slotIndex;
+        m_slots[slotIndex].name        = saveName;
+        m_slots[slotIndex].playtimeSeconds = data.playtimeSeconds;
+        m_slots[slotIndex].isEmpty     = false;
+        // Serialise to JsonValue (represents the on-disk representation)
+        m_serialized[slotIndex]        = GameSaveSerializer::toJson(data);
+        NF_LOG_INFO("SaveSystem", "Saved '" + saveName + "' to slot " +
+                    std::to_string(slotIndex));
+        return true;
+    }
+
+    // Load game data from slot. Returns nullptr if slot is empty.
+    const SaveData* loadGame(int slotIndex) {
+        if (slotIndex < 0 || slotIndex >= kMaxSlots) return nullptr;
+        if (m_slots[slotIndex].isEmpty) return nullptr;
+        // Re-deserialize from the stored json (simulates disk round-trip)
+        m_saveData[slotIndex] = GameSaveSerializer::fromJson(m_serialized[slotIndex]);
+        NF_LOG_INFO("SaveSystem", "Loaded slot " + std::to_string(slotIndex));
+        return &m_saveData[slotIndex];
+    }
+
+    bool deleteSlot(int slotIndex) {
+        if (slotIndex < 0 || slotIndex >= kMaxSlots) return false;
+        m_slots[slotIndex].isEmpty = true;
+        m_slots[slotIndex].name.clear();
+        m_saveData.erase(slotIndex);
+        m_serialized.erase(slotIndex);
+        return true;
+    }
+
+    void enableAutoSave(bool enable) { m_autoSaveEnabled = enable; }
+    bool isAutoSaveEnabled() const   { return m_autoSaveEnabled; }
+
+    void tickAutoSave(float dt, const SaveData& data) {
+        if (!m_autoSaveEnabled) return;
+        m_autoSaveTimer += dt;
+        if (m_autoSaveTimer >= m_autoSaveIntervalSeconds) {
+            m_autoSaveTimer = 0.f;
+            saveGame(kAutoSaveSlot, data, "AutoSave");
+        }
+    }
+
+    [[nodiscard]] const SaveSlot& slot(int index) const {
+        static SaveSlot empty;
+        if (index < 0 || index >= kMaxSlots) return empty;
+        return m_slots[index];
+    }
+
+    [[nodiscard]] std::vector<SaveSlot> listSlots() const { return m_slots; }
+
+    int usedSlotCount() const {
+        int count = 0;
+        for (const auto& s : m_slots) if (!s.isEmpty) ++count;
+        return count;
+    }
+
+    static constexpr int kAutoSaveSlot = 0;
+    float autoSaveIntervalSeconds() const { return m_autoSaveIntervalSeconds; }
+    void setAutoSaveInterval(float seconds) { m_autoSaveIntervalSeconds = seconds; }
+
+private:
+    std::vector<SaveSlot>          m_slots;
+    std::map<int, SaveData>        m_saveData;
+    std::map<int, JsonValue>       m_serialized;
+    bool  m_autoSaveEnabled        = false;
+    float m_autoSaveTimer          = 0.f;
+    float m_autoSaveIntervalSeconds = 300.f;  // 5 minutes default
+};
+
+// ── Game Phase G13 — World Events System ─────────────────────────
+
+enum class WorldEventType : uint8_t {
+    AsteroidStorm,
+    PirateRaid,
+    TechDiscovery,
+    FactionWar,
+    TradeOpportunity,
+    Plague,
+    CelestialAnomaly
+};
+
+inline std::string worldEventTypeName(WorldEventType t) {
+    switch (t) {
+        case WorldEventType::AsteroidStorm:    return "AsteroidStorm";
+        case WorldEventType::PirateRaid:       return "PirateRaid";
+        case WorldEventType::TechDiscovery:    return "TechDiscovery";
+        case WorldEventType::FactionWar:       return "FactionWar";
+        case WorldEventType::TradeOpportunity: return "TradeOpportunity";
+        case WorldEventType::Plague:           return "Plague";
+        case WorldEventType::CelestialAnomaly: return "CelestialAnomaly";
+        default: return "Unknown";
+    }
+}
+
+struct EventEffect {
+    float priceModifier      = 1.f;   // multiplier on buy/sell prices
+    float dangerModifier     = 1.f;   // multiplier on encounter danger
+    float reputationChange   = 0.f;   // flat reputation change on resolution
+    float resourceBonus      = 0.f;   // extra resource yield while active
+};
+
+struct WorldEvent {
+    int            eventId        = 0;
+    WorldEventType type           = WorldEventType::AsteroidStorm;
+    std::string    sectorId;
+    std::string    description;
+    float          duration       = 60.f;  // seconds until expiry
+    float          elapsed        = 0.f;
+    float          severity       = 1.f;   // 0-1
+    bool           isActive       = true;
+    EventEffect    effect;
+
+    bool isExpired() const { return elapsed >= duration; }
+    float remainingTime() const { return std::max(0.f, duration - elapsed); }
+    void tick(float dt) { if (isActive) elapsed += dt; }
+};
+
+class WorldEventSystem {
+public:
+    void init() {
+        m_nextEventId = 1;
+        NF_LOG_INFO("WorldEvents", "WorldEventSystem initialized");
+    }
+
+    // Spawn a new event in the specified sector. Returns the assigned event ID.
+    int spawnEvent(WorldEventType type, const std::string& sectorId,
+                   float duration, float severity, const std::string& description) {
+        WorldEvent ev;
+        ev.eventId     = m_nextEventId++;
+        ev.type        = type;
+        ev.sectorId    = sectorId;
+        ev.duration    = duration;
+        ev.severity    = std::max(0.f, std::min(1.f, severity));
+        ev.description = description;
+        ev.isActive    = true;
+        ev.effect      = buildEffect(type, ev.severity);
+        m_events.push_back(ev);
+        NF_LOG_INFO("WorldEvents", "Spawned " + worldEventTypeName(type) +
+                    " in '" + sectorId + "' id=" + std::to_string(ev.eventId));
+        return ev.eventId;
+    }
+
+    // Manually end an event before it expires.
+    bool endEvent(int eventId) {
+        for (auto& ev : m_events) {
+            if (ev.eventId == eventId && ev.isActive) {
+                ev.isActive = false;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Advance all active events; expired events are marked inactive.
+    void tick(float dt) {
+        for (auto& ev : m_events) {
+            if (!ev.isActive) continue;
+            ev.tick(dt);
+            if (ev.isExpired()) ev.isActive = false;
+        }
+        // Prune fully-expired events beyond a history window
+        while (m_events.size() > kMaxHistorySize) {
+            m_events.erase(m_events.begin());
+        }
+    }
+
+    [[nodiscard]] std::vector<WorldEvent> getActiveEvents() const {
+        std::vector<WorldEvent> out;
+        for (const auto& ev : m_events)
+            if (ev.isActive) out.push_back(ev);
+        return out;
+    }
+
+    [[nodiscard]] std::vector<WorldEvent> getEventsInSector(const std::string& sectorId) const {
+        std::vector<WorldEvent> out;
+        for (const auto& ev : m_events)
+            if (ev.sectorId == sectorId) out.push_back(ev);
+        return out;
+    }
+
+    [[nodiscard]] const WorldEvent* findEvent(int eventId) const {
+        for (const auto& ev : m_events)
+            if (ev.eventId == eventId) return &ev;
+        return nullptr;
+    }
+
+    int activeEventCount() const {
+        int n = 0;
+        for (const auto& ev : m_events) if (ev.isActive) ++n;
+        return n;
+    }
+
+    int totalEventCount() const { return (int)m_events.size(); }
+
+    static constexpr size_t kMaxHistorySize = 100;
+
+private:
+    static EventEffect buildEffect(WorldEventType type, float severity) {
+        EventEffect e;
+        switch (type) {
+            case WorldEventType::AsteroidStorm:
+                e.dangerModifier = 1.f + severity;
+                break;
+            case WorldEventType::PirateRaid:
+                e.dangerModifier   = 1.f + severity * 2.f;
+                e.reputationChange = -5.f * severity;
+                break;
+            case WorldEventType::TechDiscovery:
+                e.reputationChange = 10.f * severity;
+                e.resourceBonus    = 0.5f * severity;
+                break;
+            case WorldEventType::FactionWar:
+                e.dangerModifier   = 1.5f + severity;
+                e.priceModifier    = 1.f + 0.3f * severity;
+                break;
+            case WorldEventType::TradeOpportunity:
+                e.priceModifier  = 1.f - 0.3f * severity;  // discounted prices
+                e.resourceBonus  = 1.f * severity;
+                break;
+            case WorldEventType::Plague:
+                e.dangerModifier   = 1.f + 0.5f * severity;
+                e.reputationChange = -2.f * severity;
+                break;
+            case WorldEventType::CelestialAnomaly:
+                e.resourceBonus = 2.f * severity;
+                break;
+            default:
+                break;
+        }
+        return e;
+    }
+
+    std::vector<WorldEvent> m_events;
+    int m_nextEventId = 1;
+};
+
+// ── Game Phase G14 — Tech Tree ────────────────────────────────────
+
+enum class TechCategory : uint8_t {
+    Weapons,
+    Shields,
+    Propulsion,
+    Mining,
+    Construction,
+    Biology,
+    Computing
+};
+
+inline std::string techCategoryName(TechCategory c) {
+    switch (c) {
+        case TechCategory::Weapons:      return "Weapons";
+        case TechCategory::Shields:      return "Shields";
+        case TechCategory::Propulsion:   return "Propulsion";
+        case TechCategory::Mining:       return "Mining";
+        case TechCategory::Construction: return "Construction";
+        case TechCategory::Biology:      return "Biology";
+        case TechCategory::Computing:    return "Computing";
+        default: return "Unknown";
+    }
+}
+
+struct TechNode {
+    std::string          id;
+    std::string          displayName;
+    TechCategory         category   = TechCategory::Weapons;
+    int                  tier       = 1;           // 1 = root, higher = deeper
+    int                  cost       = 100;         // research points required
+    std::vector<std::string> prerequisites;        // ids of required nodes
+    bool                 researched = false;
+
+    // Bonus values unlocked by this node (domain-specific)
+    float damageBonus    = 0.f;
+    float shieldBonus    = 0.f;
+    float speedBonus     = 0.f;
+    float miningBonus    = 0.f;
+};
+
+class TechTree {
+public:
+    void addNode(const TechNode& node) {
+        m_nodes[node.id] = node;
+    }
+
+    // Returns true if the node exists and all its prerequisites are researched.
+    [[nodiscard]] bool canResearch(const std::string& id) const {
+        auto it = m_nodes.find(id);
+        if (it == m_nodes.end()) return false;
+        if (it->second.researched) return false;
+        for (const auto& prereq : it->second.prerequisites) {
+            auto pit = m_nodes.find(prereq);
+            if (pit == m_nodes.end() || !pit->second.researched) return false;
+        }
+        return true;
+    }
+
+    // Unlock the given node. Returns false if prerequisites unmet or already researched.
+    bool unlock(const std::string& id) {
+        if (!canResearch(id)) return false;
+        m_nodes[id].researched = true;
+        m_researchedCount++;
+        NF_LOG_INFO("TechTree", "Unlocked: " + id);
+        return true;
+    }
+
+    [[nodiscard]] bool isUnlocked(const std::string& id) const {
+        auto it = m_nodes.find(id);
+        return it != m_nodes.end() && it->second.researched;
+    }
+
+    [[nodiscard]] const TechNode* findNode(const std::string& id) const {
+        auto it = m_nodes.find(id);
+        return it != m_nodes.end() ? &it->second : nullptr;
+    }
+
+    // Returns all nodes that can be researched right now.
+    [[nodiscard]] std::vector<std::string> getAvailable() const {
+        std::vector<std::string> out;
+        for (const auto& [id, node] : m_nodes)
+            if (canResearch(id)) out.push_back(id);
+        return out;
+    }
+
+    // Returns all researched node ids.
+    [[nodiscard]] std::vector<std::string> getResearched() const {
+        std::vector<std::string> out;
+        for (const auto& [id, node] : m_nodes)
+            if (node.researched) out.push_back(id);
+        return out;
+    }
+
+    // Returns nodes of a specific tier.
+    [[nodiscard]] std::vector<std::string> getByTier(int tier) const {
+        std::vector<std::string> out;
+        for (const auto& [id, node] : m_nodes)
+            if (node.tier == tier) out.push_back(id);
+        return out;
+    }
+
+    // Compute aggregate bonuses from all researched nodes.
+    struct AggregateBonus {
+        float damage  = 0.f;
+        float shield  = 0.f;
+        float speed   = 0.f;
+        float mining  = 0.f;
+    };
+
+    [[nodiscard]] AggregateBonus computeBonuses() const {
+        AggregateBonus b;
+        for (const auto& [id, node] : m_nodes) {
+            if (!node.researched) continue;
+            b.damage  += node.damageBonus;
+            b.shield  += node.shieldBonus;
+            b.speed   += node.speedBonus;
+            b.mining  += node.miningBonus;
+        }
+        return b;
+    }
+
+    int nodeCount()       const { return (int)m_nodes.size(); }
+    int researchedCount() const { return m_researchedCount; }
+
+private:
+    std::map<std::string, TechNode> m_nodes;
+    int m_researchedCount = 0;
+};
+
+// ── Game Phase G15 — Player Progression ──────────────────────────
+
+enum class XPSource : uint8_t {
+    Combat,
+    Mining,
+    Exploration,
+    Trade,
+    Quest,
+    Crafting
+};
+
+inline std::string xpSourceName(XPSource s) {
+    switch (s) {
+        case XPSource::Combat:      return "Combat";
+        case XPSource::Mining:      return "Mining";
+        case XPSource::Exploration: return "Exploration";
+        case XPSource::Trade:       return "Trade";
+        case XPSource::Quest:       return "Quest";
+        case XPSource::Crafting:    return "Crafting";
+        default: return "Unknown";
+    }
+}
+
+class PlayerLevel {
+public:
+    static constexpr int kMaxLevel = 50;
+
+    void init(int startLevel = 1) {
+        m_level = std::max(1, std::min(startLevel, kMaxLevel));
+        m_totalXP = xpForLevel(m_level);
+        m_xpThisLevel = 0;
+        NF_LOG_INFO("PlayerLevel", "Initialized at level " + std::to_string(m_level));
+    }
+
+    // Add XP; returns number of levels gained (0 if none).
+    int addXP(int amount, XPSource /*source*/ = XPSource::Combat) {
+        if (m_level >= kMaxLevel) return 0;
+        m_totalXP     += amount;
+        m_xpThisLevel += amount;
+        int levelsGained = 0;
+        while (m_level < kMaxLevel && m_xpThisLevel >= xpToNextLevel()) {
+            m_xpThisLevel -= xpToNextLevel();
+            ++m_level;
+            ++levelsGained;
+            NF_LOG_INFO("PlayerLevel", "Level up! Now level " + std::to_string(m_level));
+        }
+        return levelsGained;
+    }
+
+    [[nodiscard]] int  currentLevel()  const { return m_level; }
+    [[nodiscard]] int  xpThisLevel()   const { return m_xpThisLevel; }
+    [[nodiscard]] int  totalXP()       const { return m_totalXP; }
+    [[nodiscard]] bool isMaxLevel()    const { return m_level >= kMaxLevel; }
+
+    // XP needed to advance from current level to next.
+    [[nodiscard]] int xpToNextLevel() const {
+        if (m_level >= kMaxLevel) return 0;
+        return xpForLevel(m_level + 1) - xpForLevel(m_level);
+    }
+
+    [[nodiscard]] float progressToNextLevel() const {
+        int needed = xpToNextLevel();
+        return needed > 0 ? static_cast<float>(m_xpThisLevel) / static_cast<float>(needed) : 1.f;
+    }
+
+private:
+    // Cumulative XP required to *reach* `level` from level 1.
+    static int xpForLevel(int level) {
+        // Quadratic: level * (level - 1) * 50
+        return level * (level - 1) * 50;
+    }
+
+    int m_level       = 1;
+    int m_totalXP     = 0;
+    int m_xpThisLevel = 0;
+};
+
+struct SkillNode {
+    std::string id;
+    std::string displayName;
+    int         requiredLevel = 1;   // minimum player level to unlock
+    int         pointCost     = 1;   // skill points required
+    bool        unlocked      = false;
+
+    // Passive bonuses granted when unlocked
+    float healthBonus   = 0.f;
+    float energyBonus   = 0.f;
+    float damageBonus   = 0.f;
+    float miningBonus   = 0.f;
+};
+
+class SkillTree {
+public:
+    void addSkill(const SkillNode& node) { m_skills[node.id] = node; }
+
+    bool unlockSkill(const std::string& id, int playerLevel, int& availablePoints) {
+        auto it = m_skills.find(id);
+        if (it == m_skills.end()) return false;
+        auto& sk = it->second;
+        if (sk.unlocked) return false;
+        if (playerLevel < sk.requiredLevel) return false;
+        if (availablePoints < sk.pointCost) return false;
+        availablePoints -= sk.pointCost;
+        sk.unlocked = true;
+        NF_LOG_INFO("SkillTree", "Skill unlocked: " + id);
+        return true;
+    }
+
+    [[nodiscard]] bool isUnlocked(const std::string& id) const {
+        auto it = m_skills.find(id);
+        return it != m_skills.end() && it->second.unlocked;
+    }
+
+    [[nodiscard]] const SkillNode* findSkill(const std::string& id) const {
+        auto it = m_skills.find(id);
+        return it != m_skills.end() ? &it->second : nullptr;
+    }
+
+    // Returns ids of skills available to unlock at the given player level.
+    [[nodiscard]] std::vector<std::string> getAvailable(int playerLevel) const {
+        std::vector<std::string> out;
+        for (const auto& [id, sk] : m_skills)
+            if (!sk.unlocked && playerLevel >= sk.requiredLevel)
+                out.push_back(id);
+        return out;
+    }
+
+    struct SkillBonuses {
+        float health = 0.f;
+        float energy = 0.f;
+        float damage = 0.f;
+        float mining = 0.f;
+    };
+
+    [[nodiscard]] SkillBonuses computeBonuses() const {
+        SkillBonuses b;
+        for (const auto& [id, sk] : m_skills) {
+            if (!sk.unlocked) continue;
+            b.health += sk.healthBonus;
+            b.energy += sk.energyBonus;
+            b.damage += sk.damageBonus;
+            b.mining += sk.miningBonus;
+        }
+        return b;
+    }
+
+    int skillCount()    const { return (int)m_skills.size(); }
+    int unlockedCount() const {
+        int n = 0;
+        for (const auto& [id, sk] : m_skills) if (sk.unlocked) ++n;
+        return n;
+    }
+
+private:
+    std::map<std::string, SkillNode> m_skills;
+};
+
+class ProgressionSystem {
+public:
+    void init(int startLevel = 1) {
+        m_level.init(startLevel);
+        m_skillPoints = 0;
+        NF_LOG_INFO("Progression", "ProgressionSystem initialized");
+    }
+
+    // Award XP, potentially granting skill points on level-up.
+    void awardXP(int amount, XPSource source = XPSource::Combat) {
+        int gained = m_level.addXP(amount, source);
+        m_skillPoints += gained;  // 1 skill point per level gained
+    }
+
+    bool spendSkillPoint(const std::string& skillId) {
+        return m_skillTree.unlockSkill(skillId, m_level.currentLevel(), m_skillPoints);
+    }
+
+    [[nodiscard]] PlayerLevel&       level()      { return m_level; }
+    [[nodiscard]] const PlayerLevel& level() const { return m_level; }
+    [[nodiscard]] SkillTree&         skillTree()  { return m_skillTree; }
+    [[nodiscard]] const SkillTree&   skillTree()  const { return m_skillTree; }
+    [[nodiscard]] int                skillPoints() const { return m_skillPoints; }
+
+    // Combined stat modifiers from skills.
+    [[nodiscard]] SkillTree::SkillBonuses bonuses() const {
+        return m_skillTree.computeBonuses();
+    }
+
+private:
+    PlayerLevel m_level;
+    SkillTree   m_skillTree;
+    int         m_skillPoints = 0;
+};
+
+// ── Game Phase G16 — Crafting System ──────────────────────────────
+
+enum class CraftingCategory : uint8_t {
+    Weapon,
+    Armor,
+    Tool,
+    Component,
+    Consumable,
+    Fuel,
+    Decoration
+};
+
+inline std::string craftingCategoryName(CraftingCategory c) {
+    switch (c) {
+        case CraftingCategory::Weapon:     return "Weapon";
+        case CraftingCategory::Armor:      return "Armor";
+        case CraftingCategory::Tool:       return "Tool";
+        case CraftingCategory::Component:  return "Component";
+        case CraftingCategory::Consumable: return "Consumable";
+        case CraftingCategory::Fuel:       return "Fuel";
+        case CraftingCategory::Decoration: return "Decoration";
+        default: return "Unknown";
+    }
+}
+
+struct CraftingIngredient {
+    std::string itemId;
+    int         quantity = 1;
+};
+
+struct CraftingRecipe {
+    std::string                    recipeId;
+    std::string                    outputItemId;
+    int                            outputQuantity = 1;
+    CraftingCategory               category       = CraftingCategory::Component;
+    std::vector<CraftingIngredient> ingredients;
+    float                          craftTime       = 5.f;   // seconds
+    int                            requiredLevel   = 1;
+};
+
+struct CraftingJob {
+    std::string recipeId;
+    float       elapsed  = 0.f;
+    float       duration = 5.f;
+    bool        complete = false;
+
+    void tick(float dt) {
+        if (complete) return;
+        elapsed += dt;
+        if (elapsed >= duration) {
+            elapsed = duration;
+            complete = true;
+        }
+    }
+
+    [[nodiscard]] float progress() const {
+        return duration > 0.f ? std::min(elapsed / duration, 1.f) : 1.f;
+    }
+};
+
+class CraftingQueue {
+public:
+    void enqueue(const std::string& recipeId, float duration) {
+        CraftingJob job;
+        job.recipeId = recipeId;
+        job.duration = duration;
+        m_jobs.push_back(job);
+        NF_LOG_INFO("Crafting", "Enqueued: " + recipeId);
+    }
+
+    // Tick the frontmost incomplete job.
+    void tick(float dt) {
+        for (auto& job : m_jobs) {
+            if (!job.complete) {
+                job.tick(dt);
+                break;   // only tick the head job
+            }
+        }
+    }
+
+    // Collect and remove all completed jobs, return their recipe ids.
+    [[nodiscard]] std::vector<std::string> collectCompleted() {
+        std::vector<std::string> out;
+        auto it = m_jobs.begin();
+        while (it != m_jobs.end()) {
+            if (it->complete) {
+                out.push_back(it->recipeId);
+                it = m_jobs.erase(it);
+            } else {
+                break;   // queue is FIFO; stop at first incomplete
+            }
+        }
+        return out;
+    }
+
+    [[nodiscard]] int  pendingCount() const { return static_cast<int>(m_jobs.size()); }
+    [[nodiscard]] bool isEmpty()      const { return m_jobs.empty(); }
+
+    [[nodiscard]] const CraftingJob* currentJob() const {
+        for (const auto& j : m_jobs) {
+            if (!j.complete) return &j;
+        }
+        return nullptr;
+    }
+
+private:
+    std::vector<CraftingJob> m_jobs;
+};
+
+class CraftingSystem {
+public:
+    void registerRecipe(const CraftingRecipe& recipe) {
+        m_recipes[recipe.recipeId] = recipe;
+    }
+
+    [[nodiscard]] const CraftingRecipe* findRecipe(const std::string& id) const {
+        auto it = m_recipes.find(id);
+        return it != m_recipes.end() ? &it->second : nullptr;
+    }
+
+    // Check if the player has enough resources (represented as a map<itemId, count>).
+    [[nodiscard]] bool canCraft(const std::string& recipeId,
+                                 const std::map<std::string, int>& inventory,
+                                 int playerLevel = 1) const {
+        auto it = m_recipes.find(recipeId);
+        if (it == m_recipes.end()) return false;
+        const auto& recipe = it->second;
+        if (playerLevel < recipe.requiredLevel) return false;
+        for (const auto& ing : recipe.ingredients) {
+            auto iit = inventory.find(ing.itemId);
+            if (iit == inventory.end() || iit->second < ing.quantity) return false;
+        }
+        return true;
+    }
+
+    // Deduct ingredients and enqueue the job. Returns false if cannot craft.
+    bool enqueue(const std::string& recipeId,
+                 std::map<std::string, int>& inventory,
+                 int playerLevel = 1) {
+        if (!canCraft(recipeId, inventory, playerLevel)) return false;
+        const auto& recipe = m_recipes[recipeId];
+        for (const auto& ing : recipe.ingredients) {
+            inventory[ing.itemId] -= ing.quantity;
+        }
+        m_queue.enqueue(recipeId, recipe.craftTime);
+        return true;
+    }
+
+    void tick(float dt) { m_queue.tick(dt); }
+
+    [[nodiscard]] std::vector<std::string> collectCompleted() {
+        return m_queue.collectCompleted();
+    }
+
+    [[nodiscard]] CraftingQueue&       queue()       { return m_queue; }
+    [[nodiscard]] const CraftingQueue& queue() const { return m_queue; }
+    [[nodiscard]] int recipeCount() const { return static_cast<int>(m_recipes.size()); }
+
+    // Get all recipe ids for a given category.
+    [[nodiscard]] std::vector<std::string> recipesByCategory(CraftingCategory cat) const {
+        std::vector<std::string> out;
+        for (const auto& [id, r] : m_recipes)
+            if (r.category == cat) out.push_back(id);
+        return out;
+    }
+
+private:
+    std::map<std::string, CraftingRecipe> m_recipes;
+    CraftingQueue m_queue;
+};
+
+// ── Game Phase G17 — Inventory & Equipment ───────────────────────
+
+enum class ItemRarity : uint8_t {
+    Common,
+    Uncommon,
+    Rare,
+    Epic,
+    Legendary
+};
+
+inline std::string itemRarityName(ItemRarity r) {
+    switch (r) {
+        case ItemRarity::Common:    return "Common";
+        case ItemRarity::Uncommon:  return "Uncommon";
+        case ItemRarity::Rare:      return "Rare";
+        case ItemRarity::Epic:      return "Epic";
+        case ItemRarity::Legendary: return "Legendary";
+        default: return "Unknown";
+    }
+}
+
+enum class ItemSlot : uint8_t {
+    None,
+    Head,
+    Chest,
+    Legs,
+    Boots,
+    Weapon,
+    Shield,
+    Accessory
+};
+
+inline std::string itemSlotName(ItemSlot s) {
+    switch (s) {
+        case ItemSlot::None:      return "None";
+        case ItemSlot::Head:      return "Head";
+        case ItemSlot::Chest:     return "Chest";
+        case ItemSlot::Legs:      return "Legs";
+        case ItemSlot::Boots:     return "Boots";
+        case ItemSlot::Weapon:    return "Weapon";
+        case ItemSlot::Shield:    return "Shield";
+        case ItemSlot::Accessory: return "Accessory";
+        default: return "Unknown";
+    }
+}
+
+struct Item {
+    std::string id;
+    std::string displayName;
+    ItemRarity  rarity    = ItemRarity::Common;
+    ItemSlot    slot      = ItemSlot::None;
+    int         stackMax  = 99;
+    int         count     = 1;
+    float       weight    = 1.f;
+
+    // Stat bonuses (applicable when equipped)
+    float damageBonus  = 0.f;
+    float armorBonus   = 0.f;
+    float speedBonus   = 0.f;
+    float healthBonus  = 0.f;
+
+    [[nodiscard]] bool isStackable() const { return stackMax > 1; }
+    [[nodiscard]] bool canStack(int amount) const { return count + amount <= stackMax; }
+};
+
+class PlayerInventory {
+public:
+    explicit PlayerInventory(int capacity = 40) : m_capacity(capacity) {}
+
+    // Add items. Returns the leftover count that didn't fit.
+    int addItem(const Item& item) {
+        int remaining = item.count;
+
+        // Try stacking first
+        if (item.isStackable()) {
+            for (auto& existing : m_items) {
+                if (existing.id == item.id && existing.canStack(remaining)) {
+                    existing.count += remaining;
+                    NF_LOG_INFO("Inventory", "Stacked " + std::to_string(remaining) + "x " + item.id);
+                    return 0;
+                } else if (existing.id == item.id) {
+                    int space = existing.stackMax - existing.count;
+                    existing.count = existing.stackMax;
+                    remaining -= space;
+                }
+            }
+        }
+
+        // New slot(s)
+        while (remaining > 0 && static_cast<int>(m_items.size()) < m_capacity) {
+            Item newSlot = item;
+            newSlot.count = std::min(remaining, item.stackMax);
+            remaining -= newSlot.count;
+            m_items.push_back(newSlot);
+        }
+
+        return remaining;   // 0 = all added
+    }
+
+    // Remove `count` of the given item. Returns amount actually removed.
+    int removeItem(const std::string& id, int count) {
+        int removed = 0;
+        for (auto it = m_items.begin(); it != m_items.end() && removed < count; ) {
+            if (it->id == id) {
+                int take = std::min(it->count, count - removed);
+                it->count -= take;
+                removed += take;
+                if (it->count <= 0) {
+                    it = m_items.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+        return removed;
+    }
+
+    [[nodiscard]] int countItem(const std::string& id) const {
+        int total = 0;
+        for (const auto& item : m_items)
+            if (item.id == id) total += item.count;
+        return total;
+    }
+
+    [[nodiscard]] const Item* findItem(const std::string& id) const {
+        for (const auto& item : m_items)
+            if (item.id == id) return &item;
+        return nullptr;
+    }
+
+    [[nodiscard]] int usedSlots()  const { return static_cast<int>(m_items.size()); }
+    [[nodiscard]] int freeSlots()  const { return m_capacity - usedSlots(); }
+    [[nodiscard]] int capacity()   const { return m_capacity; }
+    [[nodiscard]] bool isFull()    const { return usedSlots() >= m_capacity; }
+    [[nodiscard]] const std::vector<Item>& items() const { return m_items; }
+
+    // Convert to a simple map<itemId, count> (useful for crafting checks).
+    [[nodiscard]] std::map<std::string, int> toCountMap() const {
+        std::map<std::string, int> m;
+        for (const auto& item : m_items) m[item.id] += item.count;
+        return m;
+    }
+
+private:
+    std::vector<Item> m_items;
+    int m_capacity;
+};
+
+class EquipmentLoadout {
+public:
+    // Equip item in its designated slot. Returns the previously-equipped item id (empty if none).
+    std::string equip(const Item& item) {
+        if (item.slot == ItemSlot::None) return "";
+        std::string prev;
+        auto it = m_equipped.find(item.slot);
+        if (it != m_equipped.end()) prev = it->second.id;
+        m_equipped[item.slot] = item;
+        NF_LOG_INFO("Equipment", "Equipped " + item.id + " in " + itemSlotName(item.slot));
+        return prev;
+    }
+
+    // Unequip and return the item. Returns nullopt if slot is empty.
+    std::string unequip(ItemSlot slot) {
+        auto it = m_equipped.find(slot);
+        if (it == m_equipped.end()) return "";
+        std::string id = it->second.id;
+        m_equipped.erase(it);
+        NF_LOG_INFO("Equipment", "Unequipped " + id + " from " + itemSlotName(slot));
+        return id;
+    }
+
+    [[nodiscard]] bool isSlotOccupied(ItemSlot slot) const {
+        return m_equipped.find(slot) != m_equipped.end();
+    }
+
+    [[nodiscard]] const Item* getEquipped(ItemSlot slot) const {
+        auto it = m_equipped.find(slot);
+        return it != m_equipped.end() ? &it->second : nullptr;
+    }
+
+    struct EquipmentBonuses {
+        float damage = 0.f;
+        float armor  = 0.f;
+        float speed  = 0.f;
+        float health = 0.f;
+    };
+
+    [[nodiscard]] EquipmentBonuses computeBonuses() const {
+        EquipmentBonuses b;
+        for (const auto& [slot, item] : m_equipped) {
+            b.damage += item.damageBonus;
+            b.armor  += item.armorBonus;
+            b.speed  += item.speedBonus;
+            b.health += item.healthBonus;
+        }
+        return b;
+    }
+
+    [[nodiscard]] int equippedCount() const { return static_cast<int>(m_equipped.size()); }
+
+private:
+    std::map<ItemSlot, Item> m_equipped;
+};
+
 } // namespace NF

@@ -99,7 +99,7 @@
 - [x] GraphSerializer (JSON round-trip for programs and graphs)
 - [x] Graph types (14 types: World, Strategy, Conversation, Behavior, etc.)
 - [x] Expand test coverage (249 tests, up from 212)
-- [ ] Wire into editor panels (graph node editor UI)
+- [x] Wire into editor panels (graph node editor UI)
 - [ ] Validate: graph round-trip
 
 ## Phase 6 — Server & Networking
@@ -280,3 +280,80 @@
 - [x] NPCMemory class (remember, decay, dispositionTowardPlayer, entryCount, remembers)
 - [x] LegendStatus class (init, reputation, worldBias, overallTier, isLegend)
 - [x] Comprehensive test coverage (12 new tests)
+
+## Game Phase G10 — Quest & Mission System
+
+- [x] MissionObjectiveType enum (Kill, Collect, Deliver, Explore, Survive, Escort) with missionObjectiveTypeName()
+- [x] MissionObjective struct (type, targetId, description, required, current, isComplete, progress)
+- [x] MissionReward struct (credits, resources map, reputationFactionId, reputationAmount)
+- [x] MissionStatus enum (Active, Completed, Failed)
+- [x] ActiveMission class (init, objectives, reward, allObjectivesComplete, complete, fail)
+- [x] MissionLog class (acceptMission, completeMission, failMission, findActive, counts)
+- [x] QuestChain class (init, addMission, currentMissionId, advance, isComplete)
+- [x] Comprehensive test coverage (10 new tests)
+
+## Game Phase G11 — Dialogue System
+
+- [x] DialogueConditionType enum (Always, HasReputation, HasItem, MissionActive, MissionComplete)
+- [x] DialogueCondition struct (type, factionId, minReputation, itemType, missionId, evaluate)
+- [x] DialogueEffect struct (reputationFactionId, reputationDelta, startMissionId, giveItem)
+- [x] DialogueOption struct (text, condition, effect, nextNodeId)
+- [x] DialogueNode struct (nodeId, speakerName, text, options)
+- [x] DialogueGraph class (setStartNodeId, addNode, getNode, nodeCount)
+- [x] DialogueRunner class (init, currentNode, selectOption, isComplete)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G12 — Save/Load System
+
+- [x] SaveSlot struct (slotIndex, name, timestamp, playtimeSeconds, isEmpty)
+- [x] SaveData struct (playerPosition, health, energy, oxygen, playtime, inventory map, active/completed missions, reputation, currentSector)
+- [x] GameSaveSerializer (toJson/fromJson full round-trip for SaveData)
+- [x] SaveSystem class (init, saveGame, loadGame, deleteSlot, listSlots, usedSlotCount)
+- [x] Auto-save support (enableAutoSave, setAutoSaveInterval, tickAutoSave with slot 0)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G13 — World Events System
+
+- [x] WorldEventType enum (AsteroidStorm, PirateRaid, TechDiscovery, FactionWar, TradeOpportunity, Plague, CelestialAnomaly) with worldEventTypeName()
+- [x] EventEffect struct (priceModifier, dangerModifier, reputationChange, resourceBonus)
+- [x] WorldEvent struct (eventId, type, sectorId, description, duration, elapsed, severity, isActive, tick, isExpired, remainingTime)
+- [x] WorldEventSystem class (init, spawnEvent, endEvent, tick, getActiveEvents, getEventsInSector, findEvent, activeEventCount)
+- [x] Severity-scaled EventEffect building (buildEffect per event type)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G14 — Tech Tree
+
+- [x] TechCategory enum (Weapons, Shields, Propulsion, Mining, Construction, Biology, Computing) with techCategoryName()
+- [x] TechNode struct (id, displayName, category, tier, cost, prerequisites, researched, damage/shield/speed/miningBonus)
+- [x] TechTree class (addNode, canResearch, unlock, isUnlocked, findNode, getAvailable, getResearched, getByTier)
+- [x] TechTree computeBonuses (aggregate damage/shield/speed/mining from researched nodes)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G15 — Player Progression
+
+- [x] XPSource enum (Combat, Mining, Exploration, Trade, Quest, Crafting) with xpSourceName()
+- [x] PlayerLevel class (init, addXP, currentLevel, xpThisLevel, totalXP, xpToNextLevel, progressToNextLevel, isMaxLevel, kMaxLevel=50)
+- [x] Quadratic XP curve: level*(level-1)*50 cumulative XP
+- [x] SkillNode struct (id, requiredLevel, pointCost, unlocked, health/energy/damage/miningBonus)
+- [x] SkillTree class (addSkill, unlockSkill, isUnlocked, findSkill, getAvailable, computeBonuses, unlockedCount)
+- [x] ProgressionSystem class (init, awardXP → skill points on level-up, spendSkillPoint, bonuses())
+- [x] Comprehensive test coverage (8 new tests)
+
+## Game Phase G16 — Crafting System
+
+- [x] CraftingCategory enum (Weapon, Armor, Tool, Component, Consumable, Fuel, Decoration) with craftingCategoryName()
+- [x] CraftingIngredient struct (itemId, quantity)
+- [x] CraftingRecipe struct (recipeId, outputItemId, outputQuantity, category, ingredients, craftTime, requiredLevel)
+- [x] CraftingJob struct (tick, progress, complete flag)
+- [x] CraftingQueue class (enqueue, tick head-only FIFO, collectCompleted, currentJob)
+- [x] CraftingSystem class (registerRecipe, findRecipe, canCraft with inventory/level check, enqueue with ingredient deduction, recipesByCategory)
+- [x] Comprehensive test coverage (8 new tests)
+
+## Game Phase G17 — Inventory & Equipment
+
+- [x] ItemRarity enum (Common, Uncommon, Rare, Epic, Legendary) with itemRarityName()
+- [x] ItemSlot enum (None, Head, Chest, Legs, Boots, Weapon, Shield, Accessory) with itemSlotName()
+- [x] Item struct (id, displayName, rarity, slot, stackMax, count, weight, stat bonuses)
+- [x] PlayerInventory class (addItem with stacking, removeItem, countItem, findItem, capacity, toCountMap)
+- [x] EquipmentLoadout class (equip/unequip by slot, slot replace returns previous, computeBonuses aggregate)
+- [x] Comprehensive test coverage (8 new tests)

@@ -2360,3 +2360,970 @@ TEST_CASE("NF::LegendStatus init and is legend", "[g9]") {
     REQUIRE(ls.reputation().globalFame() == Catch::Approx(2500.f));
     REQUIRE(ls.isLegend() == true);
 }
+
+// ── G10: Quest & Mission System ──────────────────────────────────
+
+TEST_CASE("NF::missionObjectiveTypeName round-trip", "[g10]") {
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Kill))    == "Kill");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Collect)) == "Collect");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Deliver)) == "Deliver");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Explore)) == "Explore");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Survive)) == "Survive");
+    REQUIRE(std::string(NF::missionObjectiveTypeName(NF::MissionObjectiveType::Escort))  == "Escort");
+}
+
+TEST_CASE("NF::MissionObjective progress and isComplete", "[g10]") {
+    NF::MissionObjective obj;
+    obj.type = NF::MissionObjectiveType::Kill;
+    obj.required = 3;
+    obj.current = 0;
+    REQUIRE(obj.isComplete() == false);
+    obj.progress(2);
+    REQUIRE(obj.current == 2);
+    REQUIRE(obj.isComplete() == false);
+    obj.progress(5);
+    REQUIRE(obj.current == 3);
+    REQUIRE(obj.isComplete() == true);
+}
+
+TEST_CASE("NF::ActiveMission init and objectives", "[g10]") {
+    NF::ActiveMission m;
+    m.init(NF::StringID("mission_01"), "Destroy Pirates");
+    REQUIRE(m.title() == "Destroy Pirates");
+    REQUIRE(m.status() == NF::MissionStatus::Active);
+    REQUIRE(m.objectiveCount() == 0);
+
+    NF::MissionObjective obj;
+    obj.type = NF::MissionObjectiveType::Kill;
+    obj.required = 5;
+    m.addObjective(obj);
+    REQUIRE(m.objectiveCount() == 1);
+    REQUIRE(m.allObjectivesComplete() == false);
+
+    m.objective(0).progress(5);
+    REQUIRE(m.allObjectivesComplete() == true);
+}
+
+TEST_CASE("NF::ActiveMission complete and fail", "[g10]") {
+    NF::ActiveMission m;
+    m.init(NF::StringID("m1"), "Test");
+    m.complete();
+    REQUIRE(m.status() == NF::MissionStatus::Completed);
+
+    NF::ActiveMission m2;
+    m2.init(NF::StringID("m2"), "Test2");
+    m2.fail();
+    REQUIRE(m2.status() == NF::MissionStatus::Failed);
+}
+
+TEST_CASE("NF::MissionReward credits and resources", "[g10]") {
+    NF::MissionReward r;
+    r.credits = 500;
+    r.resources[NF::ResourceType::RefinedIron] = 10;
+    r.reputationFactionId = NF::StringID("pirates");
+    r.reputationAmount = 25.f;
+
+    REQUIRE(r.credits == 500);
+    REQUIRE(r.resources[NF::ResourceType::RefinedIron] == 10);
+    REQUIRE(r.reputationAmount == Catch::Approx(25.f));
+}
+
+TEST_CASE("NF::MissionLog accept and complete", "[g10]") {
+    NF::MissionLog log;
+    NF::ActiveMission m;
+    m.init(NF::StringID("mission_01"), "Clear Pirates");
+    log.acceptMission(m);
+    REQUIRE(log.activeMissionCount() == 1);
+    REQUIRE(log.completedMissionCount() == 0);
+
+    bool ok = log.completeMission(NF::StringID("mission_01"));
+    REQUIRE(ok == true);
+    REQUIRE(log.activeMissionCount() == 0);
+    REQUIRE(log.completedMissionCount() == 1);
+}
+
+TEST_CASE("NF::MissionLog fail mission", "[g10]") {
+    NF::MissionLog log;
+    NF::ActiveMission m;
+    m.init(NF::StringID("m_fail"), "Risky Run");
+    log.acceptMission(m);
+    bool ok = log.failMission(NF::StringID("m_fail"));
+    REQUIRE(ok == true);
+    REQUIRE(log.activeMissionCount() == 0);
+    REQUIRE(log.failedMissionCount() == 1);
+}
+
+TEST_CASE("NF::MissionLog findActive", "[g10]") {
+    NF::MissionLog log;
+    NF::ActiveMission m;
+    m.init(NF::StringID("find_me"), "Find Me");
+    log.acceptMission(m);
+    REQUIRE(log.findActive(NF::StringID("find_me")) != nullptr);
+    REQUIRE(log.findActive(NF::StringID("nope"))    == nullptr);
+}
+
+TEST_CASE("NF::QuestChain advance and isComplete", "[g10]") {
+    NF::QuestChain chain;
+    chain.init("Liberation Chain");
+    chain.addMission(NF::StringID("q1"));
+    chain.addMission(NF::StringID("q2"));
+    chain.addMission(NF::StringID("q3"));
+    REQUIRE(chain.missionCount() == 3);
+    REQUIRE(chain.currentIndex() == 0);
+    REQUIRE(chain.isComplete() == false);
+
+    chain.advance();
+    REQUIRE(chain.currentIndex() == 1);
+    chain.advance();
+    chain.advance();
+    REQUIRE(chain.isComplete() == true);
+}
+
+TEST_CASE("NF::QuestChain currentMissionId", "[g10]") {
+    NF::QuestChain chain;
+    chain.init("Test Chain");
+    chain.addMission(NF::StringID("alpha"));
+    chain.addMission(NF::StringID("beta"));
+    REQUIRE(chain.currentMissionId() == NF::StringID("alpha"));
+    chain.advance();
+    REQUIRE(chain.currentMissionId() == NF::StringID("beta"));
+}
+
+// ── G11: Dialogue System ─────────────────────────────────────────
+
+TEST_CASE("NF::DialogueCondition Always evaluates true", "[g11]") {
+    NF::DialogueCondition c;
+    c.type = NF::DialogueConditionType::Always;
+    REQUIRE(c.evaluate(0.f, 0, false, false) == true);
+}
+
+TEST_CASE("NF::DialogueCondition HasReputation", "[g11]") {
+    NF::DialogueCondition c;
+    c.type = NF::DialogueConditionType::HasReputation;
+    c.minReputation = 50.f;
+    REQUIRE(c.evaluate(49.f, 0, false, false) == false);
+    REQUIRE(c.evaluate(50.f, 0, false, false) == true);
+    REQUIRE(c.evaluate(100.f, 0, false, false) == true);
+}
+
+TEST_CASE("NF::DialogueCondition HasItem", "[g11]") {
+    NF::DialogueCondition c;
+    c.type = NF::DialogueConditionType::HasItem;
+    c.itemAmount = 3;
+    REQUIRE(c.evaluate(0.f, 2, false, false) == false);
+    REQUIRE(c.evaluate(0.f, 3, false, false) == true);
+}
+
+TEST_CASE("NF::DialogueCondition MissionActive and MissionComplete", "[g11]") {
+    NF::DialogueCondition ca;
+    ca.type = NF::DialogueConditionType::MissionActive;
+    REQUIRE(ca.evaluate(0.f, 0, false, false) == false);
+    REQUIRE(ca.evaluate(0.f, 0, true, false) == true);
+
+    NF::DialogueCondition cc;
+    cc.type = NF::DialogueConditionType::MissionComplete;
+    REQUIRE(cc.evaluate(0.f, 0, false, false) == false);
+    REQUIRE(cc.evaluate(0.f, 0, false, true) == true);
+}
+
+TEST_CASE("NF::DialogueGraph addNode and getNode", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+
+    NF::DialogueNode node;
+    node.nodeId = 0;
+    node.speakerName = "Merchant";
+    node.text = "Welcome, traveler.";
+    graph.addNode(node);
+
+    REQUIRE(graph.nodeCount() == 1);
+    const NF::DialogueNode* n = graph.getNode(0);
+    REQUIRE(n != nullptr);
+    REQUIRE(n->speakerName == "Merchant");
+    REQUIRE(graph.getNode(99) == nullptr);
+}
+
+TEST_CASE("NF::DialogueRunner traversal", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+
+    NF::DialogueNode n0;
+    n0.nodeId = 0;
+    n0.speakerName = "Guard";
+    n0.text = "Halt! Who goes there?";
+    NF::DialogueOption opt0;
+    opt0.text = "A friend.";
+    opt0.nextNodeId = 1;
+    n0.options.push_back(opt0);
+    graph.addNode(n0);
+
+    NF::DialogueNode n1;
+    n1.nodeId = 1;
+    n1.speakerName = "Guard";
+    n1.text = "Pass, friend.";
+    NF::DialogueOption opt1;
+    opt1.text = "Thank you.";
+    opt1.nextNodeId = -1;
+    n1.options.push_back(opt1);
+    graph.addNode(n1);
+
+    NF::DialogueRunner runner;
+    runner.init(&graph);
+    REQUIRE(runner.isComplete() == false);
+    REQUIRE(runner.currentNode()->text == "Halt! Who goes there?");
+
+    runner.selectOption(0);
+    REQUIRE(runner.currentNodeId() == 1);
+    REQUIRE(runner.currentNode()->text == "Pass, friend.");
+
+    runner.selectOption(0);
+    REQUIRE(runner.isComplete() == true);
+}
+
+TEST_CASE("NF::DialogueRunner selectOption with effect", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+
+    NF::DialogueNode n0;
+    n0.nodeId = 0;
+    n0.speakerName = "Broker";
+    n0.text = "Deal?";
+    NF::DialogueOption opt;
+    opt.text = "Yes.";
+    opt.nextNodeId = -1;
+    opt.effect.reputationFactionId = NF::StringID("traders");
+    opt.effect.reputationDelta = 10.f;
+    n0.options.push_back(opt);
+    graph.addNode(n0);
+
+    NF::DialogueRunner runner;
+    runner.init(&graph);
+    const NF::DialogueEffect* fx = runner.selectOption(0);
+    REQUIRE(fx != nullptr);
+    REQUIRE(fx->reputationFactionId == NF::StringID("traders"));
+    REQUIRE(fx->reputationDelta == Catch::Approx(10.f));
+    REQUIRE(runner.isComplete() == true);
+}
+
+TEST_CASE("NF::DialogueRunner invalid option returns nullptr", "[g11]") {
+    NF::DialogueGraph graph;
+    graph.setStartNodeId(0);
+    NF::DialogueNode n0;
+    n0.nodeId = 0;
+    n0.text = "Hi.";
+    graph.addNode(n0);
+
+    NF::DialogueRunner runner;
+    runner.init(&graph);
+    REQUIRE(runner.selectOption(5) == nullptr);
+}
+
+// ── G12: Save/Load System ─────────────────────────────────────────
+
+TEST_CASE("SaveSystem init creates empty slots", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+    REQUIRE(sys.usedSlotCount() == 0);
+    auto slots = sys.listSlots();
+    REQUIRE((int)slots.size() == NF::SaveSystem::kMaxSlots);
+    for (const auto& s : slots) REQUIRE(s.isEmpty);
+}
+
+TEST_CASE("SaveSystem saveGame and loadGame round-trip", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+
+    NF::SaveData data;
+    data.playerHealth    = 75.f;
+    data.playerEnergy    = 50.f;
+    data.playerPosition  = {10.f, 2.f, -5.f};
+    data.currentSector   = "Sector7";
+    data.inventory["RawIron"] = 3;
+    data.activeMissionIds.push_back("mission_01");
+    data.reputation["pirates"] = -25.f;
+    data.playtimeSeconds = 123.f;
+
+    REQUIRE(sys.saveGame(1, data, "Save1"));
+    REQUIRE_FALSE(sys.slot(1).isEmpty);
+    REQUIRE(sys.slot(1).name == "Save1");
+    REQUIRE(sys.usedSlotCount() == 1);
+
+    const NF::SaveData* loaded = sys.loadGame(1);
+    REQUIRE(loaded != nullptr);
+    REQUIRE(loaded->playerHealth  == Catch::Approx(75.f));
+    REQUIRE(loaded->playerEnergy  == Catch::Approx(50.f));
+    REQUIRE(loaded->currentSector == "Sector7");
+    REQUIRE(loaded->inventory.at("RawIron") == 3);
+    REQUIRE(loaded->activeMissionIds.size() == 1);
+    REQUIRE(loaded->activeMissionIds[0] == "mission_01");
+    REQUIRE(loaded->reputation.at("pirates") == Catch::Approx(-25.f));
+}
+
+TEST_CASE("SaveSystem deleteSlot clears slot", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+
+    NF::SaveData d;
+    d.playerHealth = 100.f;
+    sys.saveGame(2, d, "SlotTwo");
+    REQUIRE_FALSE(sys.slot(2).isEmpty);
+
+    REQUIRE(sys.deleteSlot(2));
+    REQUIRE(sys.slot(2).isEmpty);
+    REQUIRE(sys.usedSlotCount() == 0);
+}
+
+TEST_CASE("SaveSystem loadGame returns nullptr for empty slot", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+    REQUIRE(sys.loadGame(3) == nullptr);
+}
+
+TEST_CASE("SaveSystem autoSave triggers after interval", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+    sys.enableAutoSave(true);
+    sys.setAutoSaveInterval(10.f);  // 10 seconds for test
+
+    NF::SaveData d;
+    d.playerHealth = 80.f;
+
+    // Tick just under the interval — no auto-save yet
+    sys.tickAutoSave(9.f, d);
+    REQUIRE(sys.slot(NF::SaveSystem::kAutoSaveSlot).isEmpty);
+
+    // Tick past the interval — auto-save fires
+    sys.tickAutoSave(2.f, d);
+    REQUIRE_FALSE(sys.slot(NF::SaveSystem::kAutoSaveSlot).isEmpty);
+    REQUIRE(sys.slot(NF::SaveSystem::kAutoSaveSlot).name == "AutoSave");
+}
+
+TEST_CASE("GameSaveSerializer toJson fromJson round-trip", "[Game][SaveSystem]") {
+    NF::SaveData original;
+    original.playerHealth    = 42.f;
+    original.currentSector   = "AlphaZone";
+    original.inventory["Circuits"] = 7;
+    original.completedMissionIds.push_back("m_done");
+
+    NF::JsonValue j = NF::GameSaveSerializer::toJson(original);
+    NF::SaveData  rt = NF::GameSaveSerializer::fromJson(j);
+
+    REQUIRE(rt.playerHealth == Catch::Approx(42.f));
+    REQUIRE(rt.currentSector == "AlphaZone");
+    REQUIRE(rt.inventory.at("Circuits") == 7);
+    REQUIRE(rt.completedMissionIds.size() == 1);
+    REQUIRE(rt.completedMissionIds[0] == "m_done");
+}
+
+// ── G13: World Events System ──────────────────────────────────────
+
+TEST_CASE("WorldEventSystem spawn and query active events", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    int id = wes.spawnEvent(NF::WorldEventType::PirateRaid, "SectorAlpha", 60.f, 0.8f, "Raiders!");
+    REQUIRE(id > 0);
+    REQUIRE(wes.activeEventCount() == 1);
+
+    auto active = wes.getActiveEvents();
+    REQUIRE(active.size() == 1);
+    REQUIRE(active[0].type == NF::WorldEventType::PirateRaid);
+    REQUIRE(active[0].sectorId == "SectorAlpha");
+}
+
+TEST_CASE("WorldEventSystem endEvent marks event inactive", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    int id = wes.spawnEvent(NF::WorldEventType::TradeOpportunity, "Bazaar", 120.f, 0.5f, "Sale!");
+    REQUIRE(wes.activeEventCount() == 1);
+
+    REQUIRE(wes.endEvent(id));
+    REQUIRE(wes.activeEventCount() == 0);
+}
+
+TEST_CASE("WorldEventSystem tick expires events by duration", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    wes.spawnEvent(NF::WorldEventType::AsteroidStorm, "Belt", 5.f, 0.3f, "Storm!");
+    REQUIRE(wes.activeEventCount() == 1);
+
+    wes.tick(3.f);
+    REQUIRE(wes.activeEventCount() == 1);  // not yet expired
+
+    wes.tick(3.f);  // total 6s > 5s duration
+    REQUIRE(wes.activeEventCount() == 0);
+}
+
+TEST_CASE("WorldEventSystem getEventsInSector filters correctly", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    wes.spawnEvent(NF::WorldEventType::Plague,  "SectorA", 100.f, 0.4f, "Illness");
+    wes.spawnEvent(NF::WorldEventType::FactionWar, "SectorB", 100.f, 0.9f, "War");
+
+    auto sectorA = wes.getEventsInSector("SectorA");
+    REQUIRE(sectorA.size() == 1);
+    REQUIRE(sectorA[0].type == NF::WorldEventType::Plague);
+
+    auto sectorB = wes.getEventsInSector("SectorB");
+    REQUIRE(sectorB.size() == 1);
+    REQUIRE(sectorB[0].type == NF::WorldEventType::FactionWar);
+
+    REQUIRE(wes.getEventsInSector("SectorC").empty());
+}
+
+TEST_CASE("WorldEventType name conversion covers all types", "[Game][WorldEvents]") {
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::AsteroidStorm)    == "AsteroidStorm");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::PirateRaid)       == "PirateRaid");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::TechDiscovery)    == "TechDiscovery");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::FactionWar)       == "FactionWar");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::TradeOpportunity) == "TradeOpportunity");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::Plague)           == "Plague");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::CelestialAnomaly) == "CelestialAnomaly");
+}
+
+TEST_CASE("WorldEvent effect severity scales modifiers", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    // PirateRaid at high severity should increase danger modifier
+    int id = wes.spawnEvent(NF::WorldEventType::PirateRaid, "S", 60.f, 1.0f, "desc");
+    const NF::WorldEvent* ev = wes.findEvent(id);
+    REQUIRE(ev != nullptr);
+    REQUIRE(ev->effect.dangerModifier > 1.f);
+    REQUIRE(ev->effect.reputationChange < 0.f);
+
+    // TradeOpportunity should reduce prices
+    int id2 = wes.spawnEvent(NF::WorldEventType::TradeOpportunity, "S2", 60.f, 1.0f, "desc");
+    const NF::WorldEvent* ev2 = wes.findEvent(id2);
+    REQUIRE(ev2 != nullptr);
+    REQUIRE(ev2->effect.priceModifier < 1.f);
+}
+
+TEST_CASE("WorldEvent remainingTime decreases on tick", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    int id = wes.spawnEvent(NF::WorldEventType::CelestialAnomaly, "Void", 30.f, 0.5f, "Anomaly");
+    wes.tick(10.f);
+    const NF::WorldEvent* ev = wes.findEvent(id);
+    REQUIRE(ev != nullptr);
+    REQUIRE(ev->remainingTime() == Catch::Approx(20.f));
+}
+
+// ── G14: Tech Tree ───────────────────────────────────────────────
+
+TEST_CASE("TechTree addNode and canResearch root node", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode n;
+    n.id = "basic_weapons";
+    n.displayName = "Basic Weapons";
+    n.category = NF::TechCategory::Weapons;
+    n.tier = 1;
+    n.cost = 50;
+    tree.addNode(n);
+
+    // Root node (no prereqs) should be researchable immediately
+    REQUIRE(tree.canResearch("basic_weapons"));
+    REQUIRE(tree.nodeCount() == 1);
+    REQUIRE(tree.researchedCount() == 0);
+}
+
+TEST_CASE("TechTree unlock node and prerequisite chain", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode root;
+    root.id = "shields_t1";
+    root.tier = 1;
+    tree.addNode(root);
+
+    NF::TechNode child;
+    child.id = "shields_t2";
+    child.tier = 2;
+    child.prerequisites.push_back("shields_t1");
+    tree.addNode(child);
+
+    // Child not researchable yet
+    REQUIRE_FALSE(tree.canResearch("shields_t2"));
+
+    // Unlock root
+    REQUIRE(tree.unlock("shields_t1"));
+    REQUIRE(tree.isUnlocked("shields_t1"));
+    REQUIRE(tree.researchedCount() == 1);
+
+    // Now child is researchable
+    REQUIRE(tree.canResearch("shields_t2"));
+    REQUIRE(tree.unlock("shields_t2"));
+    REQUIRE(tree.isUnlocked("shields_t2"));
+    REQUIRE(tree.researchedCount() == 2);
+}
+
+TEST_CASE("TechTree unlock already-researched node returns false", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode n;
+    n.id = "prop_basic";
+    tree.addNode(n);
+
+    REQUIRE(tree.unlock("prop_basic"));
+    REQUIRE_FALSE(tree.unlock("prop_basic"));  // already researched
+}
+
+TEST_CASE("TechTree getAvailable lists only researchable nodes", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode a;
+    a.id = "a";
+    tree.addNode(a);
+
+    NF::TechNode b;
+    b.id = "b";
+    b.prerequisites.push_back("a");
+    tree.addNode(b);
+
+    auto avail = tree.getAvailable();
+    REQUIRE(avail.size() == 1);
+    REQUIRE(avail[0] == "a");
+
+    tree.unlock("a");
+    avail = tree.getAvailable();
+    REQUIRE(avail.size() == 1);
+    REQUIRE(avail[0] == "b");
+}
+
+TEST_CASE("TechTree computeBonuses aggregates researched nodes", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode n1;
+    n1.id = "dmg1";
+    n1.damageBonus = 5.f;
+    tree.addNode(n1);
+
+    NF::TechNode n2;
+    n2.id = "dmg2";
+    n2.damageBonus = 3.f;
+    n2.miningBonus = 2.f;
+    tree.addNode(n2);
+
+    // Nothing researched yet
+    auto b = tree.computeBonuses();
+    REQUIRE(b.damage == Catch::Approx(0.f));
+
+    tree.unlock("dmg1");
+    tree.unlock("dmg2");
+
+    b = tree.computeBonuses();
+    REQUIRE(b.damage == Catch::Approx(8.f));
+    REQUIRE(b.mining == Catch::Approx(2.f));
+}
+
+TEST_CASE("TechTree getByTier filters correctly", "[Game][TechTree]") {
+    NF::TechTree tree;
+
+    NF::TechNode t1a; t1a.id = "t1a"; t1a.tier = 1; tree.addNode(t1a);
+    NF::TechNode t1b; t1b.id = "t1b"; t1b.tier = 1; tree.addNode(t1b);
+    NF::TechNode t2a; t2a.id = "t2a"; t2a.tier = 2; tree.addNode(t2a);
+
+    REQUIRE(tree.getByTier(1).size() == 2);
+    REQUIRE(tree.getByTier(2).size() == 1);
+    REQUIRE(tree.getByTier(3).empty());
+}
+
+TEST_CASE("TechCategory name round-trip", "[Game][TechTree]") {
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Weapons)      == "Weapons");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Shields)      == "Shields");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Propulsion)   == "Propulsion");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Mining)       == "Mining");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Construction) == "Construction");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Biology)      == "Biology");
+    REQUIRE(NF::techCategoryName(NF::TechCategory::Computing)    == "Computing");
+}
+
+// ── G15: Player Progression ───────────────────────────────────────
+
+TEST_CASE("PlayerLevel init starts at given level", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(1);
+    REQUIRE(pl.currentLevel() == 1);
+    REQUIRE(pl.xpThisLevel() == 0);
+    REQUIRE_FALSE(pl.isMaxLevel());
+}
+
+TEST_CASE("PlayerLevel addXP causes level up", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(1);
+
+    int needed = pl.xpToNextLevel();
+    REQUIRE(needed > 0);
+
+    int gained = pl.addXP(needed);
+    REQUIRE(gained == 1);
+    REQUIRE(pl.currentLevel() == 2);
+}
+
+TEST_CASE("PlayerLevel progressToNextLevel returns 0-1 fraction", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(1);
+
+    int needed = pl.xpToNextLevel();
+    pl.addXP(needed / 2);
+
+    float progress = pl.progressToNextLevel();
+    REQUIRE(progress > 0.f);
+    REQUIRE(progress < 1.f);
+}
+
+TEST_CASE("PlayerLevel caps at max level", "[Game][Progression]") {
+    NF::PlayerLevel pl;
+    pl.init(NF::PlayerLevel::kMaxLevel);
+    REQUIRE(pl.isMaxLevel());
+    REQUIRE(pl.xpToNextLevel() == 0);
+
+    int gained = pl.addXP(10000);
+    REQUIRE(gained == 0);  // no more levels
+}
+
+TEST_CASE("SkillTree unlockSkill respects level requirement", "[Game][Progression]") {
+    NF::SkillTree st;
+
+    NF::SkillNode sk;
+    sk.id = "heavy_mining";
+    sk.requiredLevel = 5;
+    sk.pointCost = 1;
+    sk.miningBonus = 10.f;
+    st.addSkill(sk);
+
+    int points = 5;
+    // Level too low
+    REQUIRE_FALSE(st.unlockSkill("heavy_mining", 3, points));
+    REQUIRE(points == 5);
+
+    // Level sufficient
+    REQUIRE(st.unlockSkill("heavy_mining", 5, points));
+    REQUIRE(points == 4);
+    REQUIRE(st.isUnlocked("heavy_mining"));
+}
+
+TEST_CASE("SkillTree computeBonuses aggregates unlocked skills", "[Game][Progression]") {
+    NF::SkillTree st;
+
+    NF::SkillNode s1; s1.id = "hp1"; s1.healthBonus = 20.f; s1.requiredLevel = 1; s1.pointCost = 1;
+    NF::SkillNode s2; s2.id = "hp2"; s2.healthBonus = 15.f; s2.requiredLevel = 1; s2.pointCost = 1;
+    st.addSkill(s1);
+    st.addSkill(s2);
+
+    int pts = 10;
+    st.unlockSkill("hp1", 1, pts);
+    st.unlockSkill("hp2", 1, pts);
+
+    auto b = st.computeBonuses();
+    REQUIRE(b.health == Catch::Approx(35.f));
+}
+
+TEST_CASE("ProgressionSystem awardXP grants skill points on level-up", "[Game][Progression]") {
+    NF::ProgressionSystem prog;
+    prog.init(1);
+
+    REQUIRE(prog.skillPoints() == 0);
+
+    int needed = prog.level().xpToNextLevel();
+    prog.awardXP(needed);
+
+    REQUIRE(prog.level().currentLevel() == 2);
+    REQUIRE(prog.skillPoints() == 1);
+}
+
+TEST_CASE("ProgressionSystem spendSkillPoint unlocks skill", "[Game][Progression]") {
+    NF::ProgressionSystem prog;
+    prog.init(1);
+
+    NF::SkillNode sk;
+    sk.id = "fast_drill";
+    sk.requiredLevel = 1;
+    sk.pointCost = 1;
+    sk.miningBonus = 5.f;
+    prog.skillTree().addSkill(sk);
+
+    // No skill points yet
+    REQUIRE_FALSE(prog.spendSkillPoint("fast_drill"));
+
+    // Level up to get a skill point
+    prog.awardXP(prog.level().xpToNextLevel());
+    REQUIRE(prog.skillPoints() == 1);
+
+    REQUIRE(prog.spendSkillPoint("fast_drill"));
+    REQUIRE(prog.skillPoints() == 0);
+    REQUIRE(prog.bonuses().mining == Catch::Approx(5.f));
+}
+
+// ── G16: Crafting System ─────────────────────────────────────────
+
+TEST_CASE("CraftingCategory names", "[Game][Crafting]") {
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Weapon)     == "Weapon");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Armor)      == "Armor");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Tool)       == "Tool");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Component)  == "Component");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Consumable) == "Consumable");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Fuel)       == "Fuel");
+    REQUIRE(NF::craftingCategoryName(NF::CraftingCategory::Decoration) == "Decoration");
+}
+
+TEST_CASE("CraftingQueue enqueue and tick to completion", "[Game][Crafting]") {
+    NF::CraftingQueue q;
+    REQUIRE(q.isEmpty());
+
+    q.enqueue("iron_plate", 3.f);
+    REQUIRE(q.pendingCount() == 1);
+
+    q.tick(2.f);
+    auto done = q.collectCompleted();
+    REQUIRE(done.empty());
+
+    q.tick(2.f);
+    done = q.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "iron_plate");
+    REQUIRE(q.isEmpty());
+}
+
+TEST_CASE("CraftingQueue processes jobs in FIFO order", "[Game][Crafting]") {
+    NF::CraftingQueue q;
+    q.enqueue("a", 1.f);
+    q.enqueue("b", 1.f);
+
+    q.tick(1.5f);
+    auto done = q.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "a");
+
+    q.tick(1.5f);
+    done = q.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "b");
+}
+
+TEST_CASE("CraftingSystem registerRecipe and canCraft", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe recipe;
+    recipe.recipeId = "steel_bar";
+    recipe.outputItemId = "steel";
+    recipe.category = NF::CraftingCategory::Component;
+    recipe.craftTime = 4.f;
+    recipe.ingredients.push_back({"iron", 2});
+    recipe.ingredients.push_back({"coal", 1});
+    cs.registerRecipe(recipe);
+
+    REQUIRE(cs.recipeCount() == 1);
+    REQUIRE(cs.findRecipe("steel_bar") != nullptr);
+
+    std::map<std::string, int> inv = {{"iron", 5}, {"coal", 3}};
+    REQUIRE(cs.canCraft("steel_bar", inv));
+
+    std::map<std::string, int> noCoal = {{"iron", 5}};
+    REQUIRE_FALSE(cs.canCraft("steel_bar", noCoal));
+}
+
+TEST_CASE("CraftingSystem enqueue deducts ingredients", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe recipe;
+    recipe.recipeId = "circuit";
+    recipe.craftTime = 2.f;
+    recipe.ingredients.push_back({"copper", 3});
+    cs.registerRecipe(recipe);
+
+    std::map<std::string, int> inv = {{"copper", 5}};
+    REQUIRE(cs.enqueue("circuit", inv));
+    REQUIRE(inv["copper"] == 2);
+
+    cs.tick(3.f);
+    auto done = cs.collectCompleted();
+    REQUIRE(done.size() == 1);
+    REQUIRE(done[0] == "circuit");
+}
+
+TEST_CASE("CraftingSystem canCraft respects required level", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe recipe;
+    recipe.recipeId = "advanced_laser";
+    recipe.requiredLevel = 10;
+    recipe.craftTime = 1.f;
+    cs.registerRecipe(recipe);
+
+    std::map<std::string, int> inv;
+    REQUIRE_FALSE(cs.canCraft("advanced_laser", inv, 5));
+    REQUIRE(cs.canCraft("advanced_laser", inv, 10));
+}
+
+TEST_CASE("CraftingSystem recipesByCategory filters", "[Game][Crafting]") {
+    NF::CraftingSystem cs;
+
+    NF::CraftingRecipe r1; r1.recipeId = "sword"; r1.category = NF::CraftingCategory::Weapon;
+    NF::CraftingRecipe r2; r2.recipeId = "potion"; r2.category = NF::CraftingCategory::Consumable;
+    NF::CraftingRecipe r3; r3.recipeId = "axe"; r3.category = NF::CraftingCategory::Weapon;
+    cs.registerRecipe(r1);
+    cs.registerRecipe(r2);
+    cs.registerRecipe(r3);
+
+    auto weapons = cs.recipesByCategory(NF::CraftingCategory::Weapon);
+    REQUIRE(weapons.size() == 2);
+    REQUIRE(cs.recipesByCategory(NF::CraftingCategory::Consumable).size() == 1);
+}
+
+TEST_CASE("CraftingJob progress tracks correctly", "[Game][Crafting]") {
+    NF::CraftingJob job;
+    job.recipeId = "test";
+    job.duration = 10.f;
+
+    REQUIRE(job.progress() == Catch::Approx(0.f));
+    job.tick(5.f);
+    REQUIRE(job.progress() == Catch::Approx(0.5f));
+    job.tick(5.f);
+    REQUIRE(job.complete);
+    REQUIRE(job.progress() == Catch::Approx(1.f));
+}
+
+// ── G17: Inventory & Equipment ───────────────────────────────────
+
+TEST_CASE("ItemRarity and ItemSlot names", "[Game][Inventory]") {
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Common)    == "Common");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Uncommon)  == "Uncommon");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Rare)      == "Rare");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Epic)      == "Epic");
+    REQUIRE(NF::itemRarityName(NF::ItemRarity::Legendary) == "Legendary");
+
+    REQUIRE(NF::itemSlotName(NF::ItemSlot::Head)   == "Head");
+    REQUIRE(NF::itemSlotName(NF::ItemSlot::Weapon) == "Weapon");
+    REQUIRE(NF::itemSlotName(NF::ItemSlot::Shield) == "Shield");
+}
+
+TEST_CASE("Inventory addItem and stacking", "[Game][Inventory]") {
+    NF::PlayerInventory inv(10);
+    REQUIRE(inv.freeSlots() == 10);
+
+    NF::Item iron;
+    iron.id = "iron_ore";
+    iron.count = 5;
+    iron.stackMax = 20;
+
+    int leftover = inv.addItem(iron);
+    REQUIRE(leftover == 0);
+    REQUIRE(inv.usedSlots() == 1);
+    REQUIRE(inv.countItem("iron_ore") == 5);
+
+    // Stack onto same slot
+    iron.count = 10;
+    leftover = inv.addItem(iron);
+    REQUIRE(leftover == 0);
+    REQUIRE(inv.usedSlots() == 1);
+    REQUIRE(inv.countItem("iron_ore") == 15);
+}
+
+TEST_CASE("Inventory removeItem", "[Game][Inventory]") {
+    NF::PlayerInventory inv(10);
+
+    NF::Item item;
+    item.id = "gem";
+    item.count = 8;
+    item.stackMax = 99;
+    inv.addItem(item);
+
+    int removed = inv.removeItem("gem", 3);
+    REQUIRE(removed == 3);
+    REQUIRE(inv.countItem("gem") == 5);
+
+    removed = inv.removeItem("gem", 10);
+    REQUIRE(removed == 5);
+    REQUIRE(inv.countItem("gem") == 0);
+    REQUIRE(inv.usedSlots() == 0);
+}
+
+TEST_CASE("Inventory capacity limit", "[Game][Inventory]") {
+    NF::PlayerInventory inv(2);
+
+    NF::Item a; a.id = "a"; a.count = 1; a.stackMax = 1;
+    NF::Item b; b.id = "b"; b.count = 1; b.stackMax = 1;
+    NF::Item c; c.id = "c"; c.count = 1; c.stackMax = 1;
+
+    REQUIRE(inv.addItem(a) == 0);
+    REQUIRE(inv.addItem(b) == 0);
+    REQUIRE(inv.isFull());
+
+    int left = inv.addItem(c);
+    REQUIRE(left == 1);   // couldn't fit
+}
+
+TEST_CASE("Inventory toCountMap", "[Game][Inventory]") {
+    NF::PlayerInventory inv(10);
+
+    NF::Item iron; iron.id = "iron"; iron.count = 5; iron.stackMax = 99;
+    NF::Item coal; coal.id = "coal"; coal.count = 3; coal.stackMax = 99;
+    inv.addItem(iron);
+    inv.addItem(coal);
+
+    auto m = inv.toCountMap();
+    REQUIRE(m["iron"] == 5);
+    REQUIRE(m["coal"] == 3);
+}
+
+TEST_CASE("EquipmentLoadout equip and unequip", "[Game][Equipment]") {
+    NF::EquipmentLoadout eq;
+
+    NF::Item helmet;
+    helmet.id = "iron_helm";
+    helmet.slot = NF::ItemSlot::Head;
+    helmet.armorBonus = 5.f;
+
+    eq.equip(helmet);
+    REQUIRE(eq.isSlotOccupied(NF::ItemSlot::Head));
+    REQUIRE(eq.equippedCount() == 1);
+
+    auto prev = eq.unequip(NF::ItemSlot::Head);
+    REQUIRE(prev == "iron_helm");
+    REQUIRE_FALSE(eq.isSlotOccupied(NF::ItemSlot::Head));
+}
+
+TEST_CASE("EquipmentLoadout replaces existing and computes bonuses", "[Game][Equipment]") {
+    NF::EquipmentLoadout eq;
+
+    NF::Item sword1;
+    sword1.id = "rusty_sword";
+    sword1.slot = NF::ItemSlot::Weapon;
+    sword1.damageBonus = 3.f;
+
+    NF::Item sword2;
+    sword2.id = "steel_sword";
+    sword2.slot = NF::ItemSlot::Weapon;
+    sword2.damageBonus = 8.f;
+
+    eq.equip(sword1);
+    auto prev = eq.equip(sword2);
+    REQUIRE(prev == "rusty_sword");
+    REQUIRE(eq.equippedCount() == 1);
+
+    auto b = eq.computeBonuses();
+    REQUIRE(b.damage == Catch::Approx(8.f));
+}
+
+TEST_CASE("EquipmentLoadout computeBonuses aggregates all slots", "[Game][Equipment]") {
+    NF::EquipmentLoadout eq;
+
+    NF::Item helm;  helm.id = "h";  helm.slot = NF::ItemSlot::Head;   helm.armorBonus = 5.f;
+    NF::Item chest; chest.id = "c"; chest.slot = NF::ItemSlot::Chest;  chest.armorBonus = 10.f; chest.healthBonus = 20.f;
+    NF::Item wpn;   wpn.id = "w";   wpn.slot = NF::ItemSlot::Weapon;  wpn.damageBonus = 7.f;
+
+    eq.equip(helm);
+    eq.equip(chest);
+    eq.equip(wpn);
+
+    auto b = eq.computeBonuses();
+    REQUIRE(b.armor  == Catch::Approx(15.f));
+    REQUIRE(b.health == Catch::Approx(20.f));
+    REQUIRE(b.damage == Catch::Approx(7.f));
+    REQUIRE(eq.equippedCount() == 3);
+}

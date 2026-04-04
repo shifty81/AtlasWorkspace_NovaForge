@@ -55,6 +55,16 @@ if(NF_BUILD_TESTS)
 endif()
 
 # ── Summary ────────────────────────────────────────────────────────
+# ── Visual Studio startup project ──────────────────────────────────
+# Prevents "Access is denied" when running ALL_BUILD in VS.
+if(NF_BUILD_EDITOR)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                 PROPERTY VS_STARTUP_PROJECT NovaForgeEditor)
+elseif(NF_BUILD_GAME)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                 PROPERTY VS_STARTUP_PROJECT NovaForgeGame)
+endif()
+
 message(STATUS "")
 message(STATUS "╔══════════════════════════════════════════╗")
 message(STATUS "║       NovaForge ${PROJECT_VERSION}                    ║")
