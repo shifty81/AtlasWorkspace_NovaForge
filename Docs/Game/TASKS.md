@@ -99,7 +99,7 @@
 - [x] GraphSerializer (JSON round-trip for programs and graphs)
 - [x] Graph types (14 types: World, Strategy, Conversation, Behavior, etc.)
 - [x] Expand test coverage (249 tests, up from 212)
-- [ ] Wire into editor panels (graph node editor UI)
+- [x] Wire into editor panels (graph node editor UI)
 - [ ] Validate: graph round-trip
 
 ## Phase 6 — Server & Networking
@@ -301,4 +301,22 @@
 - [x] DialogueNode struct (nodeId, speakerName, text, options)
 - [x] DialogueGraph class (setStartNodeId, addNode, getNode, nodeCount)
 - [x] DialogueRunner class (init, currentNode, selectOption, isComplete)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G12 — Save/Load System
+
+- [x] SaveSlot struct (slotIndex, name, timestamp, playtimeSeconds, isEmpty)
+- [x] SaveData struct (playerPosition, health, energy, oxygen, playtime, inventory map, active/completed missions, reputation, currentSector)
+- [x] GameSaveSerializer (toJson/fromJson full round-trip for SaveData)
+- [x] SaveSystem class (init, saveGame, loadGame, deleteSlot, listSlots, usedSlotCount)
+- [x] Auto-save support (enableAutoSave, setAutoSaveInterval, tickAutoSave with slot 0)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G13 — World Events System
+
+- [x] WorldEventType enum (AsteroidStorm, PirateRaid, TechDiscovery, FactionWar, TradeOpportunity, Plague, CelestialAnomaly) with worldEventTypeName()
+- [x] EventEffect struct (priceModifier, dangerModifier, reputationChange, resourceBonus)
+- [x] WorldEvent struct (eventId, type, sectorId, description, duration, elapsed, severity, isActive, tick, isExpired, remainingTime)
+- [x] WorldEventSystem class (init, spawnEvent, endEvent, tick, getActiveEvents, getEventsInSector, findEvent, activeEventCount)
+- [x] Severity-scaled EventEffect building (buildEffect per event type)
 - [x] Comprehensive test coverage (7 new tests)

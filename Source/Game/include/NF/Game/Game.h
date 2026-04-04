@@ -2799,4 +2799,377 @@ private:
     DialogueEffect m_lastEffect;
 };
 
+// ── Game Phase G12 — Save/Load System ────────────────────────────
+
+struct SaveSlot {
+    int         slotIndex   = 0;
+    std::string name;
+    std::string timestamp;
+    float       playtimeSeconds = 0.f;
+    bool        isEmpty = true;
+};
+
+struct SaveData {
+    // Player state
+    Vec3  playerPosition{0.f, 0.f, 0.f};
+    float playerHealth    = 100.f;
+    float playerEnergy    = 100.f;
+    float playerOxygen    = 100.f;
+    float playtimeSeconds = 0.f;
+
+    // Inventory
+    std::map<std::string, int> inventory;
+
+    // Active missions (by id)
+    std::vector<std::string> activeMissionIds;
+    std::vector<std::string> completedMissionIds;
+
+    // Reputation per faction
+    std::map<std::string, float> reputation;
+
+    // Current sector name
+    std::string currentSector;
+};
+
+class GameSaveSerializer {
+public:
+    static JsonValue toJson(const SaveData& data) {
+        JsonValue root;
+        // Player state
+        root["playerHealth"]    = JsonValue(data.playerHealth);
+        root["playerEnergy"]    = JsonValue(data.playerEnergy);
+        root["playerOxygen"]    = JsonValue(data.playerOxygen);
+        root["playtimeSeconds"] = JsonValue(data.playtimeSeconds);
+        root["currentSector"]   = JsonValue(data.currentSector);
+
+        // Position
+        JsonValue pos;
+        pos["x"] = JsonValue(data.playerPosition.x);
+        pos["y"] = JsonValue(data.playerPosition.y);
+        pos["z"] = JsonValue(data.playerPosition.z);
+        root["position"] = pos;
+
+        // Inventory
+        JsonValue inv;
+        for (const auto& [key, qty] : data.inventory)
+            inv[key] = JsonValue(qty);
+        root["inventory"] = inv;
+
+        // Missions
+        auto activeMissions = JsonValue::array();
+        for (const auto& id : data.activeMissionIds)
+            activeMissions.push(JsonValue(id));
+        root["activeMissions"] = activeMissions;
+
+        auto completedMissions = JsonValue::array();
+        for (const auto& id : data.completedMissionIds)
+            completedMissions.push(JsonValue(id));
+        root["completedMissions"] = completedMissions;
+
+        // Reputation
+        JsonValue rep;
+        for (const auto& [faction, val] : data.reputation)
+            rep[faction] = JsonValue(val);
+        root["reputation"] = rep;
+
+        return root;
+    }
+
+    static SaveData fromJson(const JsonValue& j) {
+        SaveData data;
+        if (j.hasKey("playerHealth"))    data.playerHealth    = j["playerHealth"].asFloat();
+        if (j.hasKey("playerEnergy"))    data.playerEnergy    = j["playerEnergy"].asFloat();
+        if (j.hasKey("playerOxygen"))    data.playerOxygen    = j["playerOxygen"].asFloat();
+        if (j.hasKey("playtimeSeconds")) data.playtimeSeconds = j["playtimeSeconds"].asFloat();
+        if (j.hasKey("currentSector"))   data.currentSector   = j["currentSector"].asString();
+
+        if (j.hasKey("position")) {
+            const auto& pos = j["position"];
+            data.playerPosition.x = pos.hasKey("x") ? pos["x"].asFloat() : 0.f;
+            data.playerPosition.y = pos.hasKey("y") ? pos["y"].asFloat() : 0.f;
+            data.playerPosition.z = pos.hasKey("z") ? pos["z"].asFloat() : 0.f;
+        }
+
+        if (j.hasKey("inventory")) {
+            const auto& inv = j["inventory"];
+            for (const auto& [key, val] : inv.members())
+                data.inventory[key] = val.asInt();
+        }
+
+        if (j.hasKey("activeMissions")) {
+            const auto& arr = j["activeMissions"];
+            for (size_t i = 0; i < arr.size(); ++i)
+                data.activeMissionIds.push_back(arr[i].asString());
+        }
+
+        if (j.hasKey("completedMissions")) {
+            const auto& arr = j["completedMissions"];
+            for (size_t i = 0; i < arr.size(); ++i)
+                data.completedMissionIds.push_back(arr[i].asString());
+        }
+
+        if (j.hasKey("reputation")) {
+            const auto& rep = j["reputation"];
+            for (const auto& [key, val] : rep.members())
+                data.reputation[key] = val.asFloat();
+        }
+
+        return data;
+    }
+};
+
+class SaveSystem {
+public:
+    static constexpr int kMaxSlots = 5;
+
+    void init() {
+        m_slots.resize(kMaxSlots);
+        for (int i = 0; i < kMaxSlots; ++i) {
+            m_slots[i].slotIndex = i;
+            m_slots[i].isEmpty   = true;
+        }
+        NF_LOG_INFO("SaveSystem", "SaveSystem initialized with " +
+                    std::to_string(kMaxSlots) + " slots");
+    }
+
+    // Persist a SaveData into a slot. Returns false if slotIndex is out of range.
+    bool saveGame(int slotIndex, const SaveData& data, const std::string& saveName) {
+        if (slotIndex < 0 || slotIndex >= kMaxSlots) return false;
+        m_saveData[slotIndex]          = data;
+        m_slots[slotIndex].slotIndex   = slotIndex;
+        m_slots[slotIndex].name        = saveName;
+        m_slots[slotIndex].playtimeSeconds = data.playtimeSeconds;
+        m_slots[slotIndex].isEmpty     = false;
+        // Serialise to JsonValue (represents the on-disk representation)
+        m_serialized[slotIndex]        = GameSaveSerializer::toJson(data);
+        NF_LOG_INFO("SaveSystem", "Saved '" + saveName + "' to slot " +
+                    std::to_string(slotIndex));
+        return true;
+    }
+
+    // Load game data from slot. Returns nullptr if slot is empty.
+    const SaveData* loadGame(int slotIndex) {
+        if (slotIndex < 0 || slotIndex >= kMaxSlots) return nullptr;
+        if (m_slots[slotIndex].isEmpty) return nullptr;
+        // Re-deserialize from the stored json (simulates disk round-trip)
+        m_saveData[slotIndex] = GameSaveSerializer::fromJson(m_serialized[slotIndex]);
+        NF_LOG_INFO("SaveSystem", "Loaded slot " + std::to_string(slotIndex));
+        return &m_saveData[slotIndex];
+    }
+
+    bool deleteSlot(int slotIndex) {
+        if (slotIndex < 0 || slotIndex >= kMaxSlots) return false;
+        m_slots[slotIndex].isEmpty = true;
+        m_slots[slotIndex].name.clear();
+        m_saveData.erase(slotIndex);
+        m_serialized.erase(slotIndex);
+        return true;
+    }
+
+    void enableAutoSave(bool enable) { m_autoSaveEnabled = enable; }
+    bool isAutoSaveEnabled() const   { return m_autoSaveEnabled; }
+
+    void tickAutoSave(float dt, const SaveData& data) {
+        if (!m_autoSaveEnabled) return;
+        m_autoSaveTimer += dt;
+        if (m_autoSaveTimer >= m_autoSaveIntervalSeconds) {
+            m_autoSaveTimer = 0.f;
+            saveGame(kAutoSaveSlot, data, "AutoSave");
+        }
+    }
+
+    [[nodiscard]] const SaveSlot& slot(int index) const {
+        static SaveSlot empty;
+        if (index < 0 || index >= kMaxSlots) return empty;
+        return m_slots[index];
+    }
+
+    [[nodiscard]] std::vector<SaveSlot> listSlots() const { return m_slots; }
+
+    int usedSlotCount() const {
+        int count = 0;
+        for (const auto& s : m_slots) if (!s.isEmpty) ++count;
+        return count;
+    }
+
+    static constexpr int kAutoSaveSlot = 0;
+    float autoSaveIntervalSeconds() const { return m_autoSaveIntervalSeconds; }
+    void setAutoSaveInterval(float seconds) { m_autoSaveIntervalSeconds = seconds; }
+
+private:
+    std::vector<SaveSlot>          m_slots;
+    std::map<int, SaveData>        m_saveData;
+    std::map<int, JsonValue>       m_serialized;
+    bool  m_autoSaveEnabled        = false;
+    float m_autoSaveTimer          = 0.f;
+    float m_autoSaveIntervalSeconds = 300.f;  // 5 minutes default
+};
+
+// ── Game Phase G13 — World Events System ─────────────────────────
+
+enum class WorldEventType : uint8_t {
+    AsteroidStorm,
+    PirateRaid,
+    TechDiscovery,
+    FactionWar,
+    TradeOpportunity,
+    Plague,
+    CelestialAnomaly
+};
+
+inline std::string worldEventTypeName(WorldEventType t) {
+    switch (t) {
+        case WorldEventType::AsteroidStorm:    return "AsteroidStorm";
+        case WorldEventType::PirateRaid:       return "PirateRaid";
+        case WorldEventType::TechDiscovery:    return "TechDiscovery";
+        case WorldEventType::FactionWar:       return "FactionWar";
+        case WorldEventType::TradeOpportunity: return "TradeOpportunity";
+        case WorldEventType::Plague:           return "Plague";
+        case WorldEventType::CelestialAnomaly: return "CelestialAnomaly";
+        default: return "Unknown";
+    }
+}
+
+struct EventEffect {
+    float priceModifier      = 1.f;   // multiplier on buy/sell prices
+    float dangerModifier     = 1.f;   // multiplier on encounter danger
+    float reputationChange   = 0.f;   // flat reputation change on resolution
+    float resourceBonus      = 0.f;   // extra resource yield while active
+};
+
+struct WorldEvent {
+    int            eventId        = 0;
+    WorldEventType type           = WorldEventType::AsteroidStorm;
+    std::string    sectorId;
+    std::string    description;
+    float          duration       = 60.f;  // seconds until expiry
+    float          elapsed        = 0.f;
+    float          severity       = 1.f;   // 0-1
+    bool           isActive       = true;
+    EventEffect    effect;
+
+    bool isExpired() const { return elapsed >= duration; }
+    float remainingTime() const { return std::max(0.f, duration - elapsed); }
+    void tick(float dt) { if (isActive) elapsed += dt; }
+};
+
+class WorldEventSystem {
+public:
+    void init() {
+        m_nextEventId = 1;
+        NF_LOG_INFO("WorldEvents", "WorldEventSystem initialized");
+    }
+
+    // Spawn a new event in the specified sector. Returns the assigned event ID.
+    int spawnEvent(WorldEventType type, const std::string& sectorId,
+                   float duration, float severity, const std::string& description) {
+        WorldEvent ev;
+        ev.eventId     = m_nextEventId++;
+        ev.type        = type;
+        ev.sectorId    = sectorId;
+        ev.duration    = duration;
+        ev.severity    = std::max(0.f, std::min(1.f, severity));
+        ev.description = description;
+        ev.isActive    = true;
+        ev.effect      = buildEffect(type, ev.severity);
+        m_events.push_back(ev);
+        NF_LOG_INFO("WorldEvents", "Spawned " + worldEventTypeName(type) +
+                    " in '" + sectorId + "' id=" + std::to_string(ev.eventId));
+        return ev.eventId;
+    }
+
+    // Manually end an event before it expires.
+    bool endEvent(int eventId) {
+        for (auto& ev : m_events) {
+            if (ev.eventId == eventId && ev.isActive) {
+                ev.isActive = false;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Advance all active events; expired events are marked inactive.
+    void tick(float dt) {
+        for (auto& ev : m_events) {
+            if (!ev.isActive) continue;
+            ev.tick(dt);
+            if (ev.isExpired()) ev.isActive = false;
+        }
+        // Prune fully-expired events beyond a history window
+        while (m_events.size() > kMaxHistorySize) {
+            m_events.erase(m_events.begin());
+        }
+    }
+
+    [[nodiscard]] std::vector<WorldEvent> getActiveEvents() const {
+        std::vector<WorldEvent> out;
+        for (const auto& ev : m_events)
+            if (ev.isActive) out.push_back(ev);
+        return out;
+    }
+
+    [[nodiscard]] std::vector<WorldEvent> getEventsInSector(const std::string& sectorId) const {
+        std::vector<WorldEvent> out;
+        for (const auto& ev : m_events)
+            if (ev.sectorId == sectorId) out.push_back(ev);
+        return out;
+    }
+
+    [[nodiscard]] const WorldEvent* findEvent(int eventId) const {
+        for (const auto& ev : m_events)
+            if (ev.eventId == eventId) return &ev;
+        return nullptr;
+    }
+
+    int activeEventCount() const {
+        int n = 0;
+        for (const auto& ev : m_events) if (ev.isActive) ++n;
+        return n;
+    }
+
+    int totalEventCount() const { return (int)m_events.size(); }
+
+    static constexpr size_t kMaxHistorySize = 100;
+
+private:
+    static EventEffect buildEffect(WorldEventType type, float severity) {
+        EventEffect e;
+        switch (type) {
+            case WorldEventType::AsteroidStorm:
+                e.dangerModifier = 1.f + severity;
+                break;
+            case WorldEventType::PirateRaid:
+                e.dangerModifier   = 1.f + severity * 2.f;
+                e.reputationChange = -5.f * severity;
+                break;
+            case WorldEventType::TechDiscovery:
+                e.reputationChange = 10.f * severity;
+                e.resourceBonus    = 0.5f * severity;
+                break;
+            case WorldEventType::FactionWar:
+                e.dangerModifier   = 1.5f + severity;
+                e.priceModifier    = 1.f + 0.3f * severity;
+                break;
+            case WorldEventType::TradeOpportunity:
+                e.priceModifier  = 1.f - 0.3f * severity;  // discounted prices
+                e.resourceBonus  = 1.f * severity;
+                break;
+            case WorldEventType::Plague:
+                e.dangerModifier   = 1.f + 0.5f * severity;
+                e.reputationChange = -2.f * severity;
+                break;
+            case WorldEventType::CelestialAnomaly:
+                e.resourceBonus = 2.f * severity;
+                break;
+            default:
+                break;
+        }
+        return e;
+    }
+
+    std::vector<WorldEvent> m_events;
+    int m_nextEventId = 1;
+};
+
 } // namespace NF

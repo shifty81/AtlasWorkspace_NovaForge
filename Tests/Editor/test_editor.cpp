@@ -1180,3 +1180,84 @@ TEST_CASE("EditorApp ide.index_project indexes Source directory", "[Editor][Proj
 
     app.shutdown();
 }
+
+// ── Phase 5: GraphEditorPanel wiring ─────────────────────────────
+
+TEST_CASE("GraphEditorPanel newGraph creates an empty graph", "[Editor][GraphEditor]") {
+    NF::GraphEditorPanel panel;
+    REQUIRE_FALSE(panel.hasOpenGraph());
+
+    panel.newGraph(NF::GraphType::World, "TestGraph");
+    REQUIRE(panel.hasOpenGraph());
+    REQUIRE(panel.currentGraphName() == "TestGraph");
+    REQUIRE(panel.nodeCount() == 0);
+    REQUIRE(panel.linkCount() == 0);
+}
+
+TEST_CASE("GraphEditorPanel addNode returns valid id", "[Editor][GraphEditor]") {
+    NF::GraphEditorPanel panel;
+    panel.newGraph(NF::GraphType::World, "G");
+
+    int id1 = panel.addNode("NodeA");
+    int id2 = panel.addNode("NodeB");
+
+    REQUIRE(id1 > 0);
+    REQUIRE(id2 > 0);
+    REQUIRE(id1 != id2);
+    REQUIRE(panel.nodeCount() == 2);
+}
+
+TEST_CASE("GraphEditorPanel removeNode removes selected node", "[Editor][GraphEditor]") {
+    NF::GraphEditorPanel panel;
+    panel.newGraph(NF::GraphType::World, "G");
+
+    int id = panel.addNode("NodeA");
+    panel.selectNode(id);
+    REQUIRE(panel.selectedNodeId() == id);
+
+    bool removed = panel.removeNode(id);
+    REQUIRE(removed);
+    REQUIRE(panel.nodeCount() == 0);
+    REQUIRE(panel.selectedNodeId() == -1);
+}
+
+TEST_CASE("GraphEditorPanel addLink connects two nodes", "[Editor][GraphEditor]") {
+    NF::GraphEditorPanel panel;
+    panel.newGraph(NF::GraphType::World, "G");
+
+    int a = panel.addNode("A");
+    int b = panel.addNode("B");
+    bool ok = panel.addLink(a, 0, b, 0);
+
+    REQUIRE(ok);
+    REQUIRE(panel.linkCount() == 1);
+}
+
+TEST_CASE("EditorApp graph.new_graph command creates graph in panel", "[Editor][GraphEditor]") {
+    NF::EditorApp app;
+    app.init(800, 600);
+
+    app.commands().executeCommand("graph.new_graph");
+
+    auto* gep = app.graphEditorPanel();
+    REQUIRE(gep != nullptr);
+    REQUIRE(gep->hasOpenGraph());
+
+    app.shutdown();
+}
+
+TEST_CASE("EditorApp graph.add_node command adds node and notifies", "[Editor][GraphEditor]") {
+    NF::EditorApp app;
+    app.init(800, 600);
+
+    // First create a graph, then add a node
+    app.commands().executeCommand("graph.new_graph");
+    size_t notifBefore = app.notifications().count();
+
+    app.commands().executeCommand("graph.add_node");
+
+    REQUIRE(app.notifications().count() > notifBefore);
+    REQUIRE(app.graphEditorPanel()->nodeCount() == 1);
+
+    app.shutdown();
+}

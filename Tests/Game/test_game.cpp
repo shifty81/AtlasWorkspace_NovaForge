@@ -2617,3 +2617,198 @@ TEST_CASE("NF::DialogueRunner invalid option returns nullptr", "[g11]") {
     runner.init(&graph);
     REQUIRE(runner.selectOption(5) == nullptr);
 }
+
+// ── G12: Save/Load System ─────────────────────────────────────────
+
+TEST_CASE("SaveSystem init creates empty slots", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+    REQUIRE(sys.usedSlotCount() == 0);
+    auto slots = sys.listSlots();
+    REQUIRE((int)slots.size() == NF::SaveSystem::kMaxSlots);
+    for (const auto& s : slots) REQUIRE(s.isEmpty);
+}
+
+TEST_CASE("SaveSystem saveGame and loadGame round-trip", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+
+    NF::SaveData data;
+    data.playerHealth    = 75.f;
+    data.playerEnergy    = 50.f;
+    data.playerPosition  = {10.f, 2.f, -5.f};
+    data.currentSector   = "Sector7";
+    data.inventory["RawIron"] = 3;
+    data.activeMissionIds.push_back("mission_01");
+    data.reputation["pirates"] = -25.f;
+    data.playtimeSeconds = 123.f;
+
+    REQUIRE(sys.saveGame(1, data, "Save1"));
+    REQUIRE_FALSE(sys.slot(1).isEmpty);
+    REQUIRE(sys.slot(1).name == "Save1");
+    REQUIRE(sys.usedSlotCount() == 1);
+
+    const NF::SaveData* loaded = sys.loadGame(1);
+    REQUIRE(loaded != nullptr);
+    REQUIRE(loaded->playerHealth  == Catch::Approx(75.f));
+    REQUIRE(loaded->playerEnergy  == Catch::Approx(50.f));
+    REQUIRE(loaded->currentSector == "Sector7");
+    REQUIRE(loaded->inventory.at("RawIron") == 3);
+    REQUIRE(loaded->activeMissionIds.size() == 1);
+    REQUIRE(loaded->activeMissionIds[0] == "mission_01");
+    REQUIRE(loaded->reputation.at("pirates") == Catch::Approx(-25.f));
+}
+
+TEST_CASE("SaveSystem deleteSlot clears slot", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+
+    NF::SaveData d;
+    d.playerHealth = 100.f;
+    sys.saveGame(2, d, "SlotTwo");
+    REQUIRE_FALSE(sys.slot(2).isEmpty);
+
+    REQUIRE(sys.deleteSlot(2));
+    REQUIRE(sys.slot(2).isEmpty);
+    REQUIRE(sys.usedSlotCount() == 0);
+}
+
+TEST_CASE("SaveSystem loadGame returns nullptr for empty slot", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+    REQUIRE(sys.loadGame(3) == nullptr);
+}
+
+TEST_CASE("SaveSystem autoSave triggers after interval", "[Game][SaveSystem]") {
+    NF::SaveSystem sys;
+    sys.init();
+    sys.enableAutoSave(true);
+    sys.setAutoSaveInterval(10.f);  // 10 seconds for test
+
+    NF::SaveData d;
+    d.playerHealth = 80.f;
+
+    // Tick just under the interval — no auto-save yet
+    sys.tickAutoSave(9.f, d);
+    REQUIRE(sys.slot(NF::SaveSystem::kAutoSaveSlot).isEmpty);
+
+    // Tick past the interval — auto-save fires
+    sys.tickAutoSave(2.f, d);
+    REQUIRE_FALSE(sys.slot(NF::SaveSystem::kAutoSaveSlot).isEmpty);
+    REQUIRE(sys.slot(NF::SaveSystem::kAutoSaveSlot).name == "AutoSave");
+}
+
+TEST_CASE("GameSaveSerializer toJson fromJson round-trip", "[Game][SaveSystem]") {
+    NF::SaveData original;
+    original.playerHealth    = 42.f;
+    original.currentSector   = "AlphaZone";
+    original.inventory["Circuits"] = 7;
+    original.completedMissionIds.push_back("m_done");
+
+    NF::JsonValue j = NF::GameSaveSerializer::toJson(original);
+    NF::SaveData  rt = NF::GameSaveSerializer::fromJson(j);
+
+    REQUIRE(rt.playerHealth == Catch::Approx(42.f));
+    REQUIRE(rt.currentSector == "AlphaZone");
+    REQUIRE(rt.inventory.at("Circuits") == 7);
+    REQUIRE(rt.completedMissionIds.size() == 1);
+    REQUIRE(rt.completedMissionIds[0] == "m_done");
+}
+
+// ── G13: World Events System ──────────────────────────────────────
+
+TEST_CASE("WorldEventSystem spawn and query active events", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    int id = wes.spawnEvent(NF::WorldEventType::PirateRaid, "SectorAlpha", 60.f, 0.8f, "Raiders!");
+    REQUIRE(id > 0);
+    REQUIRE(wes.activeEventCount() == 1);
+
+    auto active = wes.getActiveEvents();
+    REQUIRE(active.size() == 1);
+    REQUIRE(active[0].type == NF::WorldEventType::PirateRaid);
+    REQUIRE(active[0].sectorId == "SectorAlpha");
+}
+
+TEST_CASE("WorldEventSystem endEvent marks event inactive", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    int id = wes.spawnEvent(NF::WorldEventType::TradeOpportunity, "Bazaar", 120.f, 0.5f, "Sale!");
+    REQUIRE(wes.activeEventCount() == 1);
+
+    REQUIRE(wes.endEvent(id));
+    REQUIRE(wes.activeEventCount() == 0);
+}
+
+TEST_CASE("WorldEventSystem tick expires events by duration", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    wes.spawnEvent(NF::WorldEventType::AsteroidStorm, "Belt", 5.f, 0.3f, "Storm!");
+    REQUIRE(wes.activeEventCount() == 1);
+
+    wes.tick(3.f);
+    REQUIRE(wes.activeEventCount() == 1);  // not yet expired
+
+    wes.tick(3.f);  // total 6s > 5s duration
+    REQUIRE(wes.activeEventCount() == 0);
+}
+
+TEST_CASE("WorldEventSystem getEventsInSector filters correctly", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    wes.spawnEvent(NF::WorldEventType::Plague,  "SectorA", 100.f, 0.4f, "Illness");
+    wes.spawnEvent(NF::WorldEventType::FactionWar, "SectorB", 100.f, 0.9f, "War");
+
+    auto sectorA = wes.getEventsInSector("SectorA");
+    REQUIRE(sectorA.size() == 1);
+    REQUIRE(sectorA[0].type == NF::WorldEventType::Plague);
+
+    auto sectorB = wes.getEventsInSector("SectorB");
+    REQUIRE(sectorB.size() == 1);
+    REQUIRE(sectorB[0].type == NF::WorldEventType::FactionWar);
+
+    REQUIRE(wes.getEventsInSector("SectorC").empty());
+}
+
+TEST_CASE("WorldEventType name conversion covers all types", "[Game][WorldEvents]") {
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::AsteroidStorm)    == "AsteroidStorm");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::PirateRaid)       == "PirateRaid");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::TechDiscovery)    == "TechDiscovery");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::FactionWar)       == "FactionWar");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::TradeOpportunity) == "TradeOpportunity");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::Plague)           == "Plague");
+    REQUIRE(NF::worldEventTypeName(NF::WorldEventType::CelestialAnomaly) == "CelestialAnomaly");
+}
+
+TEST_CASE("WorldEvent effect severity scales modifiers", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    // PirateRaid at high severity should increase danger modifier
+    int id = wes.spawnEvent(NF::WorldEventType::PirateRaid, "S", 60.f, 1.0f, "desc");
+    const NF::WorldEvent* ev = wes.findEvent(id);
+    REQUIRE(ev != nullptr);
+    REQUIRE(ev->effect.dangerModifier > 1.f);
+    REQUIRE(ev->effect.reputationChange < 0.f);
+
+    // TradeOpportunity should reduce prices
+    int id2 = wes.spawnEvent(NF::WorldEventType::TradeOpportunity, "S2", 60.f, 1.0f, "desc");
+    const NF::WorldEvent* ev2 = wes.findEvent(id2);
+    REQUIRE(ev2 != nullptr);
+    REQUIRE(ev2->effect.priceModifier < 1.f);
+}
+
+TEST_CASE("WorldEvent remainingTime decreases on tick", "[Game][WorldEvents]") {
+    NF::WorldEventSystem wes;
+    wes.init();
+
+    int id = wes.spawnEvent(NF::WorldEventType::CelestialAnomaly, "Void", 30.f, 0.5f, "Anomaly");
+    wes.tick(10.f);
+    const NF::WorldEvent* ev = wes.findEvent(id);
+    REQUIRE(ev != nullptr);
+    REQUIRE(ev->remainingTime() == Catch::Approx(20.f));
+}

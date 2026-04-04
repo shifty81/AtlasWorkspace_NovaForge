@@ -30,6 +30,10 @@
 | **G7** — Exploration | Probe scanning, wormholes, ancient tech | ✅ Done |
 | **G8** — FPS Interiors | Walkable ships, EVA, survival mechanics | ✅ Done |
 | **G9** — Legend System | Player reputation, world bias, NPC memory | ✅ Done |
+| **G10** — Quest & Mission System | Mission objectives, rewards, quest chains | ✅ Done |
+| **G11** — Dialogue System | Branching dialogue, conditions, effects | ✅ Done |
+| **G12** — Save/Load System | Full game state serialization, auto-save, 5 slots | ✅ Done |
+| **G13** — World Events | Dynamic sector events, severity effects, expiry | ✅ Done |
 
 ## Status Key
 
