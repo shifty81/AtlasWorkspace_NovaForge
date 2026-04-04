@@ -1186,6 +1186,393 @@ private:
     bool m_initialized = false;
 };
 
+// ── MenuBar ──────────────────────────────────────────────────────
+
+struct MenuItem {
+    std::string name;
+    std::string command;    // command name to execute via EditorCommandRegistry
+    std::string hotkey;
+    bool enabled = true;
+    bool isSeparator = false;
+    std::vector<MenuItem> children;
+
+    static MenuItem separator() {
+        MenuItem m;
+        m.isSeparator = true;
+        return m;
+    }
+};
+
+struct MenuCategory {
+    std::string name;
+    std::vector<MenuItem> items;
+
+    void addItem(const std::string& itemName, const std::string& command,
+                 const std::string& hotkey = "", bool enabled = true) {
+        MenuItem m;
+        m.name = itemName;
+        m.command = command;
+        m.hotkey = hotkey;
+        m.enabled = enabled;
+        items.push_back(std::move(m));
+    }
+
+    void addSeparator() { items.push_back(MenuItem::separator()); }
+};
+
+class MenuBar {
+public:
+    MenuCategory& addCategory(const std::string& name) {
+        m_categories.push_back(MenuCategory{name, {}});
+        return m_categories.back();
+    }
+
+    MenuCategory* findCategory(const std::string& name) {
+        for (auto& c : m_categories) if (c.name == name) return &c;
+        return nullptr;
+    }
+
+    const MenuCategory* findCategory(const std::string& name) const {
+        for (auto& c : m_categories) if (c.name == name) return &c;
+        return nullptr;
+    }
+
+    const std::vector<MenuCategory>& categories() const { return m_categories; }
+    size_t categoryCount() const { return m_categories.size(); }
+
+private:
+    std::vector<MenuCategory> m_categories;
+};
+
+// ── EditorStatusBar ──────────────────────────────────────────────
+
+struct StatusBarState {
+    std::string modeName;
+    std::string worldPath;
+    bool isDirty = false;
+    int selectionCount = 0;
+    float fps = 0.f;
+    std::string statusMessage;
+};
+
+class EditorStatusBar {
+public:
+    void update(const std::string& mode, const std::string& worldPath,
+                bool dirty, int selection, float fps,
+                const std::string& msg = "") {
+        m_state.modeName = mode;
+        m_state.worldPath = worldPath;
+        m_state.isDirty = dirty;
+        m_state.selectionCount = selection;
+        m_state.fps = fps;
+        m_state.statusMessage = msg;
+    }
+
+    const StatusBarState& state() const { return m_state; }
+
+    std::string buildText() const {
+        std::string s = m_state.modeName;
+        if (!m_state.worldPath.empty()) {
+            s += "  |  " + m_state.worldPath;
+            if (m_state.isDirty) s += " *";
+        }
+        if (m_state.selectionCount > 0)
+            s += "  |  " + std::to_string(m_state.selectionCount) + " selected";
+        s += "  |  " + std::to_string(static_cast<int>(m_state.fps)) + " FPS";
+        if (!m_state.statusMessage.empty())
+            s += "  |  " + m_state.statusMessage;
+        return s;
+    }
+
+private:
+    StatusBarState m_state;
+};
+
+// ── Notification System ──────────────────────────────────────────
+
+enum class NotificationType : uint8_t { Info, Success, Warning, Error };
+
+struct EditorNotification {
+    NotificationType type = NotificationType::Info;
+    std::string message;
+    float ttl = 3.f;      // seconds before it expires
+    float elapsed = 0.f;
+
+    bool isExpired() const { return elapsed >= ttl; }
+    float progress() const { return ttl > 0.f ? std::min(elapsed / ttl, 1.f) : 1.f; }
+};
+
+class NotificationQueue {
+public:
+    void push(NotificationType type, const std::string& message, float ttl = 3.f) {
+        EditorNotification n;
+        n.type = type;
+        n.message = message;
+        n.ttl = ttl;
+        n.elapsed = 0.f;
+        m_queue.push_back(std::move(n));
+    }
+
+    void tick(float dt) {
+        for (auto& n : m_queue) n.elapsed += dt;
+        m_queue.erase(
+            std::remove_if(m_queue.begin(), m_queue.end(),
+                           [](const EditorNotification& n){ return n.isExpired(); }),
+            m_queue.end());
+    }
+
+    const EditorNotification* current() const {
+        return m_queue.empty() ? nullptr : &m_queue.front();
+    }
+
+    bool hasActive() const { return !m_queue.empty(); }
+    int count() const { return (int)m_queue.size(); }
+    void clear() { m_queue.clear(); }
+
+private:
+    std::vector<EditorNotification> m_queue;
+};
+
+// ── Orbital Editor Camera ─────────────────────────────────────────
+
+struct EditorCameraOrbit {
+    Vec3  target    = {0.f, 0.f, 0.f};
+    float distance  = 10.f;
+    float yaw       = -90.f;   // degrees
+    float pitch     = 30.f;    // degrees
+    float fovDeg    = 60.f;
+    float nearPlane = 0.1f;
+    float farPlane  = 1000.f;
+
+    Vec3 computePosition() const {
+        float y = yaw   * (3.14159265f / 180.f);
+        float p = pitch * (3.14159265f / 180.f);
+        return Vec3{
+            target.x + distance * std::cos(y) * std::cos(p),
+            target.y + distance * std::sin(p),
+            target.z + distance * std::sin(y) * std::cos(p)
+        };
+    }
+
+    void orbit(float dyaw, float dpitch) {
+        yaw   += dyaw;
+        pitch += dpitch;
+        if (pitch >  89.f) pitch =  89.f;
+        if (pitch < -89.f) pitch = -89.f;
+    }
+
+    void zoom(float delta) {
+        distance -= delta;
+        if (distance < 0.5f) distance = 0.5f;
+    }
+
+    void pan(float dx, float dy) {
+        float y = yaw * (3.14159265f / 180.f);
+        Vec3 right{std::cos(y), 0.f, std::sin(y)};
+        Vec3 up{0.f, 1.f, 0.f};
+        target = target + right * (-dx * distance * 0.001f);
+        target = target + up    * ( dy * distance * 0.001f);
+    }
+
+    Camera buildCamera(float aspectRatio) const {
+        Camera cam;
+        cam.position = computePosition();
+        cam.target   = target;
+        cam.up       = Vec3{0.f, 1.f, 0.f};
+        cam.fovDeg   = fovDeg;
+        cam.aspect   = aspectRatio;
+        cam.nearPlane = nearPlane;
+        cam.farPlane  = farPlane;
+        return cam;
+    }
+};
+
+// ── Gizmo ─────────────────────────────────────────────────────────
+
+enum class GizmoMode : uint8_t { Translate, Rotate, Scale };
+enum class GizmoAxis : uint8_t { None, X, Y, Z, XY, YZ, XZ, All };
+
+struct GizmoState {
+    GizmoMode mode       = GizmoMode::Translate;
+    GizmoAxis activeAxis = GizmoAxis::None;
+    bool isDragging      = false;
+    bool snapEnabled     = false;
+    float snapValue      = 0.25f;   // world units for translate, degrees for rotate
+
+    void activate(GizmoAxis axis) { activeAxis = axis; isDragging = true; }
+    void deactivate() { activeAxis = GizmoAxis::None; isDragging = false; }
+    void setMode(GizmoMode m) { mode = m; deactivate(); }
+};
+
+// ── Editor Settings ───────────────────────────────────────────────
+
+struct SnapSettings {
+    float gridSize  = 0.25f;   // world units
+    float angleStep = 15.f;    // degrees
+    float scaleStep = 0.1f;
+    bool  enabled   = false;
+};
+
+struct EditorSettings {
+    bool        darkMode             = true;
+    SnapSettings snap;
+    bool        showGrid             = true;
+    bool        showGizmos           = true;
+    float       cameraSpeed          = 10.f;
+    bool        autosave             = true;
+    float       autosaveIntervalSecs = 300.f;
+    int         undoHistorySize      = 100;
+};
+
+class EditorSettingsService {
+public:
+    void reset() { m_settings = EditorSettings{}; }
+
+    EditorSettings& settings() { return m_settings; }
+    const EditorSettings& settings() const { return m_settings; }
+
+    void applyTheme(EditorTheme& theme) const {
+        if (m_settings.darkMode) theme = EditorTheme::dark();
+        else                     theme = EditorTheme::light();
+    }
+
+    void setDarkMode(bool dark) { m_settings.darkMode = dark; }
+    void setShowGrid(bool show) { m_settings.showGrid = show; }
+    void setSnapEnabled(bool on) { m_settings.snap.enabled = on; }
+    void setCameraSpeed(float s) { m_settings.cameraSpeed = s; }
+
+private:
+    EditorSettings m_settings;
+};
+
+// ── Hotkey Dispatcher ────────────────────────────────────────────
+
+struct HotkeyBinding {
+    std::string hotkey;      // e.g. "Ctrl+Z", "F12", "Ctrl+Shift+S"
+    std::string commandName;
+};
+
+class HotkeyDispatcher {
+public:
+    void bind(const std::string& hotkey, const std::string& commandName) {
+        m_bindings.push_back({hotkey, commandName});
+    }
+
+    void unbind(const std::string& hotkey) {
+        m_bindings.erase(
+            std::remove_if(m_bindings.begin(), m_bindings.end(),
+                           [&](const HotkeyBinding& b){ return b.hotkey == hotkey; }),
+            m_bindings.end());
+    }
+
+    // Returns command name matched for a given hotkey string (empty if none)
+    std::string findCommand(const std::string& hotkey) const {
+        for (auto& b : m_bindings)
+            if (b.hotkey == hotkey) return b.commandName;
+        return {};
+    }
+
+    // Dispatch all matching bindings given a pressed hotkey string.
+    // Returns number of commands dispatched.
+    int dispatch(const std::string& hotkey, EditorCommandRegistry& commands) {
+        int count = 0;
+        for (auto& b : m_bindings) {
+            if (b.hotkey == hotkey) {
+                commands.executeCommand(b.commandName);
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    void loadDefaults(EditorCommandRegistry& commands) {
+        // Mirror the hotkeys already registered on commands
+        auto names = commands.allCommandNames();
+        for (auto& n : names) {
+            if (auto* info = commands.findCommand(n)) {
+                if (!info->hotkey.empty())
+                    bind(info->hotkey, n);
+            }
+        }
+    }
+
+    const std::vector<HotkeyBinding>& bindings() const { return m_bindings; }
+    int bindingCount() const { return (int)m_bindings.size(); }
+
+private:
+    std::vector<HotkeyBinding> m_bindings;
+};
+
+// ── Graph Editor Panel ───────────────────────────────────────────
+
+class GraphEditorPanel : public EditorPanel {
+public:
+    explicit GraphEditorPanel(GraphVM* vm = nullptr) : m_graphVM(vm) {}
+
+    const std::string& name() const override { return m_name; }
+    DockSlot slot() const override { return DockSlot::Center; }
+    void update(float /*dt*/) override {}
+    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/,
+                const EditorTheme& /*theme*/) override {}
+
+    void setGraphVM(GraphVM* vm) { m_graphVM = vm; }
+    GraphVM* graphVM() const { return m_graphVM; }
+
+    bool openGraph(const std::string& name) {
+        if (!m_graphVM) return false;
+        m_currentGraphName = name;
+        NF_LOG_INFO("Editor", "GraphEditorPanel: opened graph '" + name + "'");
+        return true;
+    }
+
+    const std::string& currentGraphName() const { return m_currentGraphName; }
+    bool hasOpenGraph() const { return !m_currentGraphName.empty(); }
+
+    // Selected node for inspection
+    int selectedNodeId() const { return m_selectedNodeId; }
+    void selectNode(int id) { m_selectedNodeId = id; }
+    void clearSelection() { m_selectedNodeId = -1; }
+
+private:
+    std::string m_name = "GraphEditor";
+    GraphVM* m_graphVM = nullptr;
+    std::string m_currentGraphName;
+    int m_selectedNodeId = -1;
+};
+
+// ── Frame Stats ──────────────────────────────────────────────────
+
+struct FrameStats {
+    float fps          = 0.f;
+    float frameTimeMs  = 0.f;
+    float updateTimeMs = 0.f;
+    float renderTimeMs = 0.f;
+    uint64_t frameCount = 0;
+};
+
+class FrameStatsTracker {
+public:
+    void beginFrame(float dtSeconds) {
+        m_frameTimeMs = dtSeconds * 1000.f;
+        // Exponential moving average for FPS
+        float newFps = dtSeconds > 0.f ? 1.f / dtSeconds : 0.f;
+        m_stats.fps = m_stats.fps * 0.9f + newFps * 0.1f;
+        m_stats.frameTimeMs = m_frameTimeMs;
+        ++m_stats.frameCount;
+        m_updateStart = m_stats.frameCount;  // reuse as a simple "step" marker
+    }
+
+    void recordUpdateTime(float ms) { m_stats.updateTimeMs = ms; }
+    void recordRenderTime(float ms) { m_stats.renderTimeMs = ms; }
+
+    const FrameStats& stats() const { return m_stats; }
+
+private:
+    FrameStats m_stats;
+    float m_frameTimeMs = 0.f;
+    uint64_t m_updateStart = 0;
+};
+
 // ── Editor application ───────────────────────────────────────────
 
 class EditorApp {
@@ -1291,6 +1678,55 @@ public:
             NF_LOG_INFO("IDE", "Index project");
         }, "Index Project", "");
 
+        // Entity commands
+        m_commands.registerCommand("entity.create", [this]() {
+            NF_LOG_INFO("Editor", "Create entity");
+            m_notifications.push(NotificationType::Success, "Entity created");
+        }, "Create Entity", "Ctrl+Shift+N");
+
+        m_commands.registerCommand("entity.delete", [this]() {
+            if (!m_selection.hasSelection()) return;
+            NF_LOG_INFO("Editor", "Delete selected entities");
+            m_selection.clearSelection();
+            m_notifications.push(NotificationType::Info, "Entity deleted");
+        }, "Delete Entity", "Delete");
+        m_commands.setEnabledCheck("entity.delete",
+            [this]() { return m_selection.hasSelection(); });
+
+        m_commands.registerCommand("entity.duplicate", [this]() {
+            if (!m_selection.hasSelection()) return;
+            NF_LOG_INFO("Editor", "Duplicate selected entity");
+            m_notifications.push(NotificationType::Success, "Entity duplicated");
+        }, "Duplicate Entity", "Ctrl+D");
+        m_commands.setEnabledCheck("entity.duplicate",
+            [this]() { return m_selection.hasSelection(); });
+
+        // Gizmo mode commands
+        m_commands.registerCommand("gizmo.translate", [this]() {
+            m_gizmo.setMode(GizmoMode::Translate);
+        }, "Translate Gizmo", "W");
+
+        m_commands.registerCommand("gizmo.rotate", [this]() {
+            m_gizmo.setMode(GizmoMode::Rotate);
+        }, "Rotate Gizmo", "E");
+
+        m_commands.registerCommand("gizmo.scale", [this]() {
+            m_gizmo.setMode(GizmoMode::Scale);
+        }, "Scale Gizmo", "R");
+
+        // Toggle graph editor panel
+        m_commands.registerCommand("view.toggle_graph_editor", [this]() {
+            togglePanelVisibility("GraphEditor");
+        }, "Toggle Graph Editor", "");
+
+        // Toggle settings
+        m_commands.registerCommand("view.toggle_dark_mode", [this]() {
+            m_editorSettings.setDarkMode(!m_editorSettings.settings().darkMode);
+            m_editorSettings.applyTheme(m_theme);
+            NF_LOG_INFO("Editor", std::string("Dark mode: ") +
+                (m_editorSettings.settings().darkMode ? "on" : "off"));
+        }, "Toggle Dark Mode", "");
+
         // Create default panels
         {
             auto viewport = std::make_unique<ViewportPanel>();
@@ -1317,16 +1753,36 @@ public:
             m_dockLayout.addPanel(cb->name(), cb->slot());
             m_editorPanels.push_back(std::move(cb));
         }
+        {
+            auto graphEd = std::make_unique<GraphEditorPanel>(m_graphVM);
+            m_dockLayout.addPanel(graphEd->name(), graphEd->slot());
+            m_dockLayout.setPanelVisible(graphEd->name(), false);  // hidden by default
+            m_editorPanels.push_back(std::move(graphEd));
+        }
 
         // Create default toolbar items
-        m_toolbar.addItem("Select", "select", "Select tool", []() {});
-        m_toolbar.addItem("Move", "move", "Move tool", []() {});
-        m_toolbar.addItem("Rotate", "rotate", "Rotate tool", []() {});
-        m_toolbar.addItem("Scale", "scale", "Scale tool", []() {});
+        m_toolbar.addItem("Select", "select", "Select tool", [this]() {
+            m_gizmo.setMode(GizmoMode::Translate);
+        });
+        m_toolbar.addItem("Move", "move", "Move tool", [this]() {
+            m_gizmo.setMode(GizmoMode::Translate);
+        });
+        m_toolbar.addItem("Rotate", "rotate", "Rotate tool", [this]() {
+            m_gizmo.setMode(GizmoMode::Rotate);
+        });
+        m_toolbar.addItem("Scale", "scale", "Scale tool", [this]() {
+            m_gizmo.setMode(GizmoMode::Scale);
+        });
         m_toolbar.addSeparator();
         m_toolbar.addItem("Play", "play", "Play", []() {});
         m_toolbar.addItem("Pause", "pause", "Pause", []() {});
         m_toolbar.addItem("Stop", "stop", "Stop", []() {});
+
+        // Build menu bar
+        initMenuBar();
+
+        // Load default hotkeys from registered commands
+        m_hotkeyDispatcher.loadDefaults(m_commands);
 
         NF_LOG_INFO("Editor", "NovaForge Editor initialized");
         return true;
@@ -1343,11 +1799,27 @@ public:
     void update() {}
     void render() {}
 
-    // Per-frame update with input: routes right-click WASD fly-cam to the viewport.
+    // Per-frame update with input: routes right-click WASD fly-cam to the viewport,
+    // dispatches hotkeys, ticks notifications, updates status bar and frame stats.
     void update(float dt, InputSystem& input) {
         input.update();
         if (auto* vp = viewportPanel())
             vp->updateCamera(dt, input);
+
+        m_notifications.tick(dt);
+        m_frameStats.beginFrame(dt);
+
+        m_statusBar.update(
+            "Editor",
+            m_currentWorldPath,
+            m_commandStack.isDirty(),
+            static_cast<int>(m_selection.selectionCount()),
+            m_frameStats.stats().fps);
+    }
+
+    // Process a hotkey string and dispatch matching commands.
+    int processHotkey(const std::string& hotkey) {
+        return m_hotkeyDispatcher.dispatch(hotkey, m_commands);
     }
 
     // Returns a pointer to the first ViewportPanel, or nullptr.
@@ -1364,6 +1836,13 @@ public:
         return nullptr;
     }
 
+    [[nodiscard]] GraphEditorPanel* graphEditorPanel() {
+        for (auto& p : m_editorPanels) {
+            if (auto* gep = dynamic_cast<GraphEditorPanel*>(p.get())) return gep;
+        }
+        return nullptr;
+    }
+
     // Accessors for editor services
     EditorCommandRegistry& commands() { return m_commands; }
     CommandStack& commandStack() { return m_commandStack; }
@@ -1373,6 +1852,15 @@ public:
     LaunchService& launchService() { return m_launchService; }
     DockLayout& dockLayout() { return m_dockLayout; }
     EditorToolbar& toolbar() { return m_toolbar; }
+    MenuBar& menuBar() { return m_menuBar; }
+    EditorStatusBar& statusBar() { return m_statusBar; }
+    NotificationQueue& notifications() { return m_notifications; }
+    EditorCameraOrbit& editorCamera() { return m_editorCamera; }
+    GizmoState& gizmo() { return m_gizmo; }
+    EditorSettingsService& settingsService() { return m_editorSettings; }
+    HotkeyDispatcher& hotkeyDispatcher() { return m_hotkeyDispatcher; }
+    FrameStatsTracker& frameStatsTracker() { return m_frameStats; }
+    EditorTheme& theme() { return m_theme; }
 
     [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
     void setCurrentWorldPath(const std::string& path) {
@@ -1391,7 +1879,10 @@ public:
         return m_editorPanels;
     }
 
-    void setGraphVM(GraphVM* vm) { m_graphVM = vm; }
+    void setGraphVM(GraphVM* vm) {
+        m_graphVM = vm;
+        if (auto* gep = graphEditorPanel()) gep->setGraphVM(vm);
+    }
     [[nodiscard]] GraphVM* graphVM() const { return m_graphVM; }
 
     IDEService& ideService() { return m_ideService; }
@@ -1403,6 +1894,52 @@ private:
             NF_LOG_INFO("Editor", "Toggle panel '" + name + "' visible=" +
                         (p->visible ? "true" : "false"));
         }
+    }
+
+    void initMenuBar() {
+        // File menu
+        auto& file = m_menuBar.addCategory("File");
+        file.addItem("New World",   "file.new",     "Ctrl+N");
+        file.addItem("Open World",  "file.open",    "Ctrl+O");
+        file.addItem("Save",        "file.save",    "Ctrl+S");
+        file.addItem("Save As",     "file.save_as", "Ctrl+Shift+S");
+        file.addSeparator();
+        file.addItem("Exit",        "file.exit",    "Alt+F4");
+
+        // Edit menu
+        auto& edit = m_menuBar.addCategory("Edit");
+        edit.addItem("Undo",        "edit.undo",    "Ctrl+Z");
+        edit.addItem("Redo",        "edit.redo",    "Ctrl+Y");
+        edit.addSeparator();
+        edit.addItem("Select All",  "edit.select_all",  "Ctrl+A");
+        edit.addItem("Deselect",    "edit.deselect",     "Ctrl+D");
+        edit.addSeparator();
+        edit.addItem("Create Entity",   "entity.create",    "Ctrl+Shift+N");
+        edit.addItem("Delete Entity",   "entity.delete",    "Delete");
+        edit.addItem("Duplicate Entity","entity.duplicate", "Ctrl+D");
+
+        // View menu
+        auto& view = m_menuBar.addCategory("View");
+        view.addItem("Inspector",      "view.toggle_inspector",       "");
+        view.addItem("Hierarchy",      "view.toggle_hierarchy",       "");
+        view.addItem("Console",        "view.toggle_console",         "");
+        view.addItem("Content Browser","view.toggle_content_browser", "");
+        view.addItem("Graph Editor",   "view.toggle_graph_editor",    "");
+        view.addSeparator();
+        view.addItem("Reset Layout",   "view.reset_layout",           "");
+        view.addItem("Dark Mode",      "view.toggle_dark_mode",       "");
+
+        // Graph menu
+        auto& graph = m_menuBar.addCategory("Graph");
+        graph.addItem("New Graph",  "graph.new_graph",  "");
+        graph.addItem("Open Graph", "graph.open_graph", "");
+
+        // Code menu
+        auto& code = m_menuBar.addCategory("Code");
+        code.addItem("Go To Definition", "ide.go_to_definition", "F12");
+        code.addItem("Find References",  "ide.find_references",  "Shift+F12");
+        code.addItem("Go Back",          "ide.go_back",          "Alt+Left");
+        code.addItem("Index Project",    "ide.index_project",    "");
     }
 
     Renderer m_renderer;
@@ -1419,6 +1956,17 @@ private:
     std::string m_currentWorldPath;
     GraphVM* m_graphVM = nullptr;
     IDEService m_ideService;
+
+    // New systems
+    MenuBar m_menuBar;
+    EditorStatusBar m_statusBar;
+    NotificationQueue m_notifications;
+    EditorCameraOrbit m_editorCamera;
+    GizmoState m_gizmo;
+    EditorSettingsService m_editorSettings;
+    HotkeyDispatcher m_hotkeyDispatcher;
+    FrameStatsTracker m_frameStats;
+    EditorTheme m_theme;
 };
 
 // ── Property Editor ──────────────────────────────────────────────
