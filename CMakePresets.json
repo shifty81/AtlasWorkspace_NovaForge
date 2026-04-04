@@ -70,6 +70,60 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "NF_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "windows-x64",
+      "displayName": "Windows x64 Release (VS 2022)",
+      "description": "Windows 10/11 x64 release build via Visual Studio 2022.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/Builds/windows-x64",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "NF_BUILD_EDITOR": "ON",
+        "NF_BUILD_GAME": "ON",
+        "NF_BUILD_SERVER": "ON",
+        "NF_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "windows-x64-debug",
+      "displayName": "Windows x64 Debug (VS 2022)",
+      "description": "Windows 10/11 x64 debug build — primary local dev preset.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/Builds/windows-x64-debug",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "NF_BUILD_EDITOR": "ON",
+        "NF_BUILD_GAME": "ON",
+        "NF_BUILD_SERVER": "ON",
+        "NF_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "windows-x64-debug-tests",
+      "displayName": "Windows x64 Debug + Tests (VS 2022)",
+      "description": "Windows 10/11 x64 debug build with Catch2 test suite enabled.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/Builds/windows-x64-debug-tests",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "NF_BUILD_EDITOR": "ON",
+        "NF_BUILD_GAME": "ON",
+        "NF_BUILD_SERVER": "ON",
+        "NF_BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -104,6 +158,21 @@
       "name": "vs2019-release",
       "configurePreset": "vs2019",
       "configuration": "Release"
+    },
+    {
+      "name": "windows-x64-release",
+      "configurePreset": "windows-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-x64-debug",
+      "configurePreset": "windows-x64-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-x64-debug-tests",
+      "configurePreset": "windows-x64-debug-tests",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [
@@ -117,6 +186,14 @@
     {
       "name": "vs2022",
       "configurePreset": "vs2022",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-x64-debug-tests",
+      "configurePreset": "windows-x64-debug-tests",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
