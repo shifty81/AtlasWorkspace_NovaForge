@@ -914,3 +914,200 @@ TEST_CASE("EditorApp IDE service accessor", "[Editor][EditorApp]") {
     app.shutdown();
     REQUIRE_FALSE(app.ideService().isInitialized());
 }
+
+// ── ViewportCameraController / right-click fly-cam ───────────────
+
+TEST_CASE("ViewportCameraController defaults", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    REQUIRE(ctrl.moveSpeed       > 0.f);
+    REQUIRE(ctrl.mouseSensitivity > 0.f);
+    REQUIRE_FALSE(ctrl.isActive());
+}
+
+TEST_CASE("ViewportCameraController inactive without right mouse", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    float yaw = -90.f, pitch = 0.f;
+
+    // No mouse button held → camera must not move
+    input.setKeyDown(NF::KeyCode::W);
+    ctrl.update(0.016f, input, pos, yaw, pitch);
+
+    REQUIRE_FALSE(ctrl.isActive());
+    REQUIRE(pos.x == 0.f);
+    REQUIRE(pos.y == 0.f);
+    REQUIRE(pos.z == 0.f);
+}
+
+TEST_CASE("ViewportCameraController activates on right mouse held", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    float yaw = -90.f, pitch = 0.f;
+
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    ctrl.update(0.016f, input, pos, yaw, pitch);
+
+    REQUIRE(ctrl.isActive());
+}
+
+TEST_CASE("ViewportCameraController deactivates when right mouse released", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    float yaw = -90.f, pitch = 0.f;
+
+    // First frame: held
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    ctrl.update(0.016f, input, pos, yaw, pitch);
+    REQUIRE(ctrl.isActive());
+
+    // Second frame: released
+    input.setKeyUp(NF::KeyCode::Mouse2);
+    ctrl.update(0.016f, input, pos, yaw, pitch);
+    REQUIRE_FALSE(ctrl.isActive());
+}
+
+TEST_CASE("ViewportCameraController WASD moves camera only when right mouse held", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    ctrl.moveSpeed = 10.f;
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    // yaw=-90 → forward = {0, 0, -1} (looking down -Z)
+    float yaw = -90.f, pitch = 0.f;
+
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    input.setKeyDown(NF::KeyCode::W);
+
+    ctrl.update(1.0f, input, pos, yaw, pitch);  // dt=1s for easy math
+
+    // W pressed while right mouse held → camera moved in forward direction
+    REQUIRE(ctrl.isActive());
+    // Camera should have moved (any axis)
+    float moved = std::sqrt(pos.x*pos.x + pos.y*pos.y + pos.z*pos.z);
+    REQUIRE(moved > 0.f);
+}
+
+TEST_CASE("ViewportCameraController mouse look changes yaw and pitch", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    ctrl.mouseSensitivity = 1.0f;  // 1 degree per pixel for easy math
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    float yaw = 0.f, pitch = 0.f;
+
+    // Simulate mouse delta
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    input.setMousePosition(10.f, -5.f);  // deltaX=10, deltaY=-5 from (0,0)
+    ctrl.update(0.016f, input, pos, yaw, pitch);
+
+    REQUIRE(yaw   != 0.f);  // yaw changed due to X delta
+    REQUIRE(pitch != 0.f);  // pitch changed due to Y delta
+}
+
+TEST_CASE("ViewportCameraController pitch is clamped", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    ctrl.mouseSensitivity = 100.f;  // huge sensitivity to force clamp
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    float yaw = 0.f, pitch = 0.f;
+
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    input.setMousePosition(0.f, -1000.f);  // huge upward move
+    ctrl.update(0.016f, input, pos, yaw, pitch);
+
+    REQUIRE(pitch >= -89.f);
+    REQUIRE(pitch <=  89.f);
+}
+
+TEST_CASE("ViewportCameraController sprint multiplier increases speed", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    ctrl.moveSpeed = 10.f;
+    ctrl.sprintMultiplier = 3.f;
+    NF::InputSystem input;
+    input.init();
+
+    // Run without shift
+    NF::Vec3 posNormal{0.f, 0.f, 0.f};
+    float yaw = -90.f, pitch = 0.f;
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    input.setKeyDown(NF::KeyCode::W);
+    ctrl.update(1.0f, input, posNormal, yaw, pitch);
+    float normalDist = std::sqrt(posNormal.x*posNormal.x + posNormal.z*posNormal.z);
+
+    // Run with shift
+    NF::Vec3 posSprint{0.f, 0.f, 0.f};
+    yaw = -90.f; pitch = 0.f;
+    input.setKeyDown(NF::KeyCode::LShift);
+    ctrl.update(1.0f, input, posSprint, yaw, pitch);
+    float sprintDist = std::sqrt(posSprint.x*posSprint.x + posSprint.z*posSprint.z);
+
+    REQUIRE(sprintDist > normalDist);
+}
+
+TEST_CASE("ViewportCameraController Q/E moves vertically", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportCameraController ctrl;
+    ctrl.moveSpeed = 10.f;
+    NF::InputSystem input;
+    input.init();
+
+    NF::Vec3 pos{0.f, 0.f, 0.f};
+    float yaw = -90.f, pitch = 0.f;
+
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    input.setKeyDown(NF::KeyCode::E);
+    ctrl.update(1.0f, input, pos, yaw, pitch);
+
+    REQUIRE(pos.y > 0.f);  // E moves up in world space
+}
+
+TEST_CASE("ViewportPanel updateCamera delegates to controller", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportPanel vp;
+    NF::InputSystem input;
+    input.init();
+
+    REQUIRE_FALSE(vp.isFlyCamActive());
+
+    input.setKeyDown(NF::KeyCode::Mouse2);
+    vp.updateCamera(0.016f, input);
+
+    REQUIRE(vp.isFlyCamActive());
+}
+
+TEST_CASE("ViewportPanel yaw and pitch accessors", "[Editor][Viewport][FlyCam]") {
+    NF::ViewportPanel vp;
+    vp.setCameraYaw(45.f);
+    vp.setCameraPitch(15.f);
+    REQUIRE(vp.cameraYaw()   == 45.f);
+    REQUIRE(vp.cameraPitch() == 15.f);
+}
+
+TEST_CASE("EditorApp update with input drives viewport fly-cam", "[Editor][Viewport][FlyCam]") {
+    NF::EditorApp app;
+    app.init(1280, 720);
+
+    NF::InputSystem input;
+    input.init();
+    input.setKeyDown(NF::KeyCode::Mouse2);
+
+    REQUIRE(app.viewportPanel() != nullptr);
+    REQUIRE_FALSE(app.viewportPanel()->isFlyCamActive());
+
+    app.update(0.016f, input);
+
+    REQUIRE(app.viewportPanel()->isFlyCamActive());
+
+    app.shutdown();
+}

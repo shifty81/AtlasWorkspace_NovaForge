@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "NF/Game/Game.h"
 
 TEST_CASE("Chunk voxel get/set", "[Game][Voxel]") {
@@ -49,6 +50,11 @@ TEST_CASE("RigState defaults", "[Game][Rig]") {
     REQUIRE(rig.health == 100.f);
     REQUIRE(rig.energy == 100.f);
     REQUIRE(rig.activeTool == 0);
+    REQUIRE(rig.maxHealth == 100.f);
+    REQUIRE(rig.maxEnergy == 100.f);
+    REQUIRE(rig.oxygen == 100.f);
+    REQUIRE(rig.stamina == 100.f);
+    REQUIRE(rig.isAlive());
 }
 
 // ── Chunk dirty flag separation ──────────────────────────────────
@@ -489,4 +495,1868 @@ TEST_CASE("VoxelPickService respects maxDist", "[Game][Pick]") {
     // maxDist long enough
     auto hit2 = NF::VoxelPickService::raycast(world, origin, dir, 200.f);
     REQUIRE(hit2.has_value());
+}
+
+// ── G1: RigState expanded tests ─────────────────────────────────
+
+TEST_CASE("RigState tick regens energy and stamina", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.energy = 50.f;
+    rig.stamina = 50.f;
+    rig.tick(1.f);
+    REQUIRE(rig.energy == Catch::Approx(52.f));
+    REQUIRE(rig.stamina == Catch::Approx(55.f));
+}
+
+TEST_CASE("RigState tick drains oxygen", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.tick(10.f);
+    REQUIRE(rig.oxygen == Catch::Approx(90.f));
+}
+
+TEST_CASE("RigState oxygen depletion damages health", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.oxygen = 0.f;
+    rig.tick(1.f);
+    REQUIRE(rig.health < 100.f);
+    REQUIRE(rig.isAlive());
+}
+
+TEST_CASE("RigState takeDamage and heal", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.takeDamage(30.f);
+    REQUIRE(rig.health == Catch::Approx(70.f));
+    rig.heal(50.f);
+    REQUIRE(rig.health == Catch::Approx(100.f)); // clamped to max
+}
+
+TEST_CASE("RigState death stops ticking", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.takeDamage(100.f);
+    REQUIRE_FALSE(rig.isAlive());
+    float prevEnergy = rig.energy;
+    rig.tick(1.f);
+    REQUIRE(rig.energy == prevEnergy); // no regen when dead
+}
+
+TEST_CASE("RigState consumeEnergy and consumeStamina", "[Game][Rig][G1]") {
+    NF::RigState rig;
+    rig.consumeEnergy(60.f);
+    REQUIRE(rig.energy == Catch::Approx(40.f));
+    rig.consumeStamina(80.f);
+    REQUIRE(rig.stamina == Catch::Approx(20.f));
+    rig.consumeEnergy(999.f);
+    REQUIRE(rig.energy == Catch::Approx(0.f)); // clamped at 0
+}
+
+// ── G1: ResourceType tests ──────────────────────────────────────
+
+TEST_CASE("ResourceType name round-trip", "[Game][Resource][G1]") {
+    REQUIRE(NF::resourceTypeFromName("RawStone") == NF::ResourceType::RawStone);
+    REQUIRE(NF::resourceTypeFromName("RawIron") == NF::ResourceType::RawIron);
+    REQUIRE(NF::resourceTypeFromName("RefinedGold") == NF::ResourceType::RefinedGold);
+    REQUIRE(NF::resourceTypeFromName("SteelPlate") == NF::ResourceType::SteelPlate);
+    REQUIRE(NF::resourceTypeFromName("EnergyCell") == NF::ResourceType::EnergyCell);
+    REQUIRE(std::string(NF::resourceTypeName(NF::ResourceType::CircuitBoard)) == "CircuitBoard");
+    REQUIRE(std::string(NF::resourceTypeName(NF::ResourceType::RawCrystal)) == "RawCrystal");
+}
+
+// ── G1: Resource Drop Table tests ───────────────────────────────
+
+TEST_CASE("ResourceDrop table returns correct drops", "[Game][Resource][G1]") {
+    auto stoneDrops = NF::getResourceDrops(NF::VoxelType::Stone);
+    REQUIRE(stoneDrops.size() == 1);
+    REQUIRE(stoneDrops[0].resource == NF::ResourceType::RawStone);
+
+    auto ironDrops = NF::getResourceDrops(NF::VoxelType::Ore_Iron);
+    REQUIRE(ironDrops.size() == 1);
+    REQUIRE(ironDrops[0].minAmount == 1);
+    REQUIRE(ironDrops[0].maxAmount == 2);
+
+    auto crystalDrops = NF::getResourceDrops(NF::VoxelType::Ore_Crystal);
+    REQUIRE(crystalDrops[0].maxAmount == 3);
+
+    auto airDrops = NF::getResourceDrops(NF::VoxelType::Air);
+    REQUIRE(airDrops.empty());
+
+    auto glassDrops = NF::getResourceDrops(NF::VoxelType::Glass);
+    REQUIRE(glassDrops.empty());
+}
+
+// ── G1: ResourceInventory tests ─────────────────────────────────
+
+TEST_CASE("ResourceInventory add and remove", "[Game][Resource][G1]") {
+    NF::ResourceInventory inv;
+    REQUIRE(inv.isEmpty());
+    REQUIRE(inv.totalItems() == 0);
+
+    inv.add(NF::ResourceType::RawIron, 5);
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 5);
+    REQUIRE(inv.totalItems() == 5);
+    REQUIRE_FALSE(inv.isEmpty());
+
+    REQUIRE(inv.remove(NF::ResourceType::RawIron, 3));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 2);
+
+    REQUIRE_FALSE(inv.remove(NF::ResourceType::RawIron, 5));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 2);
+}
+
+TEST_CASE("ResourceInventory totalItems across types", "[Game][Resource][G1]") {
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawStone, 3);
+    inv.add(NF::ResourceType::RefinedIron, 2);
+    inv.add(NF::ResourceType::EnergyCell, 1);
+    REQUIRE(inv.totalItems() == 6);
+}
+
+// ── G1: ToolState tests ─────────────────────────────────────────
+
+TEST_CASE("ToolState isReady and use", "[Game][Tool][G1]") {
+    NF::ToolState tool;
+    tool.cooldownRate = 0.5f;
+    REQUIRE(tool.isReady());
+
+    tool.use();
+    REQUIRE_FALSE(tool.isReady());
+    REQUIRE(tool.cooldown == Catch::Approx(0.5f));
+    REQUIRE(tool.durability == Catch::Approx(99.f));
+
+    tool.tick(0.5f);
+    REQUIRE(tool.isReady());
+}
+
+TEST_CASE("ToolState zero durability not ready", "[Game][Tool][G1]") {
+    NF::ToolState tool;
+    tool.durability = 0.f;
+    REQUIRE_FALSE(tool.isReady());
+}
+
+TEST_CASE("ToolType name", "[Game][Tool][G1]") {
+    REQUIRE(std::string(NF::toolTypeName(NF::ToolType::MiningLaser)) == "MiningLaser");
+    REQUIRE(std::string(NF::toolTypeName(NF::ToolType::Scanner)) == "Scanner");
+}
+
+// ── G1: ToolBelt tests ──────────────────────────────────────────
+
+TEST_CASE("ToolBelt init and slot access", "[Game][Tool][G1]") {
+    NF::ToolBelt belt;
+    belt.init();
+
+    REQUIRE(belt.slotCount() == 4);
+    REQUIRE(belt.activeSlot() == 0);
+    REQUIRE(belt.activeTool().type == NF::ToolType::MiningLaser);
+    REQUIRE(belt.slot(1).type == NF::ToolType::PlacementTool);
+    REQUIRE(belt.slot(2).type == NF::ToolType::RepairTool);
+    REQUIRE(belt.slot(3).type == NF::ToolType::Scanner);
+}
+
+TEST_CASE("ToolBelt selectSlot clamps", "[Game][Tool][G1]") {
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(-1);
+    REQUIRE(belt.activeSlot() == 0);
+    belt.selectSlot(99);
+    REQUIRE(belt.activeSlot() == 3);
+    belt.selectSlot(2);
+    REQUIRE(belt.activeSlot() == 2);
+}
+
+TEST_CASE("ToolBelt nextTool and prevTool cycle", "[Game][Tool][G1]") {
+    NF::ToolBelt belt;
+    belt.init();
+    belt.nextTool();
+    REQUIRE(belt.activeSlot() == 1);
+    belt.nextTool();
+    belt.nextTool();
+    belt.nextTool();
+    REQUIRE(belt.activeSlot() == 0); // wrapped around
+
+    belt.prevTool();
+    REQUIRE(belt.activeSlot() == 3); // wrapped backward
+}
+
+// ── G1: HUDState tests ──────────────────────────────────────────
+
+TEST_CASE("HUDState defaults", "[Game][HUD][G1]") {
+    NF::HUDState hud;
+    REQUIRE(hud.showCrosshair);
+    REQUIRE_FALSE(hud.targetLocked);
+    REQUIRE(hud.targetVoxel == NF::VoxelType::Air);
+    REQUIRE(hud.notifications.empty());
+}
+
+TEST_CASE("HUDState add and expire notifications", "[Game][HUD][G1]") {
+    NF::HUDState hud;
+    hud.addNotification("Mined stone!", 2.f);
+    hud.addNotification("Low energy", 5.f);
+    REQUIRE(hud.notifications.size() == 2);
+
+    hud.tick(3.f);
+    REQUIRE(hud.notifications.size() == 1);
+    REQUIRE(hud.notifications[0].message == "Low energy");
+
+    hud.tick(3.f);
+    REQUIRE(hud.notifications.empty());
+}
+
+TEST_CASE("HUDState clearNotifications", "[Game][HUD][G1]") {
+    NF::HUDState hud;
+    hud.addNotification("test1");
+    hud.addNotification("test2");
+    hud.clearNotifications();
+    REQUIRE(hud.notifications.empty());
+}
+
+// ── G1: InteractionSystem mining tests ──────────────────────────
+
+TEST_CASE("InteractionSystem tryMine success", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    NF::Vec3 origin{5.5f, 10.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv, origin, dir);
+    REQUIRE(result.success);
+    REQUIRE(result.minedType == NF::VoxelType::Stone);
+    REQUIRE(world.getWorld(5, 5, 5) == NF::VoxelType::Air);
+    REQUIRE(voxelInv.count(NF::VoxelType::Stone) == 1);
+    REQUIRE(resInv.count(NF::ResourceType::RawStone) == 1);
+    REQUIRE(rig.energy < 100.f);
+}
+
+TEST_CASE("InteractionSystem tryMine fails wrong tool", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(1); // placement tool
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv,
+                                      {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE_FALSE(result.success);
+}
+
+TEST_CASE("InteractionSystem tryMine fails no energy", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    rig.energy = 0.f;
+    NF::ToolBelt belt;
+    belt.init();
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv,
+                                      {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE_FALSE(result.success);
+}
+
+TEST_CASE("InteractionSystem tryMine ore drops resources", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Ore_Iron);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    NF::Inventory voxelInv;
+    NF::ResourceInventory resInv;
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryMine(world, rig, belt, voxelInv, resInv,
+                                      {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE(result.success);
+    REQUIRE_FALSE(result.drops.empty());
+    REQUIRE(resInv.count(NF::ResourceType::RawIron) >= 1);
+}
+
+// ── G1: InteractionSystem placement tests ───────────────────────
+
+TEST_CASE("InteractionSystem tryPlace success", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(1); // placement tool
+    NF::Inventory voxelInv;
+    voxelInv.add(NF::VoxelType::Dirt, 5);
+
+    NF::InteractionSystem interaction;
+    NF::Vec3 origin{5.5f, 10.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto result = interaction.tryPlace(world, rig, belt, voxelInv, origin, dir, NF::VoxelType::Dirt);
+    REQUIRE(result.success);
+    REQUIRE(result.placedType == NF::VoxelType::Dirt);
+    REQUIRE(voxelInv.count(NF::VoxelType::Dirt) == 4);
+    // Placed adjacent to stone (on top), at (5,6,5)
+    REQUIRE(world.getWorld(5, 6, 5) == NF::VoxelType::Dirt);
+}
+
+TEST_CASE("InteractionSystem tryPlace fails no inventory", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::RigState rig;
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(1);
+    NF::Inventory voxelInv; // empty
+
+    NF::InteractionSystem interaction;
+    auto result = interaction.tryPlace(world, rig, belt, voxelInv,
+                                       {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f},
+                                       NF::VoxelType::Dirt);
+    REQUIRE_FALSE(result.success);
+}
+
+// ── G1: InteractionSystem scan tests ────────────────────────────
+
+TEST_CASE("InteractionSystem tryScan returns voxel info", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Ore_Gold);
+
+    NF::ToolBelt belt;
+    belt.init();
+    belt.selectSlot(3); // scanner
+
+    NF::InteractionSystem interaction;
+    auto hit = interaction.tryScan(world, belt, {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE(hit.has_value());
+    REQUIRE(hit->type == NF::VoxelType::Ore_Gold);
+}
+
+TEST_CASE("InteractionSystem tryScan fails wrong tool", "[Game][Interaction][G1]") {
+    NF::WorldState world;
+    world.setWorld(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::ToolBelt belt;
+    belt.init(); // active is mining laser
+
+    NF::InteractionSystem interaction;
+    auto hit = interaction.tryScan(world, belt, {5.5f, 10.f, 5.5f}, {0.f, -1.f, 0.f});
+    REQUIRE_FALSE(hit.has_value());
+}
+
+TEST_CASE("InteractionSystem maxReach config", "[Game][Interaction][G1]") {
+    NF::InteractionSystem interaction;
+    REQUIRE(interaction.maxReach() == Catch::Approx(8.f));
+    interaction.setMaxReach(12.f);
+    REQUIRE(interaction.maxReach() == Catch::Approx(12.f));
+}
+
+// ── G1: GameSession tests ───────────────────────────────────────
+
+TEST_CASE("GameSession init and shutdown", "[Game][Session][G1]") {
+    NF::GameSession session;
+    REQUIRE_FALSE(session.isActive());
+
+    session.init();
+    REQUIRE(session.isActive());
+    REQUIRE(session.rig().health == 100.f);
+    REQUIRE(session.toolBelt().slotCount() == 4);
+    REQUIRE(session.voxelInventory().count(NF::VoxelType::Stone) == 0);
+    REQUIRE(session.resourceInventory().isEmpty());
+
+    session.shutdown();
+    REQUIRE_FALSE(session.isActive());
+}
+
+TEST_CASE("GameSession tick updates rig and tools", "[Game][Session][G1]") {
+    NF::GameSession session;
+    session.init();
+
+    session.rig().energy = 50.f;
+    session.toolBelt().activeTool().use(); // put on cooldown
+    float cd = session.toolBelt().activeTool().cooldown;
+    REQUIRE(cd > 0.f);
+
+    session.tick(1.f);
+    REQUIRE(session.rig().energy > 50.f); // regen
+    REQUIRE(session.toolBelt().activeTool().cooldown < cd); // reduced
+}
+
+TEST_CASE("GameSession tick expires HUD notifications", "[Game][Session][G1]") {
+    NF::GameSession session;
+    session.init();
+    session.hud().addNotification("test", 1.f);
+    REQUIRE(session.hud().notifications.size() == 1);
+
+    session.tick(2.f);
+    REQUIRE(session.hud().notifications.empty());
+}
+
+TEST_CASE("GameSession full mine interaction", "[Game][Session][G1]") {
+    NF::GameSession session;
+    session.init();
+
+    session.world().setWorld(5, 5, 5, NF::VoxelType::Ore_Crystal);
+
+    NF::Vec3 origin{5.5f, 10.f, 5.5f};
+    NF::Vec3 dir{0.f, -1.f, 0.f};
+
+    auto result = session.interaction().tryMine(
+        session.world(), session.rig(), session.toolBelt(),
+        session.voxelInventory(), session.resourceInventory(),
+        origin, dir);
+
+    REQUIRE(result.success);
+    REQUIRE(session.voxelInventory().count(NF::VoxelType::Ore_Crystal) == 1);
+    REQUIRE(session.resourceInventory().count(NF::ResourceType::RawCrystal) >= 1);
+    REQUIRE(session.world().getWorld(5, 5, 5) == NF::VoxelType::Air);
+}
+
+// ── G2: ChunkRenderData tests ───────────────────────────────────
+
+TEST_CASE("ChunkRenderData defaults", "[Game][G2]") {
+    NF::ChunkRenderData data;
+    REQUIRE_FALSE(data.valid);
+    REQUIRE(data.version == 0);
+    REQUIRE(data.mesh.vertexCount() == 0);
+}
+
+// ── G2: ChunkRenderCache tests ──────────────────────────────────
+
+TEST_CASE("ChunkRenderCache update and get", "[Game][RenderCache][G2]") {
+    NF::Chunk chunk;
+    chunk.cx = 0; chunk.cy = 0; chunk.cz = 0;
+    chunk.set(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::ChunkRenderCache cache;
+    REQUIRE(cache.cacheSize() == 0);
+
+    cache.update(chunk);
+    REQUIRE(cache.cacheSize() == 1);
+
+    auto* data = cache.get({0, 0, 0});
+    REQUIRE(data != nullptr);
+    REQUIRE(data->valid);
+    REQUIRE(data->version == 1);
+    REQUIRE(data->mesh.vertexCount() > 0);
+
+    // Update again increments version
+    cache.update(chunk);
+    data = cache.get({0, 0, 0});
+    REQUIRE(data->version == 2);
+}
+
+TEST_CASE("ChunkRenderCache remove and clear", "[Game][RenderCache][G2]") {
+    NF::Chunk chunk;
+    chunk.set(0, 0, 0, NF::VoxelType::Dirt);
+    chunk.cx = 1; chunk.cy = 2; chunk.cz = 3;
+
+    NF::ChunkRenderCache cache;
+    cache.update(chunk);
+    REQUIRE(cache.cacheSize() == 1);
+
+    cache.remove({1, 2, 3});
+    REQUIRE(cache.cacheSize() == 0);
+    REQUIRE(cache.get({1, 2, 3}) == nullptr);
+
+    cache.update(chunk);
+    cache.clear();
+    REQUIRE(cache.cacheSize() == 0);
+}
+
+TEST_CASE("ChunkRenderCache updateDirty", "[Game][RenderCache][G2]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+    world.setWorld(16, 0, 0, NF::VoxelType::Dirt);
+
+    NF::ChunkRenderCache cache;
+    int rebuilt = cache.updateDirty(world);
+    REQUIRE(rebuilt == 2);
+    REQUIRE(cache.cacheSize() == 2);
+
+    // All chunks now clean, no more rebuilds
+    int rebuilt2 = cache.updateDirty(world);
+    REQUIRE(rebuilt2 == 0);
+
+    // Dirty one chunk
+    world.setWorld(0, 0, 0, NF::VoxelType::Grass);
+    int rebuilt3 = cache.updateDirty(world);
+    REQUIRE(rebuilt3 == 1);
+}
+
+// ── G2: ChunkRenderer tests ────────────────────────────────────
+
+TEST_CASE("ChunkRenderer init/shutdown", "[Game][ChunkRenderer][G2]") {
+    NF::ChunkRenderer renderer;
+    renderer.init();
+    REQUIRE(renderer.voxelMaterial().name() == NF::StringID("voxel_material"));
+    renderer.shutdown();
+}
+
+TEST_CASE("ChunkRenderer render submits commands", "[Game][ChunkRenderer][G2]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+
+    NF::ChunkRenderCache cache;
+    cache.updateDirty(world);
+
+    NF::Camera cam;
+    cam.position = {8, 8, 50};
+    cam.target = {8, 8, 0};
+
+    NF::RenderQueue queue;
+    NF::ChunkRenderer renderer;
+    renderer.init();
+
+    int visible = renderer.render(world, cache, queue, cam, 1.f);
+    REQUIRE(visible >= 1);
+    REQUIRE(queue.size() >= 1);
+}
+
+TEST_CASE("ChunkRenderer countVisible", "[Game][ChunkRenderer][G2]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+
+    NF::Camera cam;
+    cam.position = {8, 8, 50};
+    cam.target = {8, 8, 0};
+
+    NF::ChunkRenderer renderer;
+    renderer.init();
+
+    int visible = renderer.countVisible(world, cam, 1.f);
+    REQUIRE(visible >= 1);
+}
+
+TEST_CASE("ChunkRenderer frustum culling", "[Game][ChunkRenderer][G2]") {
+    NF::WorldState world;
+    // Chunk at origin
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+    // Chunk far behind camera
+    world.setWorld(5000, 5000, 5000, NF::VoxelType::Dirt);
+
+    NF::Camera cam;
+    cam.position = {8, 8, 50};
+    cam.target = {8, 8, 0};
+    cam.farPlane = 200.f;
+
+    NF::ChunkRenderer renderer;
+    renderer.init();
+
+    // Should see chunk at origin but not the one at 5000,5000,5000
+    int visible = renderer.countVisible(world, cam, 1.f);
+    REQUIRE(visible < static_cast<int>(world.chunkCount()));
+}
+
+// ── G3: FPSCamera tests ─────────────────────────────────────────
+
+TEST_CASE("FPSCamera init and defaults", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 5, 0});
+    REQUIRE(cam.position().x == Catch::Approx(0.f));
+    REQUIRE(cam.position().y == Catch::Approx(5.f));
+    REQUIRE(cam.yaw() == Catch::Approx(-90.f));
+    REQUIRE(cam.pitch() == Catch::Approx(0.f));
+    REQUIRE(cam.sensitivity() == Catch::Approx(0.1f));
+}
+
+TEST_CASE("FPSCamera mouse look yaw", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    float initialYaw = cam.yaw();
+    cam.processMouseLook(100.f, 0.f); // move mouse right
+    REQUIRE(cam.yaw() > initialYaw);
+    REQUIRE(cam.pitch() == Catch::Approx(0.f));
+}
+
+TEST_CASE("FPSCamera mouse look pitch clamping", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    cam.processMouseLook(0.f, 10000.f); // extreme up
+    REQUIRE(cam.pitch() <= 89.f);
+    cam.processMouseLook(0.f, -20000.f); // extreme down
+    REQUIRE(cam.pitch() >= -89.f);
+}
+
+TEST_CASE("FPSCamera forward vector calculation", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0}, -90.f, 0.f); // looking along -Z
+    NF::Vec3 fwd = cam.forward();
+    REQUIRE(fwd.x == Catch::Approx(0.f).margin(1e-5));
+    REQUIRE(fwd.y == Catch::Approx(0.f).margin(1e-5));
+    REQUIRE(fwd.z == Catch::Approx(-1.f).margin(1e-5));
+}
+
+TEST_CASE("FPSCamera toCamera conversion", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera fpsCam;
+    fpsCam.init({1, 2, 3});
+    NF::Camera cam = fpsCam.toCamera(90.f, 0.5f, 500.f);
+    REQUIRE(cam.position.x == Catch::Approx(1.f));
+    REQUIRE(cam.position.y == Catch::Approx(2.f));
+    REQUIRE(cam.position.z == Catch::Approx(3.f));
+    REQUIRE(cam.fov == Catch::Approx(90.f));
+    REQUIRE(cam.nearPlane == Catch::Approx(0.5f));
+    REQUIRE(cam.farPlane == Catch::Approx(500.f));
+    // target should be position + forward
+    NF::Vec3 diff = cam.target - cam.position;
+    float len = diff.length();
+    REQUIRE(len == Catch::Approx(1.f).margin(1e-4));
+}
+
+TEST_CASE("FPSCamera sensitivity", "[Game][FPSCamera][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    cam.setSensitivity(0.5f);
+    REQUIRE(cam.sensitivity() == Catch::Approx(0.5f));
+    float yawBefore = cam.yaw();
+    cam.processMouseLook(10.f, 0.f);
+    REQUIRE(cam.yaw() == Catch::Approx(yawBefore + 10.f * 0.5f));
+}
+
+// ── G3: PlayerMovement tests ────────────────────────────────────
+
+TEST_CASE("PlayerMovement init and defaults", "[Game][PlayerMovement][G3]") {
+    NF::PlayerMovement pm;
+    pm.init({1, 2, 3});
+    REQUIRE(pm.position().x == Catch::Approx(1.f));
+    REQUIRE(pm.position().y == Catch::Approx(2.f));
+    REQUIRE(pm.walkSpeed() == Catch::Approx(5.f));
+    REQUIRE(pm.sprintSpeed() == Catch::Approx(8.f));
+    REQUIRE(pm.crouchSpeed() == Catch::Approx(2.5f));
+    REQUIRE(pm.jumpForce() == Catch::Approx(7.f));
+    REQUIRE(pm.gravity() == Catch::Approx(-20.f));
+}
+
+TEST_CASE("PlayerMovement forward movement", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0}, -90.f, 0.f); // looking along -Z
+    NF::PlayerMovement pm;
+    pm.init({0, 0, 0});
+
+    NF::MovementInput input;
+    input.forward = true;
+
+    // Start grounded
+    pm.setGravity(0.f);
+    pm.update(1.f, input, cam);
+
+    // Should have moved in -Z direction
+    REQUIRE(pm.position().z < 0.f);
+}
+
+TEST_CASE("PlayerMovement sprint speed", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0}, -90.f, 0.f);
+    NF::PlayerMovement pm;
+    pm.init({0, 0, 0});
+    pm.setGravity(0.f);
+
+    NF::MovementInput input;
+    input.forward = true;
+    input.sprint = true;
+
+    pm.update(1.f, input, cam);
+    REQUIRE(pm.isSprinting());
+    REQUIRE(pm.currentSpeed() == Catch::Approx(8.f).margin(0.1f));
+}
+
+TEST_CASE("PlayerMovement gravity and falling", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 10, 0});
+    NF::PlayerMovement pm;
+    pm.init({0, 10, 0});
+
+    NF::MovementInput input; // no input, just gravity
+    pm.update(0.1f, input, cam);
+
+    REQUIRE(pm.position().y < 10.f);
+    REQUIRE(pm.velocity().y < 0.f);
+}
+
+TEST_CASE("PlayerMovement jump", "[Game][PlayerMovement][G3]") {
+    NF::FPSCamera cam;
+    cam.init({0, 0, 0});
+    NF::PlayerMovement pm;
+    pm.init({0, 0, 0});
+
+    // First land on ground
+    NF::MovementInput input;
+    pm.update(0.1f, input, cam); // gravity pulls to y<0, snaps to 0, grounded=true
+    REQUIRE(pm.isGrounded());
+
+    // Now jump
+    input.jump = true;
+    pm.update(0.016f, input, cam);
+    REQUIRE(pm.velocity().y > 0.f);
+}
+
+// ── G3: VoxelCollider tests ─────────────────────────────────────
+
+TEST_CASE("VoxelCollider wouldCollide empty world", "[Game][VoxelCollider][G3]") {
+    NF::WorldState world;
+    NF::VoxelCollider collider;
+    REQUIRE_FALSE(collider.wouldCollide(world, {5.f, 5.f, 5.f}));
+}
+
+TEST_CASE("VoxelCollider isOnGround", "[Game][VoxelCollider][G3]") {
+    NF::WorldState world;
+    // Place a solid voxel at y=0
+    world.setWorld(5, 0, 5, NF::VoxelType::Stone);
+    NF::VoxelCollider collider;
+    // Player standing at y=1 (feet at y=1, voxel at y=0 is just below)
+    REQUIRE(collider.isOnGround(world, {5.5f, 1.f, 5.5f}));
+    // Player far above
+    REQUIRE_FALSE(collider.isOnGround(world, {5.5f, 10.f, 5.5f}));
+}
+
+TEST_CASE("VoxelCollider resolveCollision", "[Game][VoxelCollider][G3]") {
+    NF::WorldState world;
+    // Wall of stone at x=3
+    for (int y = 0; y < 3; ++y)
+        for (int z = 0; z < 3; ++z)
+            world.setWorld(3, y, z, NF::VoxelType::Stone);
+
+    NF::VoxelCollider collider;
+    NF::Vec3 pos{2.f, 0.5f, 1.f};
+    NF::Vec3 vel{10.f, 0.f, 0.f}; // moving into the wall
+
+    NF::Vec3 resolved = collider.resolveCollision(world, pos, vel, 0.1f);
+    // X should be blocked (reverted), so resolved.x should equal original
+    REQUIRE(resolved.x == Catch::Approx(pos.x));
+}
+
+// ── G3: PlayerController test ───────────────────────────────────
+
+TEST_CASE("PlayerController init and update", "[Game][PlayerController][G3]") {
+    NF::PlayerController ctrl;
+    ctrl.init({0, 0, 0});
+    REQUIRE(ctrl.position().x == Catch::Approx(0.f));
+
+    NF::WorldState world;
+    NF::MovementInput input;
+    input.forward = true;
+
+    ctrl.update(0.016f, input, 0.f, 0.f, world);
+
+    // Camera should be at eye height
+    REQUIRE(ctrl.camera().position().y > 0.f);
+    // Look direction should be valid
+    float len = ctrl.lookDirection().length();
+    REQUIRE(len == Catch::Approx(1.f).margin(1e-4));
+}
+
+// ── G4: Ship Systems ─────────────────────────────────────────────
+
+TEST_CASE("ShipClass name conversion", "[Game][Ship][G4]") {
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Fighter))   == "Fighter");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Corvette))  == "Corvette");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Frigate))   == "Frigate");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Cruiser))   == "Cruiser");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Freighter)) == "Freighter");
+    REQUIRE(std::string(NF::shipClassName(NF::ShipClass::Count))     == "Unknown");
+}
+
+TEST_CASE("ModuleSlotType name conversion", "[Game][Ship][G4]") {
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Weapon))  == "Weapon");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Shield))  == "Shield");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Engine))  == "Engine");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Reactor)) == "Reactor");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Cargo))   == "Cargo");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Utility)) == "Utility");
+    REQUIRE(std::string(NF::moduleSlotTypeName(NF::ModuleSlotType::Count))   == "Unknown");
+}
+
+TEST_CASE("ShipModule defaults and damage", "[Game][Ship][G4]") {
+    NF::ShipModule mod;
+    REQUIRE(mod.health == Catch::Approx(100.f));
+    REQUIRE(mod.active == true);
+    REQUIRE_FALSE(mod.isDestroyed());
+
+    mod.takeDamage(60.f);
+    REQUIRE(mod.health == Catch::Approx(40.f));
+    REQUIRE_FALSE(mod.isDestroyed());
+
+    mod.takeDamage(50.f);
+    REQUIRE(mod.health == Catch::Approx(0.f));
+    REQUIRE(mod.isDestroyed());
+    REQUIRE(mod.active == false);
+}
+
+TEST_CASE("ShipModule repair", "[Game][Ship][G4]") {
+    NF::ShipModule mod;
+    mod.takeDamage(100.f);
+    REQUIRE(mod.isDestroyed());
+    REQUIRE(mod.active == false);
+
+    mod.repair(50.f);
+    REQUIRE(mod.health == Catch::Approx(50.f));
+    REQUIRE(mod.active == true);
+    REQUIRE_FALSE(mod.isDestroyed());
+
+    mod.repair(200.f);
+    REQUIRE(mod.health == Catch::Approx(100.f));
+}
+
+TEST_CASE("Ship init by class — Fighter", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("TestFighter"));
+    REQUIRE(ship.shipClass() == NF::ShipClass::Fighter);
+    REQUIRE(ship.maxHull() == Catch::Approx(100.f));
+    REQUIRE(ship.maxShield() == Catch::Approx(50.f));
+    REQUIRE(ship.maxModules() == 4);
+    REQUIRE(ship.hull() == Catch::Approx(100.f));
+    REQUIRE(ship.shield() == Catch::Approx(50.f));
+}
+
+TEST_CASE("Ship init by class — Corvette", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Corvette, NF::StringID("TestCorvette"));
+    REQUIRE(ship.maxHull() == Catch::Approx(200.f));
+    REQUIRE(ship.maxShield() == Catch::Approx(100.f));
+    REQUIRE(ship.maxModules() == 6);
+}
+
+TEST_CASE("Ship init by class — Frigate", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Frigate, NF::StringID("TestFrigate"));
+    REQUIRE(ship.maxHull() == Catch::Approx(400.f));
+    REQUIRE(ship.maxShield() == Catch::Approx(200.f));
+    REQUIRE(ship.maxModules() == 8);
+}
+
+TEST_CASE("Ship add/remove modules", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Modular"));
+    REQUIRE(ship.moduleCount() == 0);
+
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 50.f;
+    REQUIRE(ship.addModule(eng));
+    REQUIRE(ship.moduleCount() == 1);
+    REQUIRE(ship.module(0)->slotType == NF::ModuleSlotType::Engine);
+
+    ship.removeModule(0);
+    REQUIRE(ship.moduleCount() == 0);
+}
+
+TEST_CASE("Ship max modules limit", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Full"));
+
+    NF::ShipModule mod;
+    for (int i = 0; i < 4; ++i)
+        REQUIRE(ship.addModule(mod));
+    REQUIRE(ship.moduleCount() == 4);
+    REQUIRE_FALSE(ship.addModule(mod));
+    REQUIRE(ship.moduleCount() == 4);
+}
+
+TEST_CASE("Ship hull damage — shield absorbs first", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("DmgTest"));
+    REQUIRE(ship.shield() == Catch::Approx(50.f));
+    REQUIRE(ship.hull() == Catch::Approx(100.f));
+
+    ship.takeDamage(30.f);
+    REQUIRE(ship.shield() == Catch::Approx(20.f));
+    REQUIRE(ship.hull() == Catch::Approx(100.f));
+
+    ship.takeDamage(40.f);
+    REQUIRE(ship.shield() == Catch::Approx(0.f));
+    REQUIRE(ship.hull() == Catch::Approx(80.f));
+}
+
+TEST_CASE("Ship destroyed state", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Doomed"));
+    REQUIRE_FALSE(ship.isDestroyed());
+
+    ship.takeDamage(50.f + 100.f);
+    REQUIRE(ship.isDestroyed());
+    REQUIRE(ship.hull() == Catch::Approx(0.f));
+}
+
+TEST_CASE("Ship computeStats", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Corvette, NF::StringID("Stats"));
+
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 40.f;
+    ship.addModule(eng);
+
+    NF::ShipModule reactor;
+    reactor.slotType = NF::ModuleSlotType::Reactor;
+    reactor.powerOutput = 100.f;
+    ship.addModule(reactor);
+
+    NF::ShipModule weapon;
+    weapon.slotType = NF::ModuleSlotType::Weapon;
+    weapon.damage = 10.f;
+    weapon.fireRate = 2.f;
+    ship.addModule(weapon);
+
+    NF::ShipStats stats = ship.computeStats();
+    REQUIRE(stats.totalThrust == Catch::Approx(40.f));
+    REQUIRE(stats.totalPowerOutput == Catch::Approx(100.f));
+    REQUIRE(stats.maxWeaponDPS == Catch::Approx(20.f));
+    REQUIRE(stats.activeModuleCount == 3);
+    REQUIRE(stats.destroyedModuleCount == 0);
+}
+
+TEST_CASE("Ship shield recharge", "[Game][Ship][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Regen"));
+    ship.takeDamage(30.f);
+    REQUIRE(ship.shield() == Catch::Approx(20.f));
+
+    ship.rechargeShield(1.f);
+    REQUIRE(ship.shield() == Catch::Approx(25.f));
+
+    ship.rechargeShield(100.f);
+    REQUIRE(ship.shield() == Catch::Approx(50.f));
+}
+
+TEST_CASE("FlightState defaults", "[Game][Flight][G4]") {
+    NF::FlightState fs;
+    REQUIRE(fs.speed == Catch::Approx(0.f));
+    REQUIRE(fs.maxSpeed == Catch::Approx(100.f));
+    REQUIRE(fs.turnRate == Catch::Approx(90.f));
+    REQUIRE(fs.boostMultiplier == Catch::Approx(2.f));
+    REQUIRE(fs.boosting == false);
+    REQUIRE(fs.forward.z == Catch::Approx(1.f));
+}
+
+TEST_CASE("FlightController init", "[Game][Flight][G4]") {
+    NF::FlightController fc;
+    fc.init({10, 20, 30});
+    REQUIRE(fc.position().x == Catch::Approx(10.f));
+    REQUIRE(fc.position().y == Catch::Approx(20.f));
+    REQUIRE(fc.position().z == Catch::Approx(30.f));
+    REQUIRE(fc.speed() == Catch::Approx(0.f));
+}
+
+TEST_CASE("FlightController update throttle", "[Game][Flight][G4]") {
+    NF::FlightController fc;
+    fc.init({0, 0, 0});
+
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Fly"));
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 50.f;
+    ship.addModule(eng);
+
+    NF::FlightInput input;
+    input.throttle = 1.f;
+
+    fc.update(1.f, input, ship);
+    REQUIRE(fc.speed() > 0.f);
+    REQUIRE(fc.position().z > 0.f);
+}
+
+TEST_CASE("FlightController boost", "[Game][Flight][G4]") {
+    NF::FlightController fc;
+    fc.init({0, 0, 0});
+
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Boost"));
+    NF::ShipModule eng;
+    eng.slotType = NF::ModuleSlotType::Engine;
+    eng.thrustPower = 50.f;
+    ship.addModule(eng);
+
+    NF::FlightInput input;
+    input.throttle = 1.f;
+    input.boost = true;
+
+    fc.update(1.f, input, ship);
+    REQUIRE(fc.state().boosting == true);
+    REQUIRE(fc.speed() > 0.f);
+}
+
+TEST_CASE("WeaponState cooldown", "[Game][Combat][G4]") {
+    NF::WeaponState ws;
+    ws.cooldown = 1.f;
+    REQUIRE_FALSE(ws.isReady());
+
+    ws.tick(0.5f);
+    REQUIRE(ws.cooldown == Catch::Approx(0.5f));
+    REQUIRE_FALSE(ws.isReady());
+
+    ws.tick(0.6f);
+    REQUIRE(ws.cooldown == Catch::Approx(0.f));
+    REQUIRE(ws.isReady());
+}
+
+TEST_CASE("CombatSystem calculate damage", "[Game][Combat][G4]") {
+    NF::Ship ship;
+    ship.init(NF::ShipClass::Fighter, NF::StringID("Gunner"));
+
+    NF::ShipModule weapon;
+    weapon.slotType = NF::ModuleSlotType::Weapon;
+    weapon.damage = 25.f;
+    weapon.fireRate = 2.f;
+    ship.addModule(weapon);
+
+    NF::CombatSystem cs;
+    cs.init();
+
+    float dmg = cs.calculateDamage(ship, 0);
+    REQUIRE(dmg == Catch::Approx(25.f));
+
+    float noDmg = cs.calculateDamage(ship, 5);
+    REQUIRE(noDmg == Catch::Approx(0.f));
+}
+
+TEST_CASE("CombatSystem evaluate target in range", "[Game][Combat][G4]") {
+    NF::CombatSystem cs;
+    cs.init();
+
+    NF::Vec3 shipPos{0, 0, 0};
+    NF::Vec3 shipFwd{0, 0, 1};
+    NF::Vec3 targetPos{0, 0, 50};
+
+    NF::CombatTarget ct = cs.evaluateTarget(shipPos, shipFwd, targetPos, 100.f, 30.f);
+    REQUIRE(ct.inRange == true);
+    REQUIRE(ct.inFiringArc == true);
+    REQUIRE(ct.distance == Catch::Approx(50.f));
+}
+
+TEST_CASE("CombatSystem evaluate target out of range", "[Game][Combat][G4]") {
+    NF::CombatSystem cs;
+    cs.init();
+
+    NF::Vec3 shipPos{0, 0, 0};
+    NF::Vec3 shipFwd{0, 0, 1};
+    NF::Vec3 targetPos{200, 0, 0};
+
+    NF::CombatTarget ct = cs.evaluateTarget(shipPos, shipFwd, targetPos, 100.f, 30.f);
+    REQUIRE(ct.inRange == false);
+    REQUIRE(ct.inFiringArc == false);
+}
+
+TEST_CASE("CombatSystem apply damage", "[Game][Combat][G4]") {
+    NF::Ship attacker;
+    attacker.init(NF::ShipClass::Fighter, NF::StringID("Attacker"));
+    NF::ShipModule weapon;
+    weapon.slotType = NF::ModuleSlotType::Weapon;
+    weapon.damage = 30.f;
+    weapon.fireRate = 1.f;
+    attacker.addModule(weapon);
+
+    NF::Ship target;
+    target.init(NF::ShipClass::Fighter, NF::StringID("Target"));
+    float initialShield = target.shield();
+
+    NF::CombatSystem cs;
+    cs.init();
+
+    float applied = cs.applyDamage(attacker, target, 0);
+    REQUIRE(applied == Catch::Approx(30.f));
+    REQUIRE(target.shield() == Catch::Approx(initialShield - 30.f));
+    REQUIRE(target.hull() == Catch::Approx(100.f));
+}
+
+// ── G5 Tests ─────────────────────────────────────────────────────
+
+TEST_CASE("NF::FormationType name", "[g5]") {
+    REQUIRE(std::string(NF::formationTypeName(NF::FormationType::Line)) == "Line");
+    REQUIRE(std::string(NF::formationTypeName(NF::FormationType::Wedge)) == "Wedge");
+    REQUIRE(std::string(NF::formationTypeName(NF::FormationType::Column)) == "Column");
+    REQUIRE(std::string(NF::formationTypeName(NF::FormationType::Spread)) == "Spread");
+    REQUIRE(std::string(NF::formationTypeName(NF::FormationType::Defensive)) == "Defensive");
+}
+
+TEST_CASE("NF::Formation init line", "[g5]") {
+    NF::Formation f;
+    f.init(NF::FormationType::Line, 4, 20.f);
+    REQUIRE(f.slotCount() == 4);
+    REQUIRE(f.slot(0).offset.x != f.slot(3).offset.x);
+    REQUIRE(f.slot(0).offset.z == 0.f);
+}
+
+TEST_CASE("NF::Formation init wedge", "[g5]") {
+    NF::Formation f;
+    f.init(NF::FormationType::Wedge, 5, 10.f);
+    REQUIRE(f.slotCount() == 5);
+    REQUIRE(f.slot(2).offset.z == 0.f);
+}
+
+TEST_CASE("NF::Formation slot world position", "[g5]") {
+    NF::Formation f;
+    f.init(NF::FormationType::Line, 1, 20.f);
+    NF::Vec3 leaderPos{10,0,10};
+    NF::Vec3 leaderFwd{0,0,1};
+    NF::Vec3 result = f.getSlotWorldPosition(0, leaderPos, leaderFwd);
+    REQUIRE(result.x == Catch::Approx(10.f));
+    REQUIRE(result.y == Catch::Approx(0.f));
+    REQUIRE(result.z == Catch::Approx(10.f));
+}
+
+TEST_CASE("NF::CaptainPersonality defaults", "[g5]") {
+    NF::CaptainPersonality p;
+    REQUIRE(p.morale == Catch::Approx(1.0f));
+    REQUIRE(p.confidence == Catch::Approx(1.0f));
+    REQUIRE(p.aggression == Catch::Approx(0.5f));
+}
+
+TEST_CASE("NF::CaptainPersonality adjust morale", "[g5]") {
+    NF::CaptainPersonality p;
+    p.adjustMorale(-0.5f);
+    REQUIRE(p.morale == Catch::Approx(0.5f));
+    p.adjustMorale(-2.f);
+    REQUIRE(p.morale == Catch::Approx(0.f));
+    p.adjustMorale(5.f);
+    REQUIRE(p.morale == Catch::Approx(1.f));
+}
+
+TEST_CASE("NF::CaptainPersonality willFlee", "[g5]") {
+    NF::CaptainPersonality p;
+    p.morale = 0.1f;
+    p.caution = 0.8f;
+    REQUIRE(p.willFlee() == true);
+    p.morale = 0.5f;
+    REQUIRE(p.willFlee() == false);
+}
+
+TEST_CASE("NF::CaptainPersonality willCharge", "[g5]") {
+    NF::CaptainPersonality p;
+    p.aggression = 0.9f;
+    p.confidence = 0.8f;
+    REQUIRE(p.willCharge() == true);
+    p.aggression = 0.3f;
+    REQUIRE(p.willCharge() == false);
+}
+
+TEST_CASE("NF::CaptainOrder name", "[g5]") {
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::HoldPosition)) == "HoldPosition");
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::AttackTarget)) == "AttackTarget");
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::DefendTarget)) == "DefendTarget");
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::FollowLeader)) == "FollowLeader");
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::Patrol)) == "Patrol");
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::Retreat)) == "Retreat");
+    REQUIRE(std::string(NF::captainOrderName(NF::CaptainOrder::FreeEngage)) == "FreeEngage");
+}
+
+TEST_CASE("NF::AICaptain init", "[g5]") {
+    NF::AICaptain cap;
+    NF::CaptainPersonality p;
+    p.aggression = 0.8f;
+    NF::StringID name(NF::StringID("captain1"));
+    cap.init(name, p);
+    REQUIRE(cap.name() == name);
+    REQUIRE(cap.personality().aggression == Catch::Approx(0.8f));
+}
+
+TEST_CASE("NF::AICaptain evaluate retreat", "[g5]") {
+    NF::AICaptain cap;
+    NF::CaptainPersonality p;
+    p.morale = 0.1f;
+    p.caution = 0.9f;
+    cap.init(NF::StringID("cap"), p);
+    auto order = cap.evaluate(0.2f, 1.f, 500.f, 1, 0);
+    REQUIRE(order == NF::CaptainOrder::Retreat);
+}
+
+TEST_CASE("NF::AICaptain evaluate attack", "[g5]") {
+    NF::AICaptain cap;
+    NF::CaptainPersonality p;
+    p.aggression = 0.9f;
+    p.confidence = 0.8f;
+    cap.init(NF::StringID("cap"), p);
+    auto order = cap.evaluate(1.f, 1.f, 100.f, 1, 0);
+    REQUIRE(order == NF::CaptainOrder::AttackTarget);
+}
+
+TEST_CASE("NF::AICaptain order override", "[g5]") {
+    NF::AICaptain cap;
+    NF::CaptainPersonality p;
+    cap.init(NF::StringID("cap"), p);
+    cap.setOrder(NF::CaptainOrder::Patrol);
+    REQUIRE(cap.currentOrder() == NF::CaptainOrder::Patrol);
+    cap.overrideOrder(NF::CaptainOrder::Retreat);
+    REQUIRE(cap.currentOrder() == NF::CaptainOrder::Retreat);
+    REQUIRE(cap.hasOverride() == true);
+    cap.clearOverride();
+    REQUIRE(cap.hasOverride() == false);
+    REQUIRE(cap.currentOrder() == NF::CaptainOrder::Patrol);
+}
+
+TEST_CASE("NF::FleetShip defaults", "[g5]") {
+    NF::FleetShip fs;
+    REQUIRE(fs.active == true);
+    REQUIRE(fs.formationSlot == -1);
+}
+
+TEST_CASE("NF::Fleet init and add ships", "[g5]") {
+    NF::Fleet fleet;
+    fleet.init(NF::StringID("fleet1"));
+    NF::FleetShip s1, s2;
+    fleet.addShip(std::move(s1));
+    fleet.addShip(std::move(s2));
+    REQUIRE(fleet.shipCount() == 2);
+    REQUIRE(fleet.activeShipCount() == 2);
+}
+
+TEST_CASE("NF::Fleet remove ship", "[g5]") {
+    NF::Fleet fleet;
+    fleet.init(NF::StringID("fleet1"));
+    NF::FleetShip s;
+    fleet.addShip(std::move(s));
+    REQUIRE(fleet.activeShipCount() == 1);
+    fleet.removeShip(0);
+    REQUIRE(fleet.activeShipCount() == 0);
+}
+
+TEST_CASE("NF::Fleet set formation", "[g5]") {
+    NF::Fleet fleet;
+    fleet.init(NF::StringID("fleet1"));
+    NF::FleetShip s1, s2, s3;
+    fleet.addShip(std::move(s1));
+    fleet.addShip(std::move(s2));
+    fleet.addShip(std::move(s3));
+    fleet.setFormation(NF::FormationType::Wedge, 15.f);
+    REQUIRE(fleet.formation().type() == NF::FormationType::Wedge);
+    REQUIRE(fleet.formation().slotCount() == 3);
+}
+
+TEST_CASE("NF::Fleet issue order and morale", "[g5]") {
+    NF::Fleet fleet;
+    fleet.init(NF::StringID("fleet1"));
+    NF::FleetShip s1, s2;
+    fleet.addShip(std::move(s1));
+    fleet.addShip(std::move(s2));
+    fleet.issueOrder(NF::CaptainOrder::Patrol);
+    REQUIRE(fleet.ship(0)->captain.currentOrder() == NF::CaptainOrder::Patrol);
+    REQUIRE(fleet.ship(1)->captain.currentOrder() == NF::CaptainOrder::Patrol);
+    REQUIRE(fleet.fleetMorale() == Catch::Approx(1.f));
+}
+
+// ── G6 Tests ─────────────────────────────────────────────────────
+
+TEST_CASE("NF::MarketItem defaults", "[g6]") {
+    NF::MarketItem item;
+    REQUIRE(item.quantity == 0);
+    REQUIRE(item.buyPrice == Catch::Approx(10.f));
+    REQUIRE(item.sellPrice == Catch::Approx(8.f));
+}
+
+TEST_CASE("NF::Market list and find item", "[g6]") {
+    NF::Market m;
+    m.init();
+    m.listItem(NF::ResourceType::RawIron, 100, 15.f, 10.f);
+    const NF::MarketItem* item = m.findItem(NF::ResourceType::RawIron);
+    REQUIRE(item != nullptr);
+    REQUIRE(item->quantity == 100);
+    REQUIRE(item->buyPrice == Catch::Approx(15.f));
+    REQUIRE(m.itemCount() == 1);
+}
+
+TEST_CASE("NF::Market buy success", "[g6]") {
+    NF::Market m;
+    m.init();
+    m.listItem(NF::ResourceType::RawIron, 100, 10.f, 8.f);
+    NF::ResourceInventory inv;
+    float credits = 200.f;
+    bool ok = m.buy(inv, NF::ResourceType::RawIron, 5, credits);
+    REQUIRE(ok == true);
+    REQUIRE(credits == Catch::Approx(150.f));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 5);
+}
+
+TEST_CASE("NF::Market buy insufficient credits", "[g6]") {
+    NF::Market m;
+    m.init();
+    m.listItem(NF::ResourceType::RawIron, 100, 10.f, 8.f);
+    NF::ResourceInventory inv;
+    float credits = 5.f;
+    bool ok = m.buy(inv, NF::ResourceType::RawIron, 5, credits);
+    REQUIRE(ok == false);
+    REQUIRE(credits == Catch::Approx(5.f));
+}
+
+TEST_CASE("NF::Market buy insufficient stock", "[g6]") {
+    NF::Market m;
+    m.init();
+    m.listItem(NF::ResourceType::RawIron, 2, 10.f, 8.f);
+    NF::ResourceInventory inv;
+    float credits = 1000.f;
+    bool ok = m.buy(inv, NF::ResourceType::RawIron, 10, credits);
+    REQUIRE(ok == false);
+}
+
+TEST_CASE("NF::Market sell success", "[g6]") {
+    NF::Market m;
+    m.init();
+    m.listItem(NF::ResourceType::RawIron, 0, 10.f, 8.f);
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawIron, 10);
+    float credits = 0.f;
+    bool ok = m.sell(inv, NF::ResourceType::RawIron, 5, credits);
+    REQUIRE(ok == true);
+    REQUIRE(credits == Catch::Approx(40.f));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 5);
+}
+
+TEST_CASE("NF::Market sell insufficient inventory", "[g6]") {
+    NF::Market m;
+    m.init();
+    NF::ResourceInventory inv;
+    float credits = 0.f;
+    bool ok = m.sell(inv, NF::ResourceType::RawIron, 5, credits);
+    REQUIRE(ok == false);
+}
+
+TEST_CASE("NF::RefiningRecipe fields", "[g6]") {
+    NF::RefiningRecipe r;
+    r.input = NF::ResourceType::RawIron;
+    r.inputAmount = 2;
+    r.output = NF::ResourceType::RefinedIron;
+    r.outputAmount = 1;
+    r.timeRequired = 5.f;
+    REQUIRE(r.inputAmount == 2);
+    REQUIRE(r.outputAmount == 1);
+    REQUIRE(r.timeRequired == Catch::Approx(5.f));
+}
+
+TEST_CASE("NF::Refinery add recipe and find", "[g6]") {
+    NF::Refinery ref;
+    NF::RefiningRecipe r;
+    r.input = NF::ResourceType::RawIron;
+    r.inputAmount = 2;
+    r.output = NF::ResourceType::RefinedIron;
+    r.outputAmount = 1;
+    r.timeRequired = 3.f;
+    ref.addRecipe(r);
+    REQUIRE(ref.recipeCount() == 1);
+    const NF::RefiningRecipe* found = ref.findRecipe(NF::ResourceType::RawIron);
+    REQUIRE(found != nullptr);
+    REQUIRE(found->outputAmount == 1);
+}
+
+TEST_CASE("NF::Refinery start and collect", "[g6]") {
+    NF::Refinery ref;
+    NF::RefiningRecipe r;
+    r.input = NF::ResourceType::RawIron;
+    r.inputAmount = 2;
+    r.output = NF::ResourceType::RefinedIron;
+    r.outputAmount = 1;
+    r.timeRequired = 3.f;
+    ref.addRecipe(r);
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawIron, 10);
+    float t = ref.startRefining(inv, NF::ResourceType::RawIron, 4);
+    REQUIRE(t == Catch::Approx(6.f));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 6);
+    ref.collectOutput(inv);
+    REQUIRE(inv.count(NF::ResourceType::RefinedIron) == 2);
+}
+
+TEST_CASE("NF::Refinery no recipe returns 0", "[g6]") {
+    NF::Refinery ref;
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawIron, 10);
+    float t = ref.startRefining(inv, NF::ResourceType::RawIron, 4);
+    REQUIRE(t == Catch::Approx(0.f));
+}
+
+TEST_CASE("NF::ManufacturingRecipe fields", "[g6]") {
+    NF::ManufacturingRecipe r;
+    r.name = NF::StringID("cannon");
+    r.output = NF::ResourceType::SteelPlate;
+    r.outputAmount = 1;
+    r.timeRequired = 10.f;
+    REQUIRE(r.outputAmount == 1);
+    REQUIRE(r.timeRequired == Catch::Approx(10.f));
+}
+
+TEST_CASE("NF::Manufacturer can craft", "[g6]") {
+    NF::Manufacturer mfg;
+    NF::ManufacturingRecipe r;
+    r.name = NF::StringID("cannon");
+    r.inputs.push_back({NF::ResourceType::RawIron, 3});
+    r.inputs.push_back({NF::ResourceType::EnergyCell, 2});
+    r.output = NF::ResourceType::SteelPlate;
+    r.outputAmount = 1;
+    r.timeRequired = 5.f;
+    mfg.addRecipe(r);
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawIron, 5);
+    inv.add(NF::ResourceType::EnergyCell, 5);
+    REQUIRE(mfg.canCraft(inv, NF::StringID("cannon")) == true);
+    inv.remove(NF::ResourceType::RawIron, 4);
+    REQUIRE(mfg.canCraft(inv, NF::StringID("cannon")) == false);
+}
+
+TEST_CASE("NF::Manufacturer craft output", "[g6]") {
+    NF::Manufacturer mfg;
+    NF::ManufacturingRecipe r;
+    r.name = NF::StringID("widget");
+    r.inputs.push_back({NF::ResourceType::RawIron, 2});
+    r.output = NF::ResourceType::SteelPlate;
+    r.outputAmount = 1;
+    r.timeRequired = 4.f;
+    mfg.addRecipe(r);
+    NF::ResourceInventory inv;
+    inv.add(NF::ResourceType::RawIron, 10);
+    float t = mfg.craft(inv, NF::StringID("widget"));
+    REQUIRE(t == Catch::Approx(4.f));
+    REQUIRE(inv.count(NF::ResourceType::RawIron) == 8);
+    REQUIRE(inv.count(NF::ResourceType::SteelPlate) == 1);
+}
+
+// ── G7 Tests ─────────────────────────────────────────────────────
+
+TEST_CASE("NF::SectorType name", "[g7]") {
+    REQUIRE(std::string(NF::sectorTypeName(NF::SectorType::Normal)) == "Normal");
+    REQUIRE(std::string(NF::sectorTypeName(NF::SectorType::Nebula)) == "Nebula");
+    REQUIRE(std::string(NF::sectorTypeName(NF::SectorType::AsteroidField)) == "AsteroidField");
+    REQUIRE(std::string(NF::sectorTypeName(NF::SectorType::DeepSpace)) == "DeepSpace");
+    REQUIRE(std::string(NF::sectorTypeName(NF::SectorType::AncientRuins)) == "AncientRuins");
+}
+
+TEST_CASE("NF::SectorInfo defaults", "[g7]") {
+    NF::SectorInfo s;
+    REQUIRE(s.type == NF::SectorType::Normal);
+    REQUIRE(s.scanProgress == Catch::Approx(0.f));
+    REQUIRE(s.fullyScanned == false);
+    REQUIRE(s.hasWormhole == false);
+    REQUIRE(s.hasAncientTech == false);
+}
+
+TEST_CASE("NF::ProbeScanner init", "[g7]") {
+    NF::ProbeScanner ps;
+    ps.init(0.2f);
+    REQUIRE(ps.scanRate() == Catch::Approx(0.2f));
+    REQUIRE(ps.isActive() == false);
+}
+
+TEST_CASE("NF::ProbeScanner tick completes scan", "[g7]") {
+    NF::ProbeScanner ps;
+    ps.init(1.f);
+    NF::SectorInfo s;
+    ps.startScan(s);
+    REQUIRE(ps.isActive() == true);
+    bool done = ps.tick(1.f);
+    REQUIRE(done == true);
+    REQUIRE(s.fullyScanned == true);
+    REQUIRE(s.scanProgress == Catch::Approx(1.f));
+    REQUIRE(ps.isActive() == false);
+}
+
+TEST_CASE("NF::ProbeScanner stop scan", "[g7]") {
+    NF::ProbeScanner ps;
+    ps.init(0.1f);
+    NF::SectorInfo s;
+    ps.startScan(s);
+    REQUIRE(ps.isActive() == true);
+    ps.stopScan();
+    REQUIRE(ps.isActive() == false);
+}
+
+TEST_CASE("NF::WormholeLink traversable", "[g7]") {
+    NF::WormholeLink wh;
+    wh.stability = 0.5f;
+    REQUIRE(wh.isTraversable() == true);
+    wh.stability = 0.05f;
+    REQUIRE(wh.isTraversable() == false);
+}
+
+TEST_CASE("NF::WormholeLink degrade", "[g7]") {
+    NF::WormholeLink wh;
+    wh.stability = 1.f;
+    wh.degrade(0.3f);
+    REQUIRE(wh.stability == Catch::Approx(0.7f));
+    wh.degrade(2.f);
+    REQUIRE(wh.stability == Catch::Approx(0.f));
+}
+
+TEST_CASE("NF::StarMap add and find sector", "[g7]") {
+    NF::StarMap sm;
+    NF::SectorInfo s;
+    s.name = NF::StringID("alpha");
+    s.type = NF::SectorType::Nebula;
+    sm.addSector(s);
+    REQUIRE(sm.sectorCount() == 1);
+    const NF::SectorInfo* found = sm.findSector(NF::StringID("alpha"));
+    REQUIRE(found != nullptr);
+    REQUIRE(found->type == NF::SectorType::Nebula);
+}
+
+TEST_CASE("NF::StarMap add wormhole", "[g7]") {
+    NF::StarMap sm;
+    NF::WormholeLink wh;
+    wh.fromSector = NF::StringID("alpha");
+    wh.toSector = NF::StringID("beta");
+    sm.addWormhole(wh);
+    REQUIRE(sm.wormholeCount() == 1);
+}
+
+TEST_CASE("NF::StarMap reachable sectors", "[g7]") {
+    NF::StarMap sm;
+    NF::SectorInfo s1; s1.name = NF::StringID("alpha");
+    NF::SectorInfo s2; s2.name = NF::StringID("beta");
+    sm.addSector(s1);
+    sm.addSector(s2);
+    NF::WormholeLink wh;
+    wh.fromSector = NF::StringID("alpha");
+    wh.toSector = NF::StringID("beta");
+    wh.twoWay = true;
+    wh.stability = 1.f;
+    sm.addWormhole(wh);
+    auto reachable = sm.getReachableSectors(NF::StringID("alpha"));
+    REQUIRE(reachable.size() == 1);
+    REQUIRE(reachable[0] == NF::StringID("beta"));
+    auto fromBeta = sm.getReachableSectors(NF::StringID("beta"));
+    REQUIRE(fromBeta.size() == 1);
+    REQUIRE(fromBeta[0] == NF::StringID("alpha"));
+}
+
+TEST_CASE("NF::StarMap ancient tech sectors", "[g7]") {
+    NF::StarMap sm;
+    NF::SectorInfo s1; s1.name = NF::StringID("alpha"); s1.hasAncientTech = true;
+    NF::SectorInfo s2; s2.name = NF::StringID("beta");  s2.hasAncientTech = false;
+    NF::SectorInfo s3; s3.name = NF::StringID("gamma"); s3.hasAncientTech = true;
+    sm.addSector(s1);
+    sm.addSector(s2);
+    sm.addSector(s3);
+    auto techSectors = sm.getAncientTechSectors();
+    REQUIRE(techSectors.size() == 2);
+}
+
+TEST_CASE("NF::AncientTechFragment defaults", "[g7]") {
+    NF::AncientTechFragment f;
+    REQUIRE(f.tier == 1);
+    REQUIRE(f.analyzed == false);
+    REQUIRE(f.damageBonus == Catch::Approx(0.f));
+}
+
+TEST_CASE("NF::AncientTechRegistry add and find", "[g7]") {
+    NF::AncientTechRegistry reg;
+    NF::AncientTechFragment f;
+    f.name = NF::StringID("fragment1");
+    f.tier = 3;
+    reg.add(f);
+    REQUIRE(reg.count() == 1);
+    auto* found = reg.find(NF::StringID("fragment1"));
+    REQUIRE(found != nullptr);
+    REQUIRE(found->tier == 3);
+}
+
+TEST_CASE("NF::AncientTechRegistry analyze", "[g7]") {
+    NF::AncientTechRegistry reg;
+    NF::AncientTechFragment f;
+    f.name = NF::StringID("frag1");
+    f.tier = 2;
+    reg.add(f);
+    REQUIRE(reg.analyzedCount() == 0);
+    reg.analyze(NF::StringID("frag1"));
+    REQUIRE(reg.analyzedCount() == 1);
+    auto* found = reg.find(NF::StringID("frag1"));
+    REQUIRE(found->analyzed == true);
+    REQUIRE(found->damageBonus == Catch::Approx(0.1f));
+}
+
+// ── G8 Tests ─────────────────────────────────────────────────────
+
+TEST_CASE("NF::RoomType name", "[g8]") {
+    REQUIRE(std::string(NF::roomTypeName(NF::RoomType::Bridge)) == "Bridge");
+    REQUIRE(std::string(NF::roomTypeName(NF::RoomType::Engineering)) == "Engineering");
+    REQUIRE(std::string(NF::roomTypeName(NF::RoomType::MedBay)) == "MedBay");
+    REQUIRE(std::string(NF::roomTypeName(NF::RoomType::Cargo)) == "Cargo");
+    REQUIRE(std::string(NF::roomTypeName(NF::RoomType::Airlock)) == "Airlock");
+    REQUIRE(std::string(NF::roomTypeName(NF::RoomType::Corridor)) == "Corridor");
+}
+
+TEST_CASE("NF::ShipRoom defaults", "[g8]") {
+    NF::ShipRoom r;
+    REQUIRE(r.type == NF::RoomType::Corridor);
+    REQUIRE(r.oxygenLevel == Catch::Approx(1.f));
+    REQUIRE(r.temperature == Catch::Approx(20.f));
+    REQUIRE(r.pressurized == true);
+}
+
+TEST_CASE("NF::ShipRoom connect and query", "[g8]") {
+    NF::ShipRoom r;
+    r.name = NF::StringID("bridge");
+    r.connect(NF::StringID("corridor1"));
+    r.connect(NF::StringID("airlock1"));
+    REQUIRE(r.isConnectedTo(NF::StringID("corridor1")) == true);
+    REQUIRE(r.isConnectedTo(NF::StringID("airlock1")) == true);
+    REQUIRE(r.isConnectedTo(NF::StringID("engineering")) == false);
+}
+
+TEST_CASE("NF::ShipRoom habitable", "[g8]") {
+    NF::ShipRoom r;
+    r.pressurized = true;
+    r.oxygenLevel = 0.8f;
+    r.temperature = 20.f;
+    REQUIRE(r.isHabitable() == true);
+}
+
+TEST_CASE("NF::ShipRoom not habitable vacuum", "[g8]") {
+    NF::ShipRoom r;
+    r.pressurized = false;
+    r.oxygenLevel = 0.f;
+    REQUIRE(r.isHabitable() == false);
+}
+
+TEST_CASE("NF::ShipInterior add and find room", "[g8]") {
+    NF::ShipInterior interior;
+    NF::ShipRoom bridge;
+    bridge.name = NF::StringID("bridge");
+    bridge.type = NF::RoomType::Bridge;
+    interior.addRoom(bridge);
+    REQUIRE(interior.roomCount() == 1);
+    auto* found = interior.findRoom(NF::StringID("bridge"));
+    REQUIRE(found != nullptr);
+    REQUIRE(found->type == NF::RoomType::Bridge);
+}
+
+TEST_CASE("NF::ShipInterior decompress", "[g8]") {
+    NF::ShipInterior interior;
+    NF::ShipRoom airlock;
+    airlock.name = NF::StringID("airlock");
+    airlock.type = NF::RoomType::Airlock;
+    interior.addRoom(airlock);
+    interior.decompress(NF::StringID("airlock"));
+    auto* r = interior.findRoom(NF::StringID("airlock"));
+    REQUIRE(r->oxygenLevel == Catch::Approx(0.f));
+    REQUIRE(r->pressurized == false);
+}
+
+TEST_CASE("NF::ShipInterior repressurize", "[g8]") {
+    NF::ShipInterior interior;
+    NF::ShipRoom airlock;
+    airlock.name = NF::StringID("airlock");
+    interior.addRoom(airlock);
+    interior.decompress(NF::StringID("airlock"));
+    interior.repressurize(NF::StringID("airlock"));
+    auto* r = interior.findRoom(NF::StringID("airlock"));
+    REQUIRE(r->oxygenLevel == Catch::Approx(1.f));
+    REQUIRE(r->pressurized == true);
+}
+
+TEST_CASE("NF::ShipInterior habitable count", "[g8]") {
+    NF::ShipInterior interior;
+    NF::ShipRoom r1; r1.name = NF::StringID("r1");
+    NF::ShipRoom r2; r2.name = NF::StringID("r2");
+    NF::ShipRoom r3; r3.name = NF::StringID("r3");
+    interior.addRoom(r1);
+    interior.addRoom(r2);
+    interior.addRoom(r3);
+    REQUIRE(interior.habitableRoomCount() == 3);
+    interior.decompress(NF::StringID("r1"));
+    REQUIRE(interior.habitableRoomCount() == 2);
+}
+
+TEST_CASE("NF::EVAState defaults", "[g8]") {
+    NF::EVAState eva;
+    REQUIRE(eva.active == false);
+    REQUIRE(eva.suitIntegrity == Catch::Approx(100.f));
+    REQUIRE(eva.oxygenSupply == Catch::Approx(300.f));
+    REQUIRE(eva.jetpackFuel == Catch::Approx(100.f));
+    REQUIRE(eva.isAlive() == true);
+}
+
+TEST_CASE("NF::EVAState tick drains oxygen", "[g8]") {
+    NF::EVAState eva;
+    eva.active = true;
+    eva.tick(10.f);
+    REQUIRE(eva.oxygenSupply == Catch::Approx(290.f));
+    eva.tick(300.f);
+    REQUIRE(eva.oxygenSupply == Catch::Approx(0.f));
+    REQUIRE(eva.isAlive() == false);
+}
+
+TEST_CASE("NF::EVAState use thruster", "[g8]") {
+    NF::EVAState eva;
+    eva.active = true;
+    eva.useThruster(NF::Vec3{1.f, 0.f, 0.f}, 10.f);
+    REQUIRE(eva.velocity.x == Catch::Approx(1.f));
+    REQUIRE(eva.jetpackFuel == Catch::Approx(90.f));
+    eva.useThruster(NF::Vec3{1.f, 0.f, 0.f}, 200.f);
+    REQUIRE(eva.jetpackFuel == Catch::Approx(0.f));
+    float prevVelX = eva.velocity.x;
+    eva.useThruster(NF::Vec3{5.f, 0.f, 0.f}, 10.f);
+    REQUIRE(eva.velocity.x == Catch::Approx(prevVelX));
+}
+
+TEST_CASE("NF::SurvivalStatus danger thresholds", "[g8]") {
+    NF::SurvivalStatus ss;
+    REQUIRE(ss.isInDanger() == false);
+    ss.radiation = 60.f;
+    REQUIRE(ss.isRadiationDangerous() == true);
+    REQUIRE(ss.isInDanger() == true);
+    ss.radiation = 0.f;
+    ss.temperature = 34.f;
+    REQUIRE(ss.isHypothermic() == true);
+    ss.temperature = 41.f;
+    REQUIRE(ss.isHyperthermic() == true);
+}
+
+TEST_CASE("NF::SurvivalStatus tick in vacuum", "[g8]") {
+    NF::SurvivalStatus ss;
+    ss.tick(1.f, nullptr);
+    REQUIRE(ss.inVacuum == true);
+    REQUIRE(ss.radiation == Catch::Approx(2.f));
+    REQUIRE(ss.temperature == Catch::Approx(32.f));
+}
+
+// ── G9 Tests ─────────────────────────────────────────────────────
+
+TEST_CASE("NF::ReputationTier from score", "[g9]") {
+    REQUIRE(NF::reputationTierFromScore(-600.f) == NF::ReputationTier::Infamous);
+    REQUIRE(NF::reputationTierFromScore(-200.f) == NF::ReputationTier::Outlaw);
+    REQUIRE(NF::reputationTierFromScore(0.f) == NF::ReputationTier::Neutral);
+    REQUIRE(NF::reputationTierFromScore(200.f) == NF::ReputationTier::Trusted);
+    REQUIRE(NF::reputationTierFromScore(700.f) == NF::ReputationTier::Honored);
+    REQUIRE(NF::reputationTierFromScore(1500.f) == NF::ReputationTier::Legend);
+}
+
+TEST_CASE("NF::ReputationTier name", "[g9]") {
+    REQUIRE(std::string(NF::reputationTierName(NF::ReputationTier::Infamous)) == "Infamous");
+    REQUIRE(std::string(NF::reputationTierName(NF::ReputationTier::Outlaw)) == "Outlaw");
+    REQUIRE(std::string(NF::reputationTierName(NF::ReputationTier::Neutral)) == "Neutral");
+    REQUIRE(std::string(NF::reputationTierName(NF::ReputationTier::Trusted)) == "Trusted");
+    REQUIRE(std::string(NF::reputationTierName(NF::ReputationTier::Honored)) == "Honored");
+    REQUIRE(std::string(NF::reputationTierName(NF::ReputationTier::Legend)) == "Legend");
+}
+
+TEST_CASE("NF::PlayerReputation adjust and get", "[g9]") {
+    NF::PlayerReputation rep;
+    NF::StringID pirates(NF::StringID("pirates"));
+    rep.adjustReputation(pirates, 200.f);
+    REQUIRE(rep.getReputation(pirates) == Catch::Approx(200.f));
+    rep.adjustReputation(pirates, -50.f);
+    REQUIRE(rep.getReputation(pirates) == Catch::Approx(150.f));
+    REQUIRE(rep.factionCount() == 1);
+}
+
+TEST_CASE("NF::PlayerReputation tier", "[g9]") {
+    NF::PlayerReputation rep;
+    NF::StringID faction(NF::StringID("guild"));
+    rep.adjustReputation(faction, 300.f);
+    REQUIRE(rep.getTier(faction) == NF::ReputationTier::Trusted);
+}
+
+TEST_CASE("NF::PlayerReputation global fame", "[g9]") {
+    NF::PlayerReputation rep;
+    rep.adjustReputation(NF::StringID("a"), 500.f);
+    rep.adjustReputation(NF::StringID("b"), -300.f);
+    REQUIRE(rep.globalFame() == Catch::Approx(800.f));
+}
+
+TEST_CASE("NF::WorldBias friendly and hostile", "[g9]") {
+    NF::WorldBias wb;
+    wb.loyaltyToPlayer = 0.5f;
+    REQUIRE(wb.isFriendly() == true);
+    REQUIRE(wb.isHostile() == false);
+    wb.loyaltyToPlayer = -0.5f;
+    REQUIRE(wb.isFriendly() == false);
+    REQUIRE(wb.isHostile() == true);
+    wb.loyaltyToPlayer = 0.f;
+    REQUIRE(wb.isFriendly() == false);
+    REQUIRE(wb.isHostile() == false);
+}
+
+TEST_CASE("NF::WorldBiasMap set and get", "[g9]") {
+    NF::WorldBiasMap wbm;
+    NF::WorldBias wb;
+    wb.sectorName = NF::StringID("sector1");
+    wb.dangerLevel = 0.7f;
+    wbm.setBias(wb);
+    REQUIRE(wbm.biasCount() == 1);
+    auto* found = wbm.getBias(NF::StringID("sector1"));
+    REQUIRE(found != nullptr);
+    REQUIRE(found->dangerLevel == Catch::Approx(0.7f));
+}
+
+TEST_CASE("NF::WorldBiasMap update from reputation", "[g9]") {
+    NF::WorldBiasMap wbm;
+    NF::WorldBias wb;
+    wb.sectorName = NF::StringID("sector1");
+    wb.loyaltyToPlayer = 0.f;
+    wbm.setBias(wb);
+    wbm.updateFromReputation(NF::StringID("faction"), 100.f);
+    auto* found = wbm.getBias(NF::StringID("sector1"));
+    REQUIRE(found->loyaltyToPlayer == Catch::Approx(1.f));
+}
+
+TEST_CASE("NF::NPCMemoryEntry defaults", "[g9]") {
+    NF::NPCMemoryEntry e;
+    REQUIRE(e.timestamp == Catch::Approx(0.f));
+    REQUIRE(e.weight == Catch::Approx(1.f));
+    REQUIRE(e.positive == true);
+}
+
+TEST_CASE("NF::NPCMemory remember and count", "[g9]") {
+    NF::NPCMemory mem;
+    NF::NPCMemoryEntry e1;
+    e1.eventType = NF::StringID("helped");
+    e1.positive = true;
+    NF::NPCMemoryEntry e2;
+    e2.eventType = NF::StringID("attacked");
+    e2.positive = false;
+    mem.remember(e1);
+    mem.remember(e2);
+    REQUIRE(mem.entryCount() == 2);
+}
+
+TEST_CASE("NF::NPCMemory disposition", "[g9]") {
+    NF::NPCMemory mem;
+    NF::NPCMemoryEntry pos;
+    pos.eventType = NF::StringID("helped");
+    pos.weight = 2.f;
+    pos.positive = true;
+    NF::NPCMemoryEntry neg;
+    neg.eventType = NF::StringID("attacked");
+    neg.weight = 1.f;
+    neg.positive = false;
+    mem.remember(pos);
+    mem.remember(neg);
+    REQUIRE(mem.dispositionTowardPlayer() == Catch::Approx(1.f));
+}
+
+TEST_CASE("NF::NPCMemory decay", "[g9]") {
+    NF::NPCMemory mem;
+    NF::NPCMemoryEntry e;
+    e.eventType = NF::StringID("traded");
+    e.weight = 1.f;
+    mem.remember(e);
+    REQUIRE(mem.entryCount() == 1);
+    mem.decay(200.f, 0.01f);
+    REQUIRE(mem.entryCount() == 0);
+}
+
+TEST_CASE("NF::NPCMemory remembers event", "[g9]") {
+    NF::NPCMemory mem;
+    NF::NPCMemoryEntry e;
+    e.eventType = NF::StringID("traded");
+    mem.remember(e);
+    REQUIRE(mem.remembers(NF::StringID("traded")) == true);
+    REQUIRE(mem.remembers(NF::StringID("attacked")) == false);
+}
+
+TEST_CASE("NF::LegendStatus init and is legend", "[g9]") {
+    NF::LegendStatus ls;
+    ls.init();
+    REQUIRE(ls.isLegend() == false);
+    ls.reputation().adjustReputation(NF::StringID("a"), 1000.f);
+    ls.reputation().adjustReputation(NF::StringID("b"), 1500.f);
+    REQUIRE(ls.reputation().globalFame() == Catch::Approx(2500.f));
+    REQUIRE(ls.isLegend() == true);
 }

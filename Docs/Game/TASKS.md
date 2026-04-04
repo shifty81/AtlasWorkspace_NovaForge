@@ -161,3 +161,122 @@
 - [x] Modding guide (ship, module, skill, mission JSON format + voxel + graph scripting)
 - [x] Architecture documentation updated (Networking dependency correction)
 - [ ] Final audit
+
+## Game Phase G1 — First Interaction Loop
+
+- [x] ResourceType enum (RawStone, RawDirt, RawIron, RawGold, RawCrystal, RefinedIron, RefinedGold, RefinedCrystal, SteelPlate, CircuitBoard, EnergyCell)
+- [x] resourceTypeName / resourceTypeFromName round-trip functions
+- [x] ResourceDrop table (getResourceDrops maps VoxelType → ResourceDrop vector)
+- [x] ResourceInventory (add, remove, count, totalItems, isEmpty)
+- [x] ToolType enum (MiningLaser, PlacementTool, RepairTool, Scanner)
+- [x] ToolState (durability, energyCost, cooldown, cooldownRate, miningDamage, isReady, tick, use)
+- [x] toolTypeName function
+- [x] ToolBelt (4 slots, init, selectSlot, nextTool, prevTool, activeTool)
+- [x] Expanded RigState (health, maxHealth, energy, maxEnergy, oxygen, stamina, regen rates, isAlive, tick, takeDamage, heal, consumeEnergy, consumeStamina)
+- [x] HUDNotification and HUDState (crosshair, notifications, addNotification, tick, clearNotifications)
+- [x] MineResult and PlaceResult structs
+- [x] InteractionSystem (tryMine, tryPlace, tryScan, maxReach)
+- [x] GameSession (init, shutdown, tick, all accessors, isActive)
+- [x] Comprehensive test coverage (32 new tests, 383 total)
+
+## Game Phase G2 — Voxel Mesh Rendering
+
+- [x] LightType enum and LightSource struct (Directional, Point, Spot)
+- [x] LightingState (add/remove lights, ambient, Phong computeLighting)
+- [x] VoxelShader (pre-configured shader with VP, model, light uniforms)
+- [x] FrustumPlane and Frustum (extract from VP matrix, AABB culling)
+- [x] ChunkRenderData (coord, mesh, valid flag, version counter)
+- [x] ChunkRenderCache (update, remove, get, clear, updateDirty)
+- [x] ChunkRenderer (init, shutdown, render with frustum culling, countVisible)
+- [x] Renderer tests (12 new: lighting, shader, frustum)
+- [x] Game tests (8 new: render cache, chunk renderer, culling)
+- [x] Comprehensive test coverage (19 new tests, 402 total)
+
+## Game Phase G3 — Movement & FPS Camera
+
+- [x] FPSCamera class (init, processMouseLook, yaw/pitch, forward/right/up vectors)
+- [x] FPSCamera updateVectors (yaw/pitch to direction vectors via trig)
+- [x] FPSCamera toCamera conversion (builds Renderer Camera struct)
+- [x] FPSCamera pitch clamping (setPitchLimits, default ±89°)
+- [x] FPSCamera sensitivity setting
+- [x] MovementInput struct (forward, backward, left, right, jump, sprint, crouch)
+- [x] PlayerMovement class (walk, sprint, crouch speeds, gravity, jump)
+- [x] PlayerMovement update (camera-relative XZ movement, gravity, ground plane)
+- [x] PlayerAABB struct (fromPosition factory, half-width AABB)
+- [x] VoxelCollider class (axis-separated collision resolution)
+- [x] VoxelCollider wouldCollide (AABB vs solid voxel overlap test)
+- [x] VoxelCollider isOnGround (check voxel below feet)
+- [x] PlayerController class (ties camera, movement, collider together)
+- [x] PlayerController update (mouse look → movement → collision → eye height)
+- [x] Comprehensive test coverage (15 new tests, 417 total)
+
+## Game Phase G4 — Ship Systems
+
+- [x] ShipClass enum (Fighter, Corvette, Frigate, Cruiser, Freighter) with shipClassName()
+- [x] ModuleSlotType enum (Weapon, Shield, Engine, Reactor, Cargo, Utility) with moduleSlotTypeName()
+- [x] ShipModule struct (health, damage, takeDamage, repair, tier, slot-specific stats)
+- [x] ShipStats struct (computed totals: thrust, power, shield, cargo, DPS, module counts)
+- [x] Ship class (init by class, module management, hull/shield damage, shield recharge, computeStats)
+- [x] Ship damage model (shield absorbs first, overflow to hull)
+- [x] Ship class stats (Fighter/Corvette/Frigate/Cruiser/Freighter hull/shield/maxModules)
+- [x] FlightInput struct (throttle, pitch, yaw, roll, boost)
+- [x] FlightState struct (position, velocity, forward/up/right, speed, maxSpeed, turnRate, boostMultiplier)
+- [x] FlightController class (init, update with rotation + thrust + boost, position/velocity/speed accessors)
+- [x] WeaponState struct (cooldown, range, isReady, tick)
+- [x] CombatTarget struct (position, distance, inRange, inFiringArc)
+- [x] CombatSystem class (calculateDamage, tickWeapons, evaluateTarget with arc check, applyDamage)
+- [x] Comprehensive test coverage (22 new tests, 439 total)
+
+## Game Phase G5 — Fleet AI
+
+- [x] FormationType enum (Line, Wedge, Column, Spread, Defensive) with formationTypeName()
+- [x] FormationSlot struct (shipIndex, offset, occupied)
+- [x] Formation class (init, slotCount, slot, setSpacing, getSlotWorldPosition, generateSlotOffsets)
+- [x] CaptainPersonality struct (aggression, caution, loyalty, initiative, morale, confidence, adjustMorale, adjustConfidence, willFlee, willCharge)
+- [x] CaptainOrder enum (HoldPosition, AttackTarget, DefendTarget, FollowLeader, Patrol, Retreat, FreeEngage) with captainOrderName()
+- [x] AICaptain class (init, name, personality, currentOrder, setOrder, overrideOrder, clearOverride, evaluate)
+- [x] FleetShip struct (ship, captain, flight, formationSlot, active)
+- [x] Fleet class (init, addShip, removeShip, ship, shipCount, activeShipCount, setFormation, issueOrder, issueOrderTo, setLeader, tick, fleetMorale, fleetStrength)
+- [x] Comprehensive test coverage (20 new tests)
+
+## Game Phase G6 — Economy
+
+- [x] MarketItem struct (resource, quantity, buyPrice, sellPrice)
+- [x] Market class (init, listItem, buy, sell, findItem, itemCount)
+- [x] RefiningRecipe struct (input, inputAmount, output, outputAmount, timeRequired)
+- [x] Refinery class (addRecipe, findRecipe, startRefining, collectOutput, recipeCount)
+- [x] ManufacturingRecipe struct (name, inputs, output, outputAmount, timeRequired)
+- [x] Manufacturer class (addRecipe, findRecipe, canCraft, craft, recipeCount)
+- [x] Comprehensive test coverage (14 new tests)
+
+## Game Phase G7 — Exploration
+
+- [x] SectorType enum (Normal, Nebula, AsteroidField, DeepSpace, AncientRuins) with sectorTypeName()
+- [x] SectorInfo struct (name, type, position, scanProgress, fullyScanned, hasWormhole, hasAncientTech)
+- [x] ProbeScanner class (init, startScan, stopScan, isActive, tick, scanRate, setScanRate)
+- [x] WormholeLink struct (fromSector, toSector, stability, twoWay, isTraversable, degrade)
+- [x] StarMap class (addSector, findSector, addWormhole, getReachableSectors, sectorCount, wormholeCount, getAncientTechSectors)
+- [x] AncientTechFragment struct (name, sectorFound, tier, analyzed, damageBonus, shieldBonus, speedBonus)
+- [x] AncientTechRegistry class (add, find, analyze, count, analyzedCount)
+- [x] Comprehensive test coverage (13 new tests)
+
+## Game Phase G8 — FPS Interiors
+
+- [x] RoomType enum (Bridge, Engineering, MedBay, Cargo, Airlock, Corridor) with roomTypeName()
+- [x] ShipRoom struct (name, type, oxygenLevel, temperature, pressurized, connectedRooms, connect, isConnectedTo, isHabitable)
+- [x] ShipInterior class (addRoom, findRoom, roomCount, decompress, repressurize, habitableRoomCount)
+- [x] EVAState struct (active, suitIntegrity, oxygenSupply, jetpackFuel, velocity, isAlive, tick, useThruster, takeSuitDamage)
+- [x] SurvivalStatus struct (radiation, temperature, inVacuum, onFire, isRadiationDangerous, isHypothermic, isHyperthermic, isInDanger, tick)
+- [x] Comprehensive test coverage (11 new tests)
+
+## Game Phase G9 — Legend System
+
+- [x] ReputationTier enum (Infamous, Outlaw, Neutral, Trusted, Honored, Legend) with reputationTierName()
+- [x] reputationTierFromScore() free function
+- [x] PlayerReputation class (adjustReputation, getReputation, getTier, factionCount, globalFame)
+- [x] WorldBias struct (sectorName, economyModifier, dangerLevel, loyaltyToPlayer, isFriendly, isHostile)
+- [x] WorldBiasMap class (setBias, getBias, updateFromReputation, biasCount)
+- [x] NPCMemoryEntry struct (eventType, timestamp, weight, positive)
+- [x] NPCMemory class (remember, decay, dispositionTowardPlayer, entryCount, remembers)
+- [x] LegendStatus class (init, reputation, worldBias, overallTier, isLegend)
+- [x] Comprehensive test coverage (12 new tests)
