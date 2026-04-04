@@ -178,3 +178,16 @@
 - [x] InteractionSystem (tryMine, tryPlace, tryScan, maxReach)
 - [x] GameSession (init, shutdown, tick, all accessors, isActive)
 - [x] Comprehensive test coverage (32 new tests, 383 total)
+
+## Game Phase G2 — Voxel Mesh Rendering
+
+- [x] LightType enum and LightSource struct (Directional, Point, Spot)
+- [x] LightingState (add/remove lights, ambient, Phong computeLighting)
+- [x] VoxelShader (pre-configured shader with VP, model, light uniforms)
+- [x] FrustumPlane and Frustum (extract from VP matrix, AABB culling)
+- [x] ChunkRenderData (coord, mesh, valid flag, version counter)
+- [x] ChunkRenderCache (update, remove, get, clear, updateDirty)
+- [x] ChunkRenderer (init, shutdown, render with frustum culling, countVisible)
+- [x] Renderer tests (12 new: lighting, shader, frustum)
+- [x] Game tests (8 new: render cache, chunk renderer, culling)
+- [x] Comprehensive test coverage (19 new tests, 402 total)

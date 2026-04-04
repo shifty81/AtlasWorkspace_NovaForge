@@ -922,3 +922,139 @@ TEST_CASE("GameSession full mine interaction", "[Game][Session][G1]") {
     REQUIRE(session.resourceInventory().count(NF::ResourceType::RawCrystal) >= 1);
     REQUIRE(session.world().getWorld(5, 5, 5) == NF::VoxelType::Air);
 }
+
+// ── G2: ChunkRenderData tests ───────────────────────────────────
+
+TEST_CASE("ChunkRenderData defaults", "[Game][G2]") {
+    NF::ChunkRenderData data;
+    REQUIRE_FALSE(data.valid);
+    REQUIRE(data.version == 0);
+    REQUIRE(data.mesh.vertexCount() == 0);
+}
+
+// ── G2: ChunkRenderCache tests ──────────────────────────────────
+
+TEST_CASE("ChunkRenderCache update and get", "[Game][RenderCache][G2]") {
+    NF::Chunk chunk;
+    chunk.cx = 0; chunk.cy = 0; chunk.cz = 0;
+    chunk.set(5, 5, 5, NF::VoxelType::Stone);
+
+    NF::ChunkRenderCache cache;
+    REQUIRE(cache.cacheSize() == 0);
+
+    cache.update(chunk);
+    REQUIRE(cache.cacheSize() == 1);
+
+    auto* data = cache.get({0, 0, 0});
+    REQUIRE(data != nullptr);
+    REQUIRE(data->valid);
+    REQUIRE(data->version == 1);
+    REQUIRE(data->mesh.vertexCount() > 0);
+
+    // Update again increments version
+    cache.update(chunk);
+    data = cache.get({0, 0, 0});
+    REQUIRE(data->version == 2);
+}
+
+TEST_CASE("ChunkRenderCache remove and clear", "[Game][RenderCache][G2]") {
+    NF::Chunk chunk;
+    chunk.set(0, 0, 0, NF::VoxelType::Dirt);
+    chunk.cx = 1; chunk.cy = 2; chunk.cz = 3;
+
+    NF::ChunkRenderCache cache;
+    cache.update(chunk);
+    REQUIRE(cache.cacheSize() == 1);
+
+    cache.remove({1, 2, 3});
+    REQUIRE(cache.cacheSize() == 0);
+    REQUIRE(cache.get({1, 2, 3}) == nullptr);
+
+    cache.update(chunk);
+    cache.clear();
+    REQUIRE(cache.cacheSize() == 0);
+}
+
+TEST_CASE("ChunkRenderCache updateDirty", "[Game][RenderCache][G2]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+    world.setWorld(16, 0, 0, NF::VoxelType::Dirt);
+
+    NF::ChunkRenderCache cache;
+    int rebuilt = cache.updateDirty(world);
+    REQUIRE(rebuilt == 2);
+    REQUIRE(cache.cacheSize() == 2);
+
+    // All chunks now clean, no more rebuilds
+    int rebuilt2 = cache.updateDirty(world);
+    REQUIRE(rebuilt2 == 0);
+
+    // Dirty one chunk
+    world.setWorld(0, 0, 0, NF::VoxelType::Grass);
+    int rebuilt3 = cache.updateDirty(world);
+    REQUIRE(rebuilt3 == 1);
+}
+
+// ── G2: ChunkRenderer tests ────────────────────────────────────
+
+TEST_CASE("ChunkRenderer init/shutdown", "[Game][ChunkRenderer][G2]") {
+    NF::ChunkRenderer renderer;
+    renderer.init();
+    REQUIRE(renderer.voxelMaterial().name() == NF::StringID("voxel_material"));
+    renderer.shutdown();
+}
+
+TEST_CASE("ChunkRenderer render submits commands", "[Game][ChunkRenderer][G2]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+
+    NF::ChunkRenderCache cache;
+    cache.updateDirty(world);
+
+    NF::Camera cam;
+    cam.position = {8, 8, 50};
+    cam.target = {8, 8, 0};
+
+    NF::RenderQueue queue;
+    NF::ChunkRenderer renderer;
+    renderer.init();
+
+    int visible = renderer.render(world, cache, queue, cam, 1.f);
+    REQUIRE(visible >= 1);
+    REQUIRE(queue.size() >= 1);
+}
+
+TEST_CASE("ChunkRenderer countVisible", "[Game][ChunkRenderer][G2]") {
+    NF::WorldState world;
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+
+    NF::Camera cam;
+    cam.position = {8, 8, 50};
+    cam.target = {8, 8, 0};
+
+    NF::ChunkRenderer renderer;
+    renderer.init();
+
+    int visible = renderer.countVisible(world, cam, 1.f);
+    REQUIRE(visible >= 1);
+}
+
+TEST_CASE("ChunkRenderer frustum culling", "[Game][ChunkRenderer][G2]") {
+    NF::WorldState world;
+    // Chunk at origin
+    world.setWorld(0, 0, 0, NF::VoxelType::Stone);
+    // Chunk far behind camera
+    world.setWorld(5000, 5000, 5000, NF::VoxelType::Dirt);
+
+    NF::Camera cam;
+    cam.position = {8, 8, 50};
+    cam.target = {8, 8, 0};
+    cam.farPlane = 200.f;
+
+    NF::ChunkRenderer renderer;
+    renderer.init();
+
+    // Should see chunk at origin but not the one at 5000,5000,5000
+    int visible = renderer.countVisible(world, cam, 1.f);
+    REQUIRE(visible < static_cast<int>(world.chunkCount()));
+}

@@ -168,3 +168,193 @@ TEST_CASE("Renderer init and frame lifecycle", "[Renderer]") {
 
     renderer.shutdown();
 }
+
+// ── G2: Lighting ─────────────────────────────────────────────────
+
+TEST_CASE("LightSource defaults", "[Renderer][Lighting][G2]") {
+    NF::LightSource light;
+    REQUIRE(light.type == NF::LightType::Directional);
+    REQUIRE_THAT(light.position.y, WithinAbs(10.f, 1e-5));
+    REQUIRE_THAT(light.direction.y, WithinAbs(-1.f, 1e-5));
+    REQUIRE_THAT(light.color.x, WithinAbs(1.f, 1e-5));
+    REQUIRE_THAT(light.intensity, WithinAbs(1.f, 1e-5));
+    REQUIRE_THAT(light.range, WithinAbs(50.f, 1e-5));
+    REQUIRE_THAT(light.spotAngle, WithinAbs(45.f, 1e-5));
+    REQUIRE(light.enabled);
+}
+
+TEST_CASE("LightingState add/remove/clear", "[Renderer][Lighting][G2]") {
+    NF::LightingState ls;
+    REQUIRE(ls.lightCount() == 0);
+
+    NF::LightSource l1;
+    l1.color = {1, 0, 0};
+    ls.addLight(l1);
+    REQUIRE(ls.lightCount() == 1);
+    REQUIRE_THAT(ls.light(0).color.x, WithinAbs(1.f, 1e-5));
+
+    NF::LightSource l2;
+    l2.color = {0, 1, 0};
+    ls.addLight(l2);
+    REQUIRE(ls.lightCount() == 2);
+
+    ls.removeLight(0);
+    REQUIRE(ls.lightCount() == 1);
+    REQUIRE_THAT(ls.light(0).color.y, WithinAbs(1.f, 1e-5));
+
+    ls.clear();
+    REQUIRE(ls.lightCount() == 0);
+}
+
+TEST_CASE("LightingState MAX_LIGHTS limit", "[Renderer][Lighting][G2]") {
+    NF::LightingState ls;
+    for (int i = 0; i < NF::LightingState::MAX_LIGHTS + 5; ++i) {
+        ls.addLight(NF::LightSource{});
+    }
+    REQUIRE(ls.lightCount() == NF::LightingState::MAX_LIGHTS);
+}
+
+TEST_CASE("LightingState ambient settings", "[Renderer][Lighting][G2]") {
+    NF::LightingState ls;
+    REQUIRE_THAT(ls.ambientIntensity(), WithinAbs(0.3f, 1e-5));
+
+    ls.setAmbientColor({0.2f, 0.2f, 0.3f});
+    ls.setAmbientIntensity(0.5f);
+
+    REQUIRE_THAT(ls.ambientColor().x, WithinAbs(0.2f, 1e-5));
+    REQUIRE_THAT(ls.ambientIntensity(), WithinAbs(0.5f, 1e-5));
+}
+
+TEST_CASE("LightingState compute lighting directional", "[Renderer][Lighting][G2]") {
+    NF::LightingState ls;
+    ls.setAmbientColor({0, 0, 0});
+    ls.setAmbientIntensity(0.f);
+
+    NF::LightSource sun;
+    sun.type = NF::LightType::Directional;
+    sun.direction = {0, -1, 0};
+    sun.color = {1, 1, 1};
+    sun.intensity = 1.f;
+    ls.addLight(sun);
+
+    // Surface facing up, lit from above
+    NF::Vec3 result = ls.computeLighting({0, 0, 0}, {0, 1, 0}, {0, 5, 0});
+    REQUIRE(result.x > 0.f);
+    REQUIRE(result.y > 0.f);
+    REQUIRE(result.z > 0.f);
+
+    // Surface facing down, lit from above - no diffuse contribution
+    NF::Vec3 dark = ls.computeLighting({0, 0, 0}, {0, -1, 0}, {0, 5, 0});
+    REQUIRE_THAT(dark.x, WithinAbs(0.f, 1e-3));
+}
+
+TEST_CASE("LightingState compute lighting point light", "[Renderer][Lighting][G2]") {
+    NF::LightingState ls;
+    ls.setAmbientColor({0, 0, 0});
+    ls.setAmbientIntensity(0.f);
+
+    NF::LightSource point;
+    point.type = NF::LightType::Point;
+    point.position = {0, 5, 0};
+    point.color = {1, 1, 1};
+    point.intensity = 1.f;
+    point.range = 50.f;
+    ls.addLight(point);
+
+    NF::Vec3 result = ls.computeLighting({0, 0, 0}, {0, 1, 0}, {0, 10, 0});
+    REQUIRE(result.x > 0.f);
+
+    // Far away point - attenuation reduces lighting
+    NF::Vec3 far = ls.computeLighting({0, -100, 0}, {0, 1, 0}, {0, 10, 0});
+    REQUIRE(far.x < result.x);
+}
+
+TEST_CASE("LightingState compute lighting disabled light", "[Renderer][Lighting][G2]") {
+    NF::LightingState ls;
+    ls.setAmbientColor({0, 0, 0});
+    ls.setAmbientIntensity(0.f);
+
+    NF::LightSource sun;
+    sun.enabled = false;
+    sun.direction = {0, -1, 0};
+    ls.addLight(sun);
+
+    NF::Vec3 result = ls.computeLighting({0, 0, 0}, {0, 1, 0}, {0, 5, 0});
+    REQUIRE_THAT(result.x, WithinAbs(0.f, 1e-5));
+}
+
+// ── G2: VoxelShader ─────────────────────────────────────────────
+
+TEST_CASE("VoxelShader init and setup", "[Renderer][VoxelShader][G2]") {
+    NF::VoxelShader vs;
+    REQUIRE_FALSE(vs.isReady());
+
+    vs.init();
+    REQUIRE(vs.isReady());
+    REQUIRE(vs.shader().isCompiled());
+
+    vs.setViewProjection(NF::Mat4::identity());
+    vs.setModel(NF::Mat4::identity());
+    vs.setLightDir({0, -1, 0});
+    vs.setLightColor({1, 1, 1});
+    vs.setAmbient({0.1f, 0.1f, 0.1f});
+    vs.setViewPos({0, 0, 5});
+
+    REQUIRE(vs.shader().vec3Uniforms().count("u_lightDir") == 1);
+    REQUIRE(vs.shader().vec3Uniforms().count("u_viewPos") == 1);
+}
+
+// ── G2: Frustum Culling ─────────────────────────────────────────
+
+TEST_CASE("FrustumPlane distance to point", "[Renderer][Frustum][G2]") {
+    NF::FrustumPlane plane;
+    plane.normal = {0, 1, 0};
+    plane.distance = -5.f;
+
+    float d = plane.distanceToPoint({0, 10, 0});
+    REQUIRE_THAT(d, WithinAbs(5.f, 1e-5));
+
+    float d2 = plane.distanceToPoint({0, 0, 0});
+    REQUIRE_THAT(d2, WithinAbs(-5.f, 1e-5));
+}
+
+TEST_CASE("Frustum extractFromVP basic", "[Renderer][Frustum][G2]") {
+    NF::Camera cam;
+    cam.position = {0, 0, 5};
+    cam.target = {0, 0, 0};
+    cam.fov = 60.f;
+    cam.nearPlane = 0.1f;
+    cam.farPlane = 1000.f;
+
+    NF::Mat4 vp = cam.projectionMatrix(1.f) * cam.viewMatrix();
+    NF::Frustum frustum;
+    frustum.extractFromVP(vp);
+
+    // All 6 planes should have normalized normals
+    for (int i = 0; i < 6; ++i) {
+        float len = frustum.plane(i).normal.length();
+        REQUIRE_THAT(len, WithinAbs(1.f, 1e-3));
+    }
+}
+
+TEST_CASE("Frustum testAABB inside and outside", "[Renderer][Frustum][G2]") {
+    NF::Camera cam;
+    cam.position = {0, 0, 50};
+    cam.target = {0, 0, 0};
+    cam.fov = 60.f;
+    cam.nearPlane = 0.1f;
+    cam.farPlane = 200.f;
+
+    NF::Mat4 vp = cam.projectionMatrix(1.f) * cam.viewMatrix();
+    NF::Frustum frustum;
+    frustum.extractFromVP(vp);
+
+    // AABB at origin should be visible (in front of camera)
+    REQUIRE(frustum.testAABB({-1, -1, -1}, {1, 1, 1}));
+
+    // AABB far behind camera should not be visible
+    REQUIRE_FALSE(frustum.testAABB({-1, -1, 500}, {1, 1, 502}));
+
+    // AABB far to the side
+    REQUIRE_FALSE(frustum.testAABB({500, 500, 0}, {502, 502, 2}));
+}

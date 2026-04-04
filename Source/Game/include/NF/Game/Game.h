@@ -964,4 +964,133 @@ private:
     bool m_active = false;
 };
 
+// ── G2: Chunk Render Data ───────────────────────────────────────
+
+struct ChunkRenderData {
+    ChunkCoord coord;
+    Mesh mesh;
+    bool valid = false;
+    uint32_t version = 0;
+};
+
+// ── G2: Chunk Render Cache ─────────────────────────────────────
+
+class ChunkRenderCache {
+public:
+    void update(const Chunk& chunk) {
+        ChunkCoord coord{chunk.cx, chunk.cy, chunk.cz};
+        auto& data = m_cache[coord];
+        data.coord = coord;
+        data.mesh = ChunkMesher::buildRenderMesh(chunk);
+        data.valid = true;
+        ++data.version;
+    }
+
+    void remove(const ChunkCoord& coord) {
+        m_cache.erase(coord);
+    }
+
+    ChunkRenderData* get(const ChunkCoord& coord) {
+        auto it = m_cache.find(coord);
+        return (it != m_cache.end()) ? &it->second : nullptr;
+    }
+
+    const ChunkRenderData* get(const ChunkCoord& coord) const {
+        auto it = m_cache.find(coord);
+        return (it != m_cache.end()) ? &it->second : nullptr;
+    }
+
+    void clear() { m_cache.clear(); }
+
+    size_t cacheSize() const { return m_cache.size(); }
+
+    int updateDirty(WorldState& world) {
+        int count = 0;
+        world.forEach([&](Chunk& chunk) {
+            if (chunk.meshDirty) {
+                update(chunk);
+                chunk.markMeshClean();
+                ++count;
+            }
+        });
+        return count;
+    }
+
+private:
+    std::unordered_map<ChunkCoord, ChunkRenderData> m_cache;
+};
+
+// ── G2: Chunk Renderer ─────────────────────────────────────────
+
+class ChunkRenderer {
+public:
+    void init() {
+        m_voxelMaterial = Material(StringID("voxel_material"));
+        m_initialized = true;
+    }
+
+    void shutdown() {
+        m_initialized = false;
+    }
+
+    int render(const WorldState& world, ChunkRenderCache& cache,
+               RenderQueue& queue, const Camera& camera, float aspect) {
+        Mat4 vp = camera.projectionMatrix(aspect) * camera.viewMatrix();
+        Frustum frustum;
+        frustum.extractFromVP(vp);
+
+        int visibleCount = 0;
+        world.forEach([&](const Chunk& chunk) {
+            float bx = static_cast<float>(chunk.cx * CHUNK_SIZE);
+            float by = static_cast<float>(chunk.cy * CHUNK_SIZE);
+            float bz = static_cast<float>(chunk.cz * CHUNK_SIZE);
+            Vec3 aabbMin{bx, by, bz};
+            Vec3 aabbMax{bx + CHUNK_SIZE, by + CHUNK_SIZE, bz + CHUNK_SIZE};
+
+            if (!frustum.testAABB(aabbMin, aabbMax)) return;
+
+            ChunkCoord coord{chunk.cx, chunk.cy, chunk.cz};
+            auto* rd = cache.get(coord);
+            if (!rd || !rd->valid || rd->mesh.vertexCount() == 0) return;
+
+            RenderCommand cmd;
+            cmd.mesh = &rd->mesh;
+            cmd.material = &m_voxelMaterial;
+            cmd.transform = Mat4::translation(0.f, 0.f, 0.f);
+            cmd.sortKey = (camera.position - Vec3{bx + CHUNK_SIZE * 0.5f,
+                                                   by + CHUNK_SIZE * 0.5f,
+                                                   bz + CHUNK_SIZE * 0.5f}).lengthSq();
+            queue.submit(std::move(cmd));
+            ++visibleCount;
+        });
+
+        return visibleCount;
+    }
+
+    int countVisible(const WorldState& world, const Camera& camera, float aspect) const {
+        Mat4 vp = camera.projectionMatrix(aspect) * camera.viewMatrix();
+        Frustum frustum;
+        frustum.extractFromVP(vp);
+
+        int count = 0;
+        world.forEach([&](const Chunk& chunk) {
+            float bx = static_cast<float>(chunk.cx * CHUNK_SIZE);
+            float by = static_cast<float>(chunk.cy * CHUNK_SIZE);
+            float bz = static_cast<float>(chunk.cz * CHUNK_SIZE);
+            Vec3 aabbMin{bx, by, bz};
+            Vec3 aabbMax{bx + CHUNK_SIZE, by + CHUNK_SIZE, bz + CHUNK_SIZE};
+
+            if (frustum.testAABB(aabbMin, aabbMax)) ++count;
+        });
+
+        return count;
+    }
+
+    Material& voxelMaterial() { return m_voxelMaterial; }
+
+private:
+    Material m_voxelMaterial;
+    bool m_initialized = false;
+};
+
 } // namespace NF

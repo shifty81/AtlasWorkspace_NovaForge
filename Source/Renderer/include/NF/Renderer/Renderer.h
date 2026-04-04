@@ -226,4 +226,190 @@ private:
     size_t m_drawCallCount = 0;
 };
 
+// ── Light Types (G2) ────────────────────────────────────────────
+
+enum class LightType : uint8_t { Directional, Point, Spot };
+
+struct LightSource {
+    LightType type = LightType::Directional;
+    Vec3 position{0, 10, 0};
+    Vec3 direction{0, -1, 0};
+    Vec3 color{1, 1, 1};
+    float intensity = 1.f;
+    float range = 50.f;
+    float spotAngle = 45.f;
+    bool enabled = true;
+};
+
+// ── Lighting State (Phong model) ────────────────────────────────
+
+class LightingState {
+public:
+    static constexpr int MAX_LIGHTS = 8;
+
+    void addLight(const LightSource& light) {
+        if (static_cast<int>(m_lights.size()) < MAX_LIGHTS)
+            m_lights.push_back(light);
+    }
+
+    void removeLight(int index) {
+        if (index >= 0 && index < static_cast<int>(m_lights.size()))
+            m_lights.erase(m_lights.begin() + index);
+    }
+
+    void clear() { m_lights.clear(); }
+
+    LightSource& light(int index) { return m_lights[index]; }
+    const LightSource& light(int index) const { return m_lights[index]; }
+
+    int lightCount() const { return static_cast<int>(m_lights.size()); }
+
+    void setAmbientColor(const Vec3& color) { m_ambientColor = color; }
+    void setAmbientIntensity(float intensity) { m_ambientIntensity = intensity; }
+    Vec3 ambientColor() const { return m_ambientColor; }
+    float ambientIntensity() const { return m_ambientIntensity; }
+
+    Vec3 computeLighting(const Vec3& surfacePos, const Vec3& surfaceNormal,
+                         const Vec3& viewPos) const {
+        Vec3 result = m_ambientColor * m_ambientIntensity;
+        constexpr float shininess = 32.f;
+
+        for (const auto& lt : m_lights) {
+            if (!lt.enabled) continue;
+
+            Vec3 L;
+            float atten = 1.f;
+
+            if (lt.type == LightType::Directional) {
+                L = (lt.direction * -1.f).normalized();
+            } else {
+                Vec3 toLight = lt.position - surfacePos;
+                float dist = toLight.length();
+                if (dist < 1e-6f) continue;
+                L = toLight * (1.f / dist);
+                float dNorm = dist / lt.range;
+                atten = std::max(0.f, 1.f - dNorm * dNorm);
+            }
+
+            Vec3 N = surfaceNormal.normalized();
+            float NdotL = std::max(0.f, N.dot(L));
+            Vec3 diffuse = lt.color * (NdotL * lt.intensity * atten);
+
+            Vec3 specular{0.f, 0.f, 0.f};
+            if (NdotL > 0.f) {
+                Vec3 V = (viewPos - surfacePos).normalized();
+                Vec3 R = N * (2.f * N.dot(L)) - L;
+                float spec = std::pow(std::max(0.f, R.dot(V)), shininess);
+                specular = lt.color * (spec * lt.intensity * atten);
+            }
+
+            result = result + diffuse + specular;
+        }
+
+        result.x = std::min(1.f, std::max(0.f, result.x));
+        result.y = std::min(1.f, std::max(0.f, result.y));
+        result.z = std::min(1.f, std::max(0.f, result.z));
+        return result;
+    }
+
+private:
+    std::vector<LightSource> m_lights;
+    Vec3 m_ambientColor{0.1f, 0.1f, 0.15f};
+    float m_ambientIntensity = 0.3f;
+};
+
+// ── Voxel Shader (G2) ──────────────────────────────────────────
+
+class VoxelShader {
+public:
+    void init() {
+        m_shader = Shader(StringID("voxel_shader"),
+            "// voxel vertex shader\n"
+            "uniform mat4 u_viewProjection;\n"
+            "uniform mat4 u_model;\n",
+            "// voxel fragment shader\n"
+            "uniform vec3 u_lightDir;\n"
+            "uniform vec3 u_lightColor;\n"
+            "uniform vec3 u_ambient;\n"
+            "uniform vec3 u_viewPos;\n");
+        m_shader.compile();
+        m_ready = true;
+    }
+
+    bool isReady() const { return m_ready; }
+
+    Shader& shader() { return m_shader; }
+    const Shader& shader() const { return m_shader; }
+
+    void setViewProjection(const Mat4& vp) { m_shader.setUniformMat4("u_viewProjection", vp); }
+    void setModel(const Mat4& model) { m_shader.setUniformMat4("u_model", model); }
+    void setLightDir(const Vec3& dir) { m_shader.setUniformVec3("u_lightDir", dir); }
+    void setLightColor(const Vec3& color) { m_shader.setUniformVec3("u_lightColor", color); }
+    void setAmbient(const Vec3& ambient) { m_shader.setUniformVec3("u_ambient", ambient); }
+    void setViewPos(const Vec3& pos) { m_shader.setUniformVec3("u_viewPos", pos); }
+
+private:
+    Shader m_shader;
+    bool m_ready = false;
+};
+
+// ── Frustum Culling (G2) ────────────────────────────────────────
+
+struct FrustumPlane {
+    Vec3 normal;
+    float distance = 0.f;
+
+    float distanceToPoint(const Vec3& point) const {
+        return normal.dot(point) + distance;
+    }
+};
+
+class Frustum {
+public:
+    void extractFromVP(const Mat4& vp) {
+        // Griggs/Hartmann method: extract planes from VP matrix rows
+        // Column-major: row i of the matrix is m[i], m[4+i], m[8+i], m[12+i]
+        auto row = [&](int i) -> Vec4 {
+            return {vp.m[i], vp.m[4 + i], vp.m[8 + i], vp.m[12 + i]};
+        };
+
+        Vec4 r0 = row(0), r1 = row(1), r2 = row(2), r3 = row(3);
+
+        auto setPlane = [](FrustumPlane& p, Vec4 v) {
+            float len = Vec3{v.x, v.y, v.z}.length();
+            if (len > 1e-7f) {
+                float inv = 1.f / len;
+                p.normal = {v.x * inv, v.y * inv, v.z * inv};
+                p.distance = v.w * inv;
+            }
+        };
+
+        setPlane(m_planes[0], {r3.x + r0.x, r3.y + r0.y, r3.z + r0.z, r3.w + r0.w}); // left
+        setPlane(m_planes[1], {r3.x - r0.x, r3.y - r0.y, r3.z - r0.z, r3.w - r0.w}); // right
+        setPlane(m_planes[2], {r3.x + r1.x, r3.y + r1.y, r3.z + r1.z, r3.w + r1.w}); // bottom
+        setPlane(m_planes[3], {r3.x - r1.x, r3.y - r1.y, r3.z - r1.z, r3.w - r1.w}); // top
+        setPlane(m_planes[4], {r3.x + r2.x, r3.y + r2.y, r3.z + r2.z, r3.w + r2.w}); // near
+        setPlane(m_planes[5], {r3.x - r2.x, r3.y - r2.y, r3.z - r2.z, r3.w - r2.w}); // far
+    }
+
+    bool testAABB(const Vec3& min, const Vec3& max) const {
+        for (int i = 0; i < 6; ++i) {
+            // Find the positive vertex (most in the direction of the normal)
+            Vec3 pv;
+            pv.x = (m_planes[i].normal.x >= 0.f) ? max.x : min.x;
+            pv.y = (m_planes[i].normal.y >= 0.f) ? max.y : min.y;
+            pv.z = (m_planes[i].normal.z >= 0.f) ? max.z : min.z;
+
+            if (m_planes[i].distanceToPoint(pv) < 0.f)
+                return false;
+        }
+        return true;
+    }
+
+    const FrustumPlane& plane(int index) const { return m_planes[index]; }
+
+private:
+    FrustumPlane m_planes[6];
+};
+
 } // namespace NF
