@@ -105,6 +105,20 @@ check "Docs/SpecRollup/"                                       "$(dir_exists Doc
 check "Tools/Validation/"                                      "$(dir_exists Tools/Validation)"
 echo ""
 
+# ── Phase 3 extraction ──────────────────────────────
+echo "▸ Phase 3 — Nova-Forge-Expeditions extraction"
+check "Source/Game/src/Systems/ (449 game systems)"            "$(dir_exists Source/Game/src/Systems)"
+check "Source/Game/include/NF/Game/Server/ (server headers)"   "$(dir_exists Source/Game/include/NF/Game/Server)"
+check "Tests/Game/Server/ (game tests)"                        "$(dir_exists Tests/Game/Server)"
+check "Source/Engine/src/PCG/ (PCG framework)"                 "$(dir_exists Source/Engine/src/PCG)"
+check "Source/Renderer/src/Pipeline/ (rendering pipeline)"     "$(dir_exists Source/Renderer/src/Pipeline)"
+check "Source/Editor/src/Tools/ (editor tools)"                "$(dir_exists Source/Editor/src/Tools)"
+check "Source/Game/src/Modules/ (gameplay modules)"            "$(dir_exists Source/Game/src/Modules)"
+check "Tools/BlenderGenerator/blender-addon/"                  "$(dir_exists Tools/BlenderGenerator/blender-addon)"
+check "Docs/Nova-Forge-Expeditions/"                           "$(dir_exists Docs/Nova-Forge-Expeditions)"
+check "Archive/_Nova-Forge-Expeditions/docs_archive/AUDIT.md"  "$(file_exists Archive/_Nova-Forge-Expeditions/docs_archive/AUDIT.md)"
+echo ""
+
 # ── Architecture docs ────────────────────────────────
 echo "▸ Architecture documentation"
 check "Docs/Architecture/NAMING_CANON.md"            "$(file_exists Docs/Architecture/NAMING_CANON.md)"
