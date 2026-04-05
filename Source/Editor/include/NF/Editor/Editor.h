@@ -598,6 +598,8 @@ public:
     [[nodiscard]] size_t panelCount() const { return m_panels.size(); }
     [[nodiscard]] const std::vector<DockPanel>& panels() const { return m_panels; }
 
+    static constexpr int kDockSlotCount = 5;
+
     // ── Splitter resizing ────────────────────────────────────────
     void beginResize(DockSlot slot, float mousePos) {
         m_resizingSlot = slot;
@@ -639,14 +641,14 @@ public:
         int idx = static_cast<int>(slot);
         auto it = m_activeTabIndex.find(idx);
         int tabIdx = (it != m_activeTabIndex.end()) ? it->second : 0;
-        if (idx < 5 && tabIdx < static_cast<int>(m_tabGroups[idx].size())) {
+        if (idx < kDockSlotCount && tabIdx < static_cast<int>(m_tabGroups[idx].size())) {
             return m_tabGroups[idx][static_cast<size_t>(tabIdx)];
         }
         return {};
     }
 
     void selectTab(const std::string& panelName) {
-        for (int s = 0; s < 5; ++s) {
+        for (int s = 0; s < kDockSlotCount; ++s) {
             for (size_t i = 0; i < m_tabGroups[s].size(); ++i) {
                 if (m_tabGroups[s][i] == panelName) {
                     m_activeTabIndex[s] = static_cast<int>(i);
@@ -681,7 +683,7 @@ private:
     bool  m_resizing     = false;
     DockSlot m_resizingSlot = DockSlot::Center;
     float m_resizeStart  = 0.f;
-    std::vector<std::string> m_tabGroups[5];  // indexed by DockSlot
+    std::vector<std::string> m_tabGroups[kDockSlotCount];  // indexed by DockSlot
     std::unordered_map<int, int> m_activeTabIndex;
 };
 
@@ -1848,13 +1850,11 @@ public:
 
     void render(UIRenderer& ui, const Rect& bounds,
                 const EditorTheme& theme) override {
-        UIRenderer& mutableUi = ui;
-
         // Background
-        mutableUi.drawRect(bounds, theme.panelBackground);
+        ui.drawRect(bounds, theme.panelBackground);
 
         if (!m_currentGraph) {
-            mutableUi.drawText(bounds.x + 8.f, bounds.y + 8.f, "No graph open", theme.panelText);
+            ui.drawText(bounds.x + 8.f, bounds.y + 8.f, "No graph open", theme.panelText);
             return;
         }
 
@@ -1863,14 +1863,14 @@ public:
             Rect nr{node.position.x + bounds.x, node.position.y + bounds.y, 120.f, 60.f};
             uint32_t nodeColor = (m_selectedNodeId >= 0 && node.id == static_cast<uint32_t>(m_selectedNodeId))
                                  ? theme.selectionHighlight : theme.toolbarBackground;
-            mutableUi.drawRect(nr, nodeColor);
-            mutableUi.drawRectOutline(nr, theme.panelText, 1.f);
-            mutableUi.drawText(nr.x + 4.f, nr.y + 4.f, node.name, theme.panelText);
+            ui.drawRect(nr, nodeColor);
+            ui.drawRectOutline(nr, theme.panelText, 1.f);
+            ui.drawText(nr.x + 4.f, nr.y + 4.f, node.name, theme.panelText);
         }
 
         // Draw link count annotation
         float ly = bounds.y + bounds.h - 20.f;
-        mutableUi.drawText(bounds.x + 4.f, ly,
+        ui.drawText(bounds.x + 4.f, ly,
                            std::to_string(m_currentGraph->links().size()) + " link(s)",
                            theme.propertyLabel);
     }
