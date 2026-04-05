@@ -1,248 +1,506 @@
-# NovaForge
+# NovaForge — Unified Monorepo
 
-> An editor-first C++20 game engine and toolset — engine runtime, world editor, visual scripting, AI, networking, and a full game layer in one unified monorepo.
-
-NovaForge is a first-person, voxel-authoritative survival and construction game set in a procedurally generated galaxy. You pilot a **R.I.G. (Rig Interface Gear)** exo-frame, mine asteroids and terrain, salvage wrecks, build structures, and eventually command fleets across faction-contested sectors.
-
-This repository is the **complete unified monorepo**: the engine core, the game-specific editor, the standalone game client, the dedicated server, the Graph VM for visual scripting, AI systems, development tooling, and the Blender pipeline — all context-aware across the full ecosystem.
-
-**Primary development platform: Windows 10/11 (Visual Studio 2022).** Cross-platform (Linux, macOS) is architecturally maintained but not continuously tested.
+> **One repo. Engine. Editor Suite. Game. AI Broker. Tools. Everything.**
+> C++20 · Python · CMake · GPL-3.0
 
 ---
 
-## Current Status — All Phases Complete
+## 🔄 REPO RESET IN PROGRESS
+
+> **MasterRepo (v001) is the structural baseline. Everything converges here into `tempnovaforge`.**
+> All other repos are being audited, refactored, and merged in. Each completed merge lands in `Archive/`.
+
+### Overall Consolidation Progress
+
+```
+████████░░░░░░░░░░░░░░░░░░░░░░░░  8%   Phase 0 in progress
+```
+
+| # | Repo | Status | Archive Ready |
+|---|------|--------|---------------|
+| 0 | **MasterRepo** ← structural seed | 🔄 In Progress | ⬜ |
+| 1 | **MasterRepoRefactor** | ⬜ Queued | ⬜ |
+| 2 | **AtlasToolingSuite** | ⬜ Queued | ⬜ |
+| 3 | **Nova-Forge-Expeditions** | ⬜ Queued | ⬜ |
+| 4 | **Atlas-NovaForge** | ⬜ Queued | ⬜ |
+| 5 | **AtlasForge** | ⬜ Queued | ⬜ |
+| 6 | **NovaForge-Project** | ⬜ Queued | ⬜ |
+| 7 | **SwissAgent → AtlasAI** | ⬜ Queued | ⬜ |
+| 8 | **ArbiterAI → AtlasAI** | ⬜ Queued | ⬜ |
+| 9 | **Arbiter → AtlasAI** | ⬜ Queued | ⬜ |
+| 10 | **AtlasForge-EveOffline** | ⬜ Queued | ⬜ |
+| 11 | **Blender-Generator → Atlas_BlenderGen** | ⬜ Queued | ⬜ |
+
+**Legend:** ✅ Done · 🔄 In Progress · ⬜ Queued · 📦 Archived
+
+> Full merge plan and per-repo action items: [`Docs/CONSOLIDATION_PLAN.md`](Docs/CONSOLIDATION_PLAN.md)
+
+---
+
+## 🏗️ System Architecture Blueprint
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          NOVAFORGE MONOREPO                             │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │                        WORKSPACE                                  │  │
+│  │          Central environment · pipeline routing · state          │  │
+│  │                                                                   │  │
+│  │   Active Project Context · Tool Registry · Directory Rules       │  │
+│  │   Cross-tool Events · Session State · AtlasAI Context Feed       │  │
+│  └────────────────────────────┬─────────────────────────────────────┘  │
+│                               │ unified context pipeline                │
+│              ┌────────────────┼────────────────┐                        │
+│              ▼                ▼                ▼                        │
+│  ┌───────────────┐  ┌─────────────────┐  ┌───────────────────────┐    │
+│  │  ATLAS EDITOR │  │   ATLAS ENGINE  │  │    ATLAS AI BROKER    │    │
+│  │    SUITE      │  │    RUNTIME      │  │       (AtlasAI)       │    │
+│  │               │  │                 │  │                       │    │
+│  │ World Editor  │  │ ECS Core        │  │  Single broker API    │    │
+│  │ Tile Editor   │  │ Renderer        │  │  Atlas_Arbiter        │    │
+│  │ Visual Script │  │ Physics         │  │  Atlas_SwissAgent     │    │
+│  │ Shader Editor │  │ Audio           │  │  Atlas_Memory         │    │
+│  │ Content Brow. │  │ Animation       │  │  Atlas_LLM            │    │
+│  │ Scene Outliner│  │ Networking      │  │  Atlas_AudioAI        │    │
+│  │ Inspector     │  │ GraphVM         │  │  Atlas_Vision         │    │
+│  │ Terrain Editor│  │ World Gen       │  │  Atlas_Bridge (C++↔Py)│    │
+│  │ Debug Tools   │  │ Voxel Runtime   │  │                       │    │
+│  │ Build Pipeline│  │ Scripting       │  │  ← ALL AI goes here   │    │
+│  └───────┬───────┘  └────────┬────────┘  └──────────┬────────────┘    │
+│          │                   │                       │                  │
+│          └───────────────────┴───────────────────────┘                 │
+│                              │                                          │
+│              ┌───────────────┼───────────────┐                         │
+│              ▼               ▼               ▼                         │
+│  ┌────────────────┐  ┌──────────────┐  ┌────────────────────────┐     │
+│  │  NOVAFORGE     │  │    TOOLS     │  │      SERVICES          │     │
+│  │  GAME LAYER    │  │    SUITE     │  │                        │     │
+│  │                │  │              │  │  Atlas_Server          │     │
+│  │ Ships/Fleets   │  │ BlenderGen   │  │  Atlas_Client          │     │
+│  │ Factions       │  │ RepoTools    │  │  Dedicated Server      │     │
+│  │ Economy        │  │ BuildTools   │  │  REST / WebSocket      │     │
+│  │ Expeditions    │  │ DevTools     │  │                        │     │
+│  │ R.I.G. System  │  │ Installer    │  │                        │     │
+│  └────────────────┘  └──────────────┘  └────────────────────────┘     │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🖥️ Editor Suite — Blueprint & Roadmap
+
+> The full Atlas Editor Suite is the primary development environment for everything in this repo.
+> The Workspace is the root shell — all editors dock into it and cross-talk through it.
+
+```
+Editor Suite Progress:  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░  6%
+```
+
+### Workspace (Root Shell)
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Win32 Window + OpenGL | Native window, DPI scaling, GL context | ✅ Done (MasterRepo) |
+| Docking Layout | 7-panel docking, live resize | ✅ Done (MasterRepo) |
+| Toolbar Panel | Play/Stop/Launch controls | ✅ Done (MasterRepo) |
+| Menu Bar | File/Edit/View/Tools menus | ✅ Done (MasterRepo) |
+| Status Bar | Real-time editor state display | ✅ Done (MasterRepo) |
+| Project Path Service | Resolves all paths from manifest | ✅ Done (MasterRepo) |
+| Editor Command Registry | Centralized command/hotkey dispatch | ✅ Done (MasterRepo) |
+| Tool Registry | Tracks open tools and pipeline state | ⬜ To Build |
+| Directory Pipeline Router | Cross-tool file routing rules | ⬜ To Build |
+| AtlasAI Context Feed | Feeds workspace state to AtlasAI broker | ⬜ To Build |
+| Session Persistence | Save/restore editor layout and state | ⬜ To Build |
+| Notification System | Toast/event notifications across panels | ⬜ To Build |
+| Plugin Bus | atlas-plugin-bus — dynamic tool registration | ⬜ To Build |
+
+### World Editor
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Viewport (3D) | 3D grid, yaw/pitch/zoom camera | ✅ Done (MasterRepo) |
+| Scene Outliner | ECS entity list for active level | ✅ Done (MasterRepo) |
+| Inspector Panel | Component properties for selected entity | ✅ Done (MasterRepo) |
+| Content Browser | Navigate Content/ directory tree | ✅ Done (MasterRepo) |
+| Voxel Inspector | Chunk map stats, voxel overlay toggle | ✅ Done (MasterRepo) |
+| HUD Panel | R.I.G. health/energy/inventory (in-editor) | ✅ Done (MasterRepo) |
+| Voxel Pick Service | Camera ray → chunk traversal → voxel hit | ✅ Done (MasterRepo) |
+| World File Service | Load/save/reload/save-as world files | ✅ Done (MasterRepo) |
+| Selection Service | Multi-object selection, sync across panels | ✅ Done (MasterRepo) |
+| Property Inspector System | Dirty tracking, real type widgets | ✅ Done (MasterRepo) |
+| Viewport Highlight Sync | Selected chunk/voxel/object overlays | ✅ Done (MasterRepo) |
+| Undo/Redo Transaction Model | Full edit history | ⬜ To Build |
+| Voxel Palette / Brush Panel | Paint voxels, select materials | ⬜ To Build |
+| DevWorld Settings Panel | Live sandbox configuration | ⬜ To Build |
+| World Gen Preview | See world gen output in-editor | ⬜ To Build |
+| Level Streaming Editor | Configure streaming zones | ⬜ To Build |
+
+### Tile Editor
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Tile Canvas | 2D tile painting surface | ⬜ Merge from AtlasForge |
+| Tileset Manager | Load/manage/edit tilesets | ⬜ Merge from AtlasForge |
+| Layer System | Multi-layer tile stacking | ⬜ Merge from AtlasForge |
+| Collision Shape Editor | Per-tile collision zones | ⬜ To Build |
+| Atlas Exporter | Export tilesets to Content/ pipeline | ⬜ To Build |
+| Workspace Integration | Notifies Workspace on export | ⬜ To Build |
+
+### Visual Script Editor (GraphVM)
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Graph VM Core | Deterministic bytecode VM | ✅ Done (MasterRepo) |
+| 14 Graph Types | Logic, event, behavior, etc. | ✅ Done (MasterRepo) |
+| Graph Canvas UI | Node drag/connect/delete | ⬜ To Build |
+| Node Library Panel | Searchable node palette | ⬜ To Build |
+| Execution Debugger | Step through graph live | ⬜ To Build |
+| AtlasAI Node | Feed/query AtlasAI from a graph node | ⬜ To Build |
+
+### Shader Editor
+
+| System | Description | Status |
+|--------|-------------|--------|
+| GLSL Editor | Syntax-highlighted GLSL edit panel | ⬜ To Build |
+| Live Preview | Real-time shader preview viewport | ⬜ To Build |
+| Uniform Inspector | Tweak shader uniforms live | ⬜ To Build |
+| Shader Hot-Reload | Recompile and apply without restart | ⬜ To Build |
+
+### Terrain Editor
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Height Brush | Sculpt terrain height | ⬜ To Build |
+| Paint Brush | Surface texture painting | ⬜ To Build |
+| Erosion Tools | Procedural erosion simulation | ⬜ To Build |
+| Foliage Scatter | Place vegetation instances | ⬜ To Build |
+
+### Content Browser (Extended)
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Basic Directory Nav | Navigate Content/ tree | ✅ Done (MasterRepo) |
+| Asset Thumbnails | Preview images for assets | ⬜ To Build |
+| Import Pipeline | Drag-drop assets → import to Content/ | ⬜ To Build |
+| Blender Pipeline Integration | BlenderGen output → Content/Ships/ etc. | ⬜ To Build |
+| Asset Database | Indexed, searchable asset registry | ⬜ To Build |
+| Schema Validation | Validate JSON data files against Schemas/ | ⬜ To Build |
+
+### Debug & Diagnostics Tools
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Contract Scanner Panel | C++ code issue display, jump-to-line | ⬜ To Build (ContractScanner tool exists) |
+| Balance Checker Panel | ArbiterAI rule-fire display | ⬜ To Build (ArbiterAI tool exists) |
+| Performance Profiler | Frame time, draw call, memory overlays | ⬜ To Build |
+| Network Monitor | Live replication/session stats | ⬜ To Build |
+| AI Debug Panel | AtlasAI decision log, memory state | ⬜ To Build |
+| Log Viewer | Filtered, searchable runtime logs | ⬜ To Build |
+
+### Build Pipeline Panel
+
+| System | Description | Status |
+|--------|-------------|--------|
+| Build Target Selector | Choose Editor/Game/Server/Tests | ⬜ To Build |
+| Inline Build Output | CMake/MSBuild output in panel | ⬜ To Build |
+| Packaging Wizard | Bundle + installer generation | ⬜ To Build |
+
+---
+
+## 🤖 AtlasAI — Unified AI Broker Blueprint
+
+> **One broker. Everything talks to AtlasAI through the Workspace.**
+> No standalone AI agents. SwissAgent, Arbiter, ArbiterAI all absorbed as subsystems.
+
+```
+AtlasAI Progress:  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  0%  (pending merge phases 7-9)
+```
+
+```
+AtlasAI/
+├── Atlas_Broker/          ← THE core broker process (single API entry point)
+│   ├── BrokerCore         ← C++ engine-facing API
+│   ├── BrokerService      ← Python runtime (LLM/tool routing)
+│   ├── API/               ← Unified interface all systems call
+│   └── Router/            ← Routes to correct subsystem
+│
+├── Atlas_Arbiter/         ← Decision-making, task planning (from Arbiter + ArbiterAI)
+│   ├── AIEngine/
+│   ├── Memory/
+│   ├── HostApp/
+│   └── VisualStudioExtension/
+│
+├── Atlas_SwissAgent/      ← Tool execution, plugins, audio, vision (from SwissAgent)
+│   ├── core/
+│   ├── llm/
+│   ├── audio_pipeline/
+│   ├── plugins/
+│   ├── stable_diffusion/
+│   └── native/
+│
+├── Atlas_Memory/          ← Unified memory (SessionMemory, ProjectMemory, LongTermMemory)
+├── Atlas_Bridge/          ← C++ ↔ Python interop layer
+└── Atlas_Shared/          ← Types, interfaces, schemas across all subsystems
+```
+
+| Subsystem | Source Repo | Status |
+|-----------|-------------|--------|
+| Atlas_Broker core | New — built here | ⬜ To Build |
+| Atlas_Broker API | New — built here | ⬜ To Build |
+| Atlas_Arbiter / AIEngine | Arbiter + ArbiterAI | ⬜ Pending merge |
+| Atlas_Arbiter / Memory | Arbiter + ArbiterAI | ⬜ Pending merge |
+| Atlas_Arbiter / HostApp | Arbiter | ⬜ Pending merge |
+| Atlas_Arbiter / VS Extension | Arbiter | ⬜ Pending merge |
+| Atlas_SwissAgent / LLM | SwissAgent | ⬜ Pending merge |
+| Atlas_SwissAgent / AudioAI | SwissAgent | ⬜ Pending merge |
+| Atlas_SwissAgent / Plugins | SwissAgent | ⬜ Pending merge |
+| Atlas_SwissAgent / Vision | SwissAgent (stable_diffusion) | ⬜ Pending merge |
+| Atlas_Memory unified layer | New — built here | ⬜ To Build |
+| Atlas_Bridge (C++↔Python) | New — built here | ⬜ To Build |
+| Workspace ↔ AtlasAI pipeline | New — built here | ⬜ To Build |
+| Editor AI Debug Panel | New — built here | ⬜ To Build |
+
+---
+
+## 🎮 NovaForge Game — Blueprint & Roadmap
+
+> Built on MasterRepo v001 baseline. Phases 0–5 complete. Phase 6 (Multiplayer) next.
+
+```
+Game Progress:  ██████████████████░░░░░░░░░░░░  58%   (Phases 0-5 done, 6-9 remaining)
+```
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
-| **Phase 1** — Core Engine | Core, Engine, Input modules with tests | ✅ Done |
-| **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | ✅ Done |
-| **Phase 3** — Voxel Runtime | Chunk data, edit API, serialization, game loop | ✅ Done |
-| **Phase 4** — Editor | Docking layout, panels, viewport, editor services | ✅ Done |
-| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types | ✅ Done |
-| **Phase 6** — Multiplayer | Server authority, replication, lockstep/rollback | ✅ Done |
-| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender pipeline | ✅ Done |
-| **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | ✅ Done |
-| **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding | ✅ Done |
-| **G1–G17** — Game Phases | Full game layer (ships, fleets, economy, quests, progression, crafting, inventory) | ✅ Done |
-
-> **599 Catch2 tests** across 12 modules (Core, Engine, Physics, Renderer, Audio, Animation, Game, GraphVM, Input, Editor, Networking, AI).
-
-> See [`Docs/roadmap.md`](Docs/roadmap.md) for next milestones and [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) for the full phase history.
+| **Phase 0** | Bootstrap — scaffold, build system, project manifest | ✅ Done |
+| **Phase 1** | Dev World — sandbox, spawn, save/load, debug overlay | ✅ Done |
+| **Phase 2** | Voxel Runtime — chunk data, edit API, serialization | ✅ Done |
+| **Phase 3** | First Interaction Loop — R.I.G., mining, inventory, HUD | ✅ Done |
+| **Phase 4** | Voxel Mesh Rendering — mesher, GPU cache, Phong shader | ✅ Done |
+| **Phase 5** | Movement & FPS Camera — WASD, collision, FPS camera | ✅ Done |
+| **Phase 6** | Multiplayer Foundation — server authority, replication, sessions | 🔜 Next |
+| **Phase 7** | Galaxy World Gen — cube-sphere, procedural star systems | ⬜ |
+| **Phase 8** | Ships & Fleets — modular construction, AI fleet captains | ⬜ |
+| **Phase 9** | Economy & Factions — NPC economy, faction standings | ⬜ |
+| **Phase 10** | Expeditions — mission system, exploration, salvage | ⬜ |
+| **Phase 11** | R.I.G. EVA & Interiors — FPS interiors, oxygen, boarding | ⬜ |
+| **Phase 12** | Polish, CI, Modding — packaging, installer, mod support | ⬜ |
 
 ---
 
-## Architecture
+## ⚙️ Engine Modules — Status
 
 ```
-Source/
-├── Core/          # Math, memory, logging, events, reflection, serialization
-├── Engine/        # ECS, world/level, behavior trees, asset system
-├── Renderer/      # RHI (OpenGL), forward pipeline, mesh, materials
-├── Physics/       # Rigid bodies, collision, character controller
-├── Audio/         # Device, spatial audio, mixer, cues
-├── Animation/     # Skeleton, blend tree, state machine, IK
-├── Input/         # Keyboard, mouse, gamepad, action mappings
-├── Networking/    # Sockets, replication, sessions, lockstep/rollback
-├── GraphVM/       # Deterministic bytecode VM, visual scripting (14 graph types)
-├── AI/            # Behavior graphs, memory, NPC logic, faction relationships
-├── World/         # World gen: cube-sphere, voxel, terrain, galaxy, streaming
-├── UI/            # Custom 2-D renderer (no ImGui) — quad batching + stb_easy_font
-├── Game/          # Game layer: voxels, R.I.G., interaction loop, inventory
-├── Editor/        # Editor app, docking panels, viewport, toolbar
-└── Programs/
-    ├── NovaForgeEditor/   # Editor executable (dev tool, does not ship)
-    ├── NovaForgeGame/     # Standalone game client (shippable artifact)
-    └── NovaForgeServer/   # Dedicated headless server
+Engine Progress:  ██████████████████████░░░░░░░░  73%
 ```
 
-### Supporting Directories
-
-```
-Config/            # Project configuration (novaforge.project.json)
-Content/           # Game content (level definitions, DevWorld, assets)
-Data/              # Game data: ships, modules, skills, missions (JSON, moddable)
-Schemas/           # Versioned JSON schemas
-Docs/              # All documentation
-Tools/             # Development tools (SwissAgent, ArbiterAI, BlenderGenerator)
-Tests/             # Catch2 unit tests
-ThirdParty/        # Third-party dependencies
-Scripts/           # Build & utility scripts
-Archive/           # Historical reference from consolidated repos
-```
+| Module | Description | Status |
+|--------|-------------|--------|
+| `NF::Core` | Math, memory, logging, events, reflection, serialization | ✅ Done |
+| `NF::Engine` | ECS, world/level, behavior trees, asset system | ✅ Done |
+| `NF::Renderer` | OpenGL RHI, forward pipeline, mesh, materials | ✅ Done |
+| `NF::Physics` | Rigid bodies, collision, character controller | ✅ Done |
+| `NF::Audio` | Device, spatial audio, mixer, cues | ✅ Done |
+| `NF::Animation` | Skeleton, blend tree, state machine, IK | ✅ Done |
+| `NF::Input` | Keyboard, mouse, gamepad, action mappings | ✅ Done |
+| `NF::Networking` | Sockets, replication, sessions, lockstep/rollback | ✅ Done |
+| `NF::GraphVM` | Deterministic bytecode VM, 14 graph types | ✅ Done |
+| `NF::UI` | Custom 2D renderer — quad batching + stb_easy_font (no ImGui) | ✅ Done |
+| `NF::World` | World gen, cube-sphere, voxel, terrain, galaxy, streaming | ⬜ In progress |
+| `NF::AI` | Behavior graphs, NPC logic, faction AI | ⬜ Pending AtlasAI merge |
 
 ### Module Dependency Graph
 
 ```
-NF::Core ──────────────────────────────────────────────────────────────┐
-NF::Engine      → NF::Core                                             │
-NF::Renderer    → NF::Core, NF::Engine                                 │
-NF::Physics     → NF::Core, NF::Engine                                 │
-NF::Audio       → NF::Core                                             │
-NF::Animation   → NF::Core, NF::Engine                                 │
-NF::Input       → NF::Core                                             │
-NF::Networking  → NF::Core                                             │
-NF::GraphVM     → NF::Core                                             │
-NF::AI          → NF::Core, NF::Engine, NF::GraphVM                    │
-NF::World       → NF::Core, NF::Engine, NF::Game                       │
-NF::UI          → NF::Core, NF::Renderer                               │
-NF::Game        → NF::Core, NF::Engine, NF::UI, NF::Renderer           │
-NF::Editor      → NF::Core, NF::Engine, NF::Renderer, NF::Game, NF::UI│
-                                                                       │
-NovaForgeEditor → NF::Editor + all modules ────────────────────────────┘
-NovaForgeGame   → NF::Game + NF::Renderer + NF::UI + supporting modules
-NovaForgeServer → NF::Game + NF::Networking + NF::AI + NF::World
+NF::Core   ──────────────────────────────────────────────────── all modules depend on this
+NF::Engine      → NF::Core
+NF::Renderer    → NF::Core, NF::Engine
+NF::Physics     → NF::Core, NF::Engine
+NF::Audio       → NF::Core
+NF::Animation   → NF::Core, NF::Engine
+NF::Input       → NF::Core
+NF::Networking  → NF::Core
+NF::GraphVM     → NF::Core
+NF::AI          → NF::Core, NF::Engine, NF::GraphVM, AtlasAI::Broker
+NF::World       → NF::Core, NF::Engine
+NF::UI          → NF::Core, NF::Renderer
+NF::Game        → NF::Core, NF::Engine, NF::UI, NF::Renderer, NF::World
+NF::Editor      → NF::Core, NF::Engine, NF::Renderer, NF::Game, NF::UI, Workspace
+
+NovaForgeEditor  → NF::Editor + all modules
+NovaForgeGame    → NF::Game + NF::Renderer + NF::UI + supporting modules
+NovaForgeServer  → NF::Game + NF::Networking + NF::AI + NF::World
 ```
 
 ---
 
-## Build Requirements
+## 🛠️ Tools Suite — Blueprint
+
+```
+Tools Progress:  █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  5%
+```
+
+| Tool | Description | Source | Status |
+|------|-------------|--------|--------|
+| `Atlas_BlenderGen` | Blender addon — ship/station/asteroid procedural gen | Blender-Generator-for-AtlasForge | ⬜ Pending merge |
+| `Atlas_RepoTools` | Repo management, rollup, index tools | AtlasToolingSuite | ⬜ Pending merge |
+| `Atlas_BuildTools` | CMake helpers, build scripts, Makefile | Multiple repos | 🔄 Partial |
+| `Atlas_DevTools` | dev_mode, stage_manager, workspace tools | SwissAgent, AtlasToolingSuite | ⬜ Pending merge |
+| `ContractScanner` | C++ static analysis — null checks, bad patterns | tempnovaforge (exists) | ✅ Scaffolded |
+| `ArbiterAI (tool)` | Rule-based balance checker, CI gate | tempnovaforge (exists) | ✅ Scaffolded |
+| `Atlas_Installer` | Packaging + installer generation | NovaForge-Project | ⬜ Pending merge |
+
+---
+
+## 📁 Repository Structure
+
+```
+tempnovaforge/
+├── README.md                    ← You are here
+├── ROADMAP.md                   ← Full detailed roadmap
+├── ARCHITECTURE.md              ← Deep system architecture
+├── CONTRIBUTING.md
+├── LICENSE                      ← GPL-3.0
+├── CMakeLists.txt
+├── CMakePresets.json
+├── vcpkg.json
+├── NovaForge.sln
+├── Directory.Build.props
+├── Dockerfile
+├── build.cmd / Makefile
+│
+├── Source/
+│   ├── Core/
+│   ├── Engine/
+│   ├── Renderer/
+│   ├── Physics/
+│   ├── Audio/
+│   ├── Animation/
+│   ├── Input/
+│   ├── Networking/
+│   ├── GraphVM/
+│   ├── AI/
+│   ├── World/
+│   ├── UI/
+│   ├── Game/
+│   ├── Editor/
+│   └── Programs/
+│       ├── NovaForgeEditor/
+│       ├── NovaForgeGame/
+│       └── NovaForgeServer/
+│
+├── AtlasAI/                     ← Unified AI broker (all AI systems)
+│   ├── Atlas_Broker/
+│   ├── Atlas_Arbiter/
+│   ├── Atlas_SwissAgent/
+│   ├── Atlas_Memory/
+│   ├── Atlas_Bridge/
+│   └── Atlas_Shared/
+│
+├── Tools/                       ← All development tools
+│   ├── Atlas_BlenderGen/
+│   ├── Atlas_RepoTools/
+│   ├── Atlas_BuildTools/
+│   ├── Atlas_DevTools/
+│   ├── ContractScanner/
+│   └── ArbiterAI/
+│
+├── Services/
+│   ├── Atlas_Server/
+│   └── Atlas_Client/
+│
+├── Shared/                      ← Shared types, interfaces, common headers
+├── Config/
+├── Content/
+├── Data/
+├── Schemas/
+├── Scripts/
+├── Tests/
+├── ThirdParty/
+├── Docs/
+│   ├── CONSOLIDATION_PLAN.md
+│   ├── Engine/
+│   ├── Editor/
+│   ├── NovaForge_Game/
+│   ├── AtlasAI/
+│   └── Tools/
+│
+└── Archive/                     ← Completed repo dumps (pull locally then delete source)
+    ├── _MasterRepo/
+    ├── _MasterRepoRefactor/
+    ├── _AtlasToolingSuite/
+    ├── _Nova-Forge-Expeditions/
+    ├── _Atlas-NovaForge/
+    ├── _AtlasForge/
+    ├── _NovaForge-Project/
+    ├── _SwissAgent/
+    ├── _ArbiterAI/
+    ├── _Arbiter/
+    ├── _AtlasForge-EveOffline/
+    └── _Blender-Generator-for-AtlasForge/
+```
+
+---
+
+## 🚀 Build Requirements
 
 | Tool | Minimum Version | Notes |
 |------|----------------|-------|
 | CMake | 3.22 | CMakePresets v6 |
-| Visual Studio | 2022 (17.x) | Primary — C++ Desktop workload required |
-| MSVC | 19.30+ (VS 2022) | C++20, `/std:c++20` |
-| GCC | 13+ | Linux/CI only |
+| Visual Studio | 2022 (17.x) | Primary — C++ Desktop workload |
+| MSVC | 19.30+ | C++20 |
+| GCC | 13+ | Linux/CI |
 | Clang | 15+ | Optional |
 | OpenGL | 3.3 core | System driver |
-
-GLAD and GLFW are fetched automatically via CMake FetchContent if not found locally.
+| Python | 3.11+ | AtlasAI runtime |
 
 ---
 
-## Quick Start — Windows (Primary)
-
-### Prerequisites
-- **Visual Studio 2022** with the **"Desktop development with C++"** workload
-- **CMake 3.22+** (bundled with VS 2022 or install separately)
-- **Git**
-
-### Option A — Visual Studio IDE (Recommended)
-
-1. Clone the repo:
-   ```
-   git clone https://github.com/shifty81/tempnovaforge.git NovaForge
-   cd NovaForge
-   ```
-2. Open Visual Studio → **File → Open → CMake…** → select `CMakeLists.txt`
-3. VS reads `CMakePresets.json` automatically — pick **"Windows x64 Debug (VS 2022)"**
-4. Select `NovaForgeEditor` as the startup project and press **F5**
-
-### Option B — Command Line (Developer Command Prompt)
+## 🚀 Quick Start — Windows (Primary)
 
 ```bat
-:: Open "Developer Command Prompt for VS 2022"
 git clone https://github.com/shifty81/tempnovaforge.git NovaForge
 cd NovaForge
-
-:: Generate .sln and build Debug
 cmake --preset windows-x64-debug
 cmake --build --preset windows-x64-debug
-
-:: Run the editor
 Builds\windows-x64-debug\bin\Debug\NovaForgeEditor.exe
 ```
 
-### Option C — Convenience Scripts
-
-```bat
-:: Generate VS 2022 solution then build via MSBuild
-.\Scripts\generate_vs_solution.bat
-build.cmd Debug
-
-:: Or using PowerShell
-.\Scripts\generate_vs_solution.ps1
-```
-
-### Build with Tests
-
-```bat
-cmake --preset windows-x64-debug-tests
-cmake --build --preset windows-x64-debug-tests
-ctest --preset windows-x64-debug-tests
-```
+Or open Visual Studio → **File → Open → CMake…** → select `CMakeLists.txt` → pick `windows-x64-debug` preset → F5.
 
 ---
 
-## Quick Start — Linux / macOS
+## 🚀 Quick Start — Linux / macOS
 
 ```bash
 git clone https://github.com/shifty81/tempnovaforge.git NovaForge
 cd NovaForge
-
-# Configure (Debug, all targets + tests)
 cmake --preset debug
-
-# Build
 cmake --build --preset debug --parallel
-
-# Run tests
-ctest --preset debug
-
-# Run the Editor
 ./Builds/debug/bin/NovaForgeEditor
-
-# Run the Game Client
-./Builds/debug/bin/NovaForgeGame
-```
-
-### Using the Makefile
-
-```bash
-make build           # Debug build (all targets)
-make build-release   # Release build
-make test            # Build and run tests
-make editor          # Build editor only
-make game            # Build game client only
-make server          # Build server only
-make clean           # Remove all build artifacts
-make help            # Show all targets
 ```
 
 ---
 
-## Available CMake Presets
+## 📐 Design Principles
 
-| Preset | Generator | Config | Tests | Purpose |
-|--------|-----------|--------|-------|---------|
-| `windows-x64-debug` | VS 2022 | Debug | Off | Local Windows dev (**primary**) |
-| `windows-x64-debug-tests` | VS 2022 | Debug | On | Windows dev + test suite |
-| `windows-x64` | VS 2022 | Release | Off | Windows release build |
-| `vs2022` | VS 2022 | Multi | On | VS IDE / `.sln` generation |
-| `vs2019` | VS 2019 | Multi | On | VS 2019 fallback |
-| `debug` | Ninja | Debug | On | Linux/macOS CI debug |
-| `release` | Ninja | Release | Off | Linux/macOS CI release |
-
-### CMake Build Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `NF_BUILD_EDITOR` | `ON` | Build the NovaForge Editor |
-| `NF_BUILD_GAME`   | `ON` | Build the standalone game client |
-| `NF_BUILD_SERVER` | `ON` | Build the dedicated server |
-| `NF_BUILD_TESTS`  | `OFF` | Build the Catch2 unit-test suite |
-
----
-
-## Design Principles
-
-- **Voxel layer is authoritative.** Structure, mining, repair, damage, and destruction are all voxel operations.
-- **R.I.G. first.** The player suit platform is the primary gameplay object.
-- **No ImGui.** The editor uses a fully custom UI renderer.
+- **Workspace is the glue.** Every tool and editor routes through the Workspace. Nothing moves files or fires events without Workspace knowing.
+- **AtlasAI is the single broker.** No standalone AI agents. One API, one runtime, all systems route through it.
+- **Voxel layer is authoritative.** Structure, mining, repair, damage, destruction — all voxel operations.
+- **R.I.G. first.** Player suit is the primary gameplay object. Mechanics build outward from R.I.G. state.
+- **No ImGui.** Editor uses a fully custom UI renderer (OpenGL quad batching + stb_easy_font).
 - **Determinism first.** All simulation must be bit-exact reproducible.
-- **Phases over features.** Each phase has a tight, locked deliverable.
-- **Editor does not ship.** The editor is a dev tool; `NovaForgeGame` is the artifact.
+- **Phases over features.** Each phase has a tight locked deliverable.
+- **Editor does not ship.** `NovaForgeGame` is the shippable artifact.
 - **Everything is data.** Game content lives in JSON, fully moddable.
-- **One repo, full context.** Engine, editor, game, server, tools, and data — all context-aware.
+- **One repo, full context.** Engine, editor, game, server, AI, tools — all context-aware.
 
 ---
 
-## Game Vision
+## 🌌 Game Vision
 
-Nova Forge is a **PvE space simulation** where you command ships, build fleets, explore procedurally generated star systems, and forge your legend across a living universe.
-
-### Core Pillars
+Nova Forge is a **PvE space simulation** — command ships, build fleets, explore procedurally generated star systems, forge your legend.
 
 | Pillar | Description |
 |--------|-------------|
@@ -253,8 +511,6 @@ Nova Forge is a **PvE space simulation** where you command ships, build fleets, 
 | **Forge** | Manufacture, refine, research — drive a living NPC economy |
 | **Survive** | FPS interiors, EVA, oxygen management, planetary exploration |
 
-### Four Factions
-
 | Faction | Style | Specialty |
 |---------|-------|-----------|
 | **Solari** | Golden / elegant | Armor tanking, energy weapons |
@@ -264,32 +520,36 @@ Nova Forge is a **PvE space simulation** where you command ships, build fleets, 
 
 ---
 
-## Documentation
+## 📚 Documentation
 
 | Document | Description |
 |----------|-------------|
-| [`Docs/roadmap.md`](Docs/roadmap.md) | Editor-first next milestones |
-| [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) | Phase-by-phase delivery plan (full history) |
+| [`Docs/CONSOLIDATION_PLAN.md`](Docs/CONSOLIDATION_PLAN.md) | Full repo merge plan, per-repo action items |
+| [`Docs/ARCHITECTURE.md`](Docs/ARCHITECTURE.md) | Deep system architecture |
+| [`Docs/Editor/EDITOR_ROADMAP.md`](Docs/Editor/EDITOR_ROADMAP.md) | Full editor suite roadmap |
+| [`Docs/AtlasAI/ATLASAI_ROADMAP.md`](Docs/AtlasAI/ATLASAI_ROADMAP.md) | AtlasAI broker build plan |
+| [`Docs/Game/ROADMAP.md`](Docs/Game/ROADMAP.md) | Phase-by-phase game delivery plan |
 | [`Docs/Game/TASKS.md`](Docs/Game/TASKS.md) | Checked task list per phase |
-| [`Docs/Game/ARCHITECTURE.md`](Docs/Game/ARCHITECTURE.md) | Module layout and design |
 | [`Docs/Game/PROJECT_RULES.md`](Docs/Game/PROJECT_RULES.md) | Hard boundaries and coding rules |
 
 ---
 
-## Consolidated From
+## 📦 Consolidating From
 
-This monorepo consolidates the following projects:
-- [MasterRepoV001](https://github.com/shifty81/MasterRepoV001) — Canonical engine/editor structure
-- [Atlas-NovaForge](https://github.com/shifty81/Atlas-NovaForge) — Full engine (418 files), server (537 files), client (156 files)
-- [NovaForge](https://github.com/shifty81/NovaForge) — Game design, engine core, editor
-- [SwissAgent](https://github.com/shifty81/SwissAgent) — AI development assistant
-- [ArbiterAI](https://github.com/shifty81/ArbiterAI) — AI project memory/assistant
-- [Blender-Generator-for-AtlasForge](https://github.com/shifty81/Blender-Generator-for-AtlasForge) — Procedural ship generation
-- [Nova-Forge-Expeditions](https://github.com/shifty81/Nova-Forge-Expeditions) — Expedition content
-- [Arbiter](https://github.com/shifty81/Arbiter) — AI arbiter system
-- [MasterRepo](https://github.com/shifty81/MasterRepo) — Original master repo
-- [MasterRepoRefactor](https://github.com/shifty81/MasterRepoRefactor) — Refactoring branch
-- [NovaForge-Project](https://github.com/shifty81/NovaForge-Project) — Project planning
+| Repo | Role | Archive Status |
+|------|------|----------------|
+| [MasterRepo](https://github.com/shifty81/MasterRepo) | v001 structural baseline — seed | 🔄 In Progress |
+| [MasterRepoRefactor](https://github.com/shifty81/MasterRepoRefactor) | Refactored Atlas+NovaForge structure | ⬜ Queued |
+| [AtlasToolingSuite](https://github.com/shifty81/AtlasToolingSuite) | Full tooling suite | ⬜ Queued |
+| [Nova-Forge-Expeditions](https://github.com/shifty81/Nova-Forge-Expeditions) | Richest game codebase | ⬜ Queued |
+| [Atlas-NovaForge](https://github.com/shifty81/Atlas-NovaForge) | Merged engine+game attempt | ⬜ Queued |
+| [AtlasForge](https://github.com/shifty81/AtlasForge) | Original engine | ⬜ Queued |
+| [NovaForge-Project](https://github.com/shifty81/NovaForge-Project) | Game project structure + rules | ⬜ Queued |
+| [SwissAgent](https://github.com/shifty81/SwissAgent) | AI agent → Atlas_SwissAgent | ⬜ Queued |
+| [ArbiterAI](https://github.com/shifty81/ArbiterAI) | AI agent → Atlas_Arbiter | ⬜ Queued |
+| [Arbiter](https://github.com/shifty81/Arbiter) | AI agent → Atlas_Arbiter | ⬜ Queued |
+| [AtlasForge-EveOffline](https://github.com/shifty81/AtlasForge-EveOffline) | Networking prototype | ⬜ Queued |
+| [Blender-Generator-for-AtlasForge](https://github.com/shifty81/Blender-Generator-for-AtlasForge) | Blender ship/station gen | ⬜ Queued |
 
 ---
 
