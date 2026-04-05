@@ -2,6 +2,7 @@
 
 > **Canonical Name:** AtlasAI
 > **Legacy Names:** ArbiterAI, SwissAgent, Arbiter — all consolidated here.
+> **Canonical Location:** `AtlasAI/` (repo root)
 
 ## Overview
 
@@ -18,6 +19,14 @@ and responses are mediated by AtlasAI through pipeline `ChangeEvent` files.
 |-----------|-----------|-------------|
 | **Atlas_Arbiter** | `AtlasAI/Atlas_Arbiter/` | Rule-based decision engine — evaluates declarative rules against JSON context |
 | **Atlas_SwissAgent** | `AtlasAI/Atlas_SwissAgent/` | Conversational AI query tool — workspace-aware code generation and analysis |
+
+### Planned Subsystems
+
+| Subsystem | Description | Status |
+|-----------|-------------|--------|
+| **Atlas_NPC** | In-game NPC behaviour (C++ engine integration) | Planned |
+| **Atlas_Pathfinding** | Navigation mesh + flow field AI (C++) | Planned |
+| **Atlas_Dialogue** | Dialogue tree + LLM-assisted NPC speech | Planned |
 
 ## Architecture
 
@@ -46,25 +55,37 @@ and responses are mediated by AtlasAI through pipeline `ChangeEvent` files.
 
 | Integration | Method |
 |-------------|--------|
+| Engine → AtlasAI | `Source/AI/` C++ runtime AI module |
 | Editor → AtlasAI | Editor writes pipeline events; AtlasAI responds with change events |
 | Build → AtlasAI | Build logs routed to `Logs/build.logger`; AtlasAI watches for issues |
 | CI → AtlasAI | ContractScanner findings written as change events for AtlasAI review |
 
+## Naming Canon
+
+All AI features, classes, and modules follow the `Atlas_` prefix or `AtlasAI::` namespace:
+
+- `AtlasAI::Arbiter`
+- `AtlasAI::SwissAgent`
+- `Atlas_NPCController`
+- `Atlas_PathfindingSystem`
+
+See `Docs/Architecture/NAMING_CANON.md` for full naming rules.
+
 ## Current Status
 
-- **Phase:** C1 MasterRepoRefactor — directory structure established
+- **Phase:** C3 Internal Consolidation — tools consolidated, legacy paths archived
 - **S1 Tool Wiring:** ⬜ Queued — full end-to-end pipeline event handling
 - **S4 ArbiterAI Integration:** ⬜ Queued — full reasoning broker active
 
 ## Legacy Tool Migration
 
-The following Tools/ directories contain legacy implementations that are being
-consolidated into AtlasAI:
+Legacy AI tool directories have been consolidated:
 
 | Legacy Path | Target | Status |
 |-------------|--------|--------|
-| `Tools/ArbiterAI/` | `AtlasAI/Atlas_Arbiter/` | 📋 Reference preserved |
-| `Tools/SwissAgent/` | `AtlasAI/Atlas_SwissAgent/` | 📋 Reference preserved |
+| `Tools/ArbiterAI/` | `AtlasAI/Atlas_Arbiter/` | ✅ Consolidated (legacy path archived) |
+| `Tools/SwissAgent/` | `AtlasAI/Atlas_SwissAgent/` | ✅ Consolidated (legacy path archived) |
+| `Tools/AtlasAI/` | `AtlasAI/` (repo root) | ✅ Consolidated |
 
-Both legacy directories remain in `Tools/` as reference implementations until S1 Tool
-Wiring is complete. At that point, active code migrates here and legacy paths are archived.
+Active development occurs in `AtlasAI/` (repo root). Legacy paths under `Tools/` are
+archived references only.

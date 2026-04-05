@@ -1,17 +1,20 @@
 add_library(NF_UI STATIC
     src/UI.cpp
 
+    # AtlasUI — Core
+    src/AtlasUI/AtlasUI.cpp
+    src/AtlasUI/PanelHost.cpp
+
     # AtlasUI — Theme
     src/AtlasUI/Theme/ThemeDefaults.cpp
     src/AtlasUI/Theme/ThemeManager.cpp
-
-    # AtlasUI — Core
-    src/AtlasUI/PanelHost.cpp
 
     # AtlasUI — Widgets
     src/AtlasUI/Widgets/Button.cpp
     src/AtlasUI/Widgets/Panel.cpp
     src/AtlasUI/Widgets/TabBar.cpp
+    src/AtlasUI/Widgets/Tabs.cpp
+    src/AtlasUI/Widgets/StackPanel.cpp
     src/AtlasUI/Widgets/Splitter.cpp
     src/AtlasUI/Widgets/Toolbar.cpp
     src/AtlasUI/Widgets/Tooltip.cpp

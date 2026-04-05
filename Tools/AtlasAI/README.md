@@ -1,11 +1,15 @@
-# Tools/AtlasAI
+# ⚠️ DEPRECATED — Tools/AtlasAI
 
-This directory is the renamed home of **ArbiterAI**, now branded as **Atlas_AI** (part of the AtlasAI subsystem).
+> **This directory has been consolidated.** The canonical AtlasAI location is `AtlasAI/` at the repo root.
+>
+> All AI tooling documentation and subsystem directories now live under the root
+> `AtlasAI/` directory. This `Tools/AtlasAI/` path is preserved for backward
+> compatibility only.
 
-> **Formerly:** `Tools/ArbiterAI/`  
-> **New Name:** `Tools/AtlasAI/` — canonical AI tooling location for the Atlas engine suite
+**Canonical Location:** `AtlasAI/` (repo root)
 
-All AI tool development, migration, and active work happens here. Legacy references to `ArbiterAI`, `Arbiter`,
-and `SwissAgent` all map to subsystems under this directory.
-
-See [`ATLAS_AI_OVERVIEW.md`](ATLAS_AI_OVERVIEW.md) for the full subsystem breakdown.
+See:
+- `AtlasAI/README.md` — Unified AI broker documentation
+- `AtlasAI/ATLAS_AI_OVERVIEW.md` — Full subsystem overview
+- `AtlasAI/Atlas_Arbiter/` — Rule-based decision engine
+- `AtlasAI/Atlas_SwissAgent/` — Conversational AI query tool
