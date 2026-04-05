@@ -664,3 +664,20 @@
 - [x] Build verification: 795/795 tests pass (777 existing + 18 new)
 - [x] Update Docs/Game/ROADMAP.md — S3 marked Done
 - [x] Update Docs/Game/TASKS.md — S3 checklist added
+
+## Phase 11 — Suite Integration (S4: ArbiterAI Integration) ✅
+
+- [x] Add RuleSeverity enum, ArbiterRule, RuleViolation structs to Pipeline.h
+- [x] Add ArbiterReasoner class to Pipeline.h — rule engine, evaluation, CI gate
+- [x] AB-1: Rule management — addRule, loadRulesFromJson, findRule
+- [x] AB-2: Rule evaluation — glob-pattern path matching, event type filtering
+- [x] AB-3: Default game balance rules — 8 built-in rules across all event types
+- [x] AB-4: Violation tracking — processEvent, violationsForPath, event counting
+- [x] AB-5: CI gate — passesGate (Error/Critical = fail), human-readable summary
+- [x] Implement ArbiterReasoner.cpp source file, update Pipeline CMakeLists
+- [x] Add test_arbiter_reasoner.cpp with 22 tests covering all AB milestones
+- [x] End-to-end test: PipelineWatcher → ToolRegistry + ArbiterReasoner
+- [x] Feedback loop prevention: ArbiterAI events skipped to avoid infinite loops
+- [x] Build verification: 817/817 tests pass (795 existing + 22 new)
+- [x] Update Docs/Game/ROADMAP.md — S4 marked Done
+- [x] Update Docs/Game/TASKS.md — S4 checklist added

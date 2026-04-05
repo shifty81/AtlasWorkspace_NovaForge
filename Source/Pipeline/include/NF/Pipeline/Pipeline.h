@@ -556,4 +556,134 @@ private:
     std::string generateRecommendation(const ChangeEvent& event) const;
 };
 
+// ── RuleSeverity ─────────────────────────────────────────────────
+// Severity level for Arbiter rule violations.
+
+enum class RuleSeverity : uint8_t {
+    Info,
+    Warning,
+    Error,
+    Critical,
+};
+
+inline const char* ruleSeverityName(RuleSeverity s) noexcept {
+    switch (s) {
+        case RuleSeverity::Info:     return "Info";
+        case RuleSeverity::Warning:  return "Warning";
+        case RuleSeverity::Error:    return "Error";
+        case RuleSeverity::Critical: return "Critical";
+        default:                      return "Unknown";
+    }
+}
+
+// ── ArbiterRule ──────────────────────────────────────────────────
+// A single declarative rule evaluated by the ArbiterReasoner.
+// Schema: { "id": "...", "description": "...", "severity": "...",
+//           "event_type": "...", "path_pattern": "...",
+//           "condition": "...", "suggestion": "..." }
+
+struct ArbiterRule {
+    std::string       id;            // Unique rule identifier (e.g. "R001")
+    std::string       description;   // Human-readable description
+    RuleSeverity      severity = RuleSeverity::Warning;
+    ChangeEventType   eventType = ChangeEventType::Unknown;  // Which event triggers this rule
+    std::string       pathPattern;   // Glob-like path pattern (empty = match all)
+    std::string       condition;     // Condition expression (for future use)
+    std::string       suggestion;    // Recommended fix if violated
+};
+
+// ── RuleViolation ────────────────────────────────────────────────
+// Result of evaluating an ArbiterRule against a pipeline event.
+
+struct RuleViolation {
+    std::string       ruleId;
+    std::string       description;
+    RuleSeverity      severity = RuleSeverity::Warning;
+    std::string       path;          // File path that triggered the violation
+    std::string       suggestion;    // Recommended fix
+    int64_t           timestamp = 0;
+};
+
+// ── ArbiterReasoner ──────────────────────────────────────────────
+// S4: ArbiterAI reasoning engine that evaluates declarative rules
+// against pipeline events.  Manages a rule set, evaluates events,
+// tracks violations, and emits findings back into the pipeline.
+//
+// AB-1: Rule definition and loading
+// AB-2: Rule evaluation engine
+// AB-3: Game balance rule set (pre-built rules)
+// AB-4: Editor integration (violation reporting)
+// AB-5: CI gate integration (pass/fail summary)
+
+class ArbiterReasoner {
+public:
+    ArbiterReasoner();
+
+    // ── AB-1: Rule management ─────────────────────────────────────
+
+    // Add a rule to the rule set.
+    void addRule(ArbiterRule rule);
+
+    // Load rules from a JSON string (array of rule objects).
+    size_t loadRulesFromJson(const std::string& json);
+
+    // Get all registered rules.
+    const std::vector<ArbiterRule>& rules() const { return m_rules; }
+    size_t ruleCount() const noexcept { return m_rules.size(); }
+
+    // Find a rule by ID (nullptr if not found).
+    const ArbiterRule* findRule(const std::string& id) const;
+
+    // ── AB-2: Rule evaluation ─────────────────────────────────────
+
+    // Evaluate all applicable rules against a pipeline event.
+    // Returns the list of violations found.
+    std::vector<RuleViolation> evaluate(const ChangeEvent& event) const;
+
+    // ── AB-3: Built-in game balance rules ─────────────────────────
+
+    // Load a pre-built set of game balance and pipeline quality rules.
+    void loadDefaultRules();
+
+    // ── AB-4: Violation tracking ──────────────────────────────────
+
+    // Process an event: evaluate rules, track violations, emit findings.
+    // Returns the number of violations found.
+    size_t processEvent(const ChangeEvent& event,
+                        const PipelineDirectories& dirs);
+
+    // Get all accumulated violations.
+    const std::vector<RuleViolation>& violations() const { return m_violations; }
+    size_t violationCount() const noexcept { return m_violations.size(); }
+
+    // Get violations for a specific path.
+    std::vector<RuleViolation> violationsForPath(const std::string& path) const;
+
+    // ── AB-5: CI gate summary ─────────────────────────────────────
+
+    // Returns true if there are no Error or Critical violations.
+    bool passesGate() const;
+
+    // Produce a human-readable summary of all violations.
+    std::string summary() const;
+
+    // Total events processed.
+    size_t eventsProcessed() const noexcept { return m_eventsProcessed; }
+
+    // ── Pipeline integration ──────────────────────────────────────
+
+    // Subscribe to a PipelineWatcher.  Incoming events are evaluated
+    // against the rule set and violations are emitted as AIAnalysis events.
+    void attachToWatcher(PipelineWatcher& watcher,
+                         const PipelineDirectories& dirs);
+
+private:
+    std::vector<ArbiterRule>    m_rules;
+    std::vector<RuleViolation>  m_violations;
+    size_t                      m_eventsProcessed = 0;
+
+    bool matchesPath(const std::string& pattern,
+                     const std::string& path) const;
+};
+
 } // namespace NF

@@ -65,7 +65,7 @@
 | **S1** — Tool Wiring | All 5 tools respond to pipeline ChangeEvents end-to-end. 17 tests. | ✅ Done |
 | **S2** — BlenderGen Bridge | BG-1→5 fully wired through pipeline into editor asset pipeline | ✅ Done |
 | **S3** — SwissAgent Integration | SA-1→5 workspace broker functional in editor | ✅ Done |
-| **S4** — ArbiterAI Integration | AB-1→5 AI reasoning broker routes through AtlasAI/ | ⬜ Queued |
+| **S4** — ArbiterAI Integration | AB-1→5 AI reasoning broker routes through AtlasAI/ | ✅ Done |
 | **S5** — Full Suite Validation | All tools active simultaneously, CI passes with suite tests | ⬜ Queued |
 
 ---
