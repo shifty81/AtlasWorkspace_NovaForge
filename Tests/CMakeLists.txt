@@ -12,6 +12,13 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
 include(Catch)
 
+# ── Route all test executables into bin/Tests/ ────────────────────
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/Tests)
+foreach(CFG Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER ${CFG} CFG_UPPER)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CFG_UPPER} ${CMAKE_BINARY_DIR}/bin/${CFG}/Tests)
+endforeach()
+
 # Core tests
 add_executable(NF_CoreTests
     Core/test_core.cpp
