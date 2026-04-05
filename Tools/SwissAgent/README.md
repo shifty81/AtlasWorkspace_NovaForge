@@ -1,5 +1,7 @@
 # SwissAgent — Multi-Purpose AI Query Tool
 
+> **Naming Note**: SwissAgent capabilities are now consolidated into **AtlasAI**. This folder is preserved for reference. See `Docs/Architecture/NAMING_CANON.md`.
+
 `Tools/SwissAgent/` — CLI + optional editor-panel integration.
 
 SwissAgent is the conversational front-end to the NovaForge workspace suite.

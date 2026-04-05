@@ -5,6 +5,10 @@
 #include "NF/Renderer/Renderer.h"
 #include "NF/Physics/Physics.h"
 #include <map>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <cstdint>
 
 namespace NF {
 
@@ -3868,6 +3872,445 @@ public:
 
 private:
     std::map<ItemSlot, Item> m_equipped;
+};
+
+// ── G18 Status Effects ──────────────────────────────────────────
+
+enum class StatusEffectType : uint8_t {
+    Poison = 0,    // DoT, reduces health over time
+    Burn,          // DoT, fire damage per tick
+    Freeze,        // Slows movement and actions
+    Radiation,     // Accumulates, causes long-term damage
+    Bleed,         // DoT, bypasses shields
+    Stun,          // Temporarily disables actions
+    Blind,         // Reduces vision/accuracy
+    Overcharge,    // Boosts output but risks burnout
+    Count
+};
+
+inline const char* statusEffectTypeName(StatusEffectType t) {
+    switch (t) {
+        case StatusEffectType::Poison:     return "Poison";
+        case StatusEffectType::Burn:       return "Burn";
+        case StatusEffectType::Freeze:     return "Freeze";
+        case StatusEffectType::Radiation:  return "Radiation";
+        case StatusEffectType::Bleed:      return "Bleed";
+        case StatusEffectType::Stun:       return "Stun";
+        case StatusEffectType::Blind:      return "Blind";
+        case StatusEffectType::Overcharge: return "Overcharge";
+        default: return "Unknown";
+    }
+}
+
+struct StatusEffect {
+    StatusEffectType type      = StatusEffectType::Poison;
+    float            damage    = 0.f;    // damage per tick (0 if non-damaging)
+    float            duration  = 0.f;   // total duration in seconds
+    float            elapsed   = 0.f;   // time elapsed
+    float            tickRate  = 1.f;   // seconds between damage ticks
+    float            tickTimer = 0.f;
+    float            intensity = 1.f;   // 0..1 multiplier on all effects
+    bool             active    = true;
+
+    [[nodiscard]] bool isExpired() const { return elapsed >= duration; }
+    [[nodiscard]] float remaining() const {
+        return std::max(0.f, duration - elapsed);
+    }
+
+    // Returns damage dealt this tick (0 if not yet time)
+    float tick(float dt) {
+        if (!active || isExpired()) return 0.f;
+        elapsed   += dt;
+        tickTimer += dt;
+        if (tickTimer >= tickRate) {
+            tickTimer -= tickRate;
+            return damage * intensity;
+        }
+        return 0.f;
+    }
+};
+
+struct AilmentStack {
+    std::vector<StatusEffect> effects;
+
+    void apply(const StatusEffect& e) {
+        // Refresh if same type already present, otherwise stack
+        for (auto& ex : effects) {
+            if (ex.type == e.type && ex.active) {
+                ex.elapsed   = 0.f;
+                ex.duration  = std::max(ex.duration, e.duration);
+                ex.intensity = std::max(ex.intensity, e.intensity);
+                return;
+            }
+        }
+        effects.push_back(e);
+    }
+
+    void remove(StatusEffectType t) {
+        for (auto& e : effects)
+            if (e.type == t) e.active = false;
+    }
+
+    [[nodiscard]] bool has(StatusEffectType t) const {
+        for (auto& e : effects)
+            if (e.type == t && e.active && !e.isExpired()) return true;
+        return false;
+    }
+
+    // Returns total damage dealt this tick from all effects
+    float tick(float dt) {
+        float total = 0.f;
+        for (auto& e : effects) total += e.tick(dt);
+        // Remove expired
+        effects.erase(
+            std::remove_if(effects.begin(), effects.end(),
+                [](const StatusEffect& e){ return !e.active || e.isExpired(); }),
+            effects.end());
+        return total;
+    }
+
+    [[nodiscard]] size_t count() const { return effects.size(); }
+    void clear() { effects.clear(); }
+};
+
+class StatusEffectSystem {
+public:
+    void applyEffect(int entityId, const StatusEffect& effect) {
+        m_stacks[entityId].apply(effect);
+    }
+
+    void removeEffect(int entityId, StatusEffectType type) {
+        auto it = m_stacks.find(entityId);
+        if (it != m_stacks.end()) it->second.remove(type);
+    }
+
+    [[nodiscard]] bool hasEffect(int entityId, StatusEffectType type) const {
+        auto it = m_stacks.find(entityId);
+        return it != m_stacks.end() && it->second.has(type);
+    }
+
+    // Tick all stacks; returns map of entity→damageDealt
+    std::unordered_map<int,float> tick(float dt) {
+        std::unordered_map<int,float> dmg;
+        for (auto& [id, stack] : m_stacks) {
+            float d = stack.tick(dt);
+            if (d > 0.f) dmg[id] = d;
+        }
+        // Clean up empty stacks
+        for (auto it = m_stacks.begin(); it != m_stacks.end(); ) {
+            if (it->second.count() == 0) it = m_stacks.erase(it);
+            else ++it;
+        }
+        return dmg;
+    }
+
+    [[nodiscard]] const AilmentStack* getStack(int entityId) const {
+        auto it = m_stacks.find(entityId);
+        return (it != m_stacks.end()) ? &it->second : nullptr;
+    }
+
+    void clearEntity(int entityId) { m_stacks.erase(entityId); }
+    void clearAll() { m_stacks.clear(); }
+    [[nodiscard]] size_t entityCount() const { return m_stacks.size(); }
+
+private:
+    std::unordered_map<int, AilmentStack> m_stacks;
+};
+
+// ── G19 Contracts & Bounties ─────────────────────────────────────
+
+enum class ContractType : uint8_t {
+    Delivery = 0,   // Transport cargo from A to B
+    Assassination,  // Eliminate a target
+    Escort,         // Protect a subject
+    Salvage,        // Recover items from a wreck
+    Patrol,         // Hold a sector for a duration
+    Mining,         // Extract a quantity of a resource
+    Count
+};
+
+inline const char* contractTypeName(ContractType t) {
+    switch(t){
+        case ContractType::Delivery:      return "Delivery";
+        case ContractType::Assassination: return "Assassination";
+        case ContractType::Escort:        return "Escort";
+        case ContractType::Salvage:       return "Salvage";
+        case ContractType::Patrol:        return "Patrol";
+        case ContractType::Mining:        return "Mining";
+        default: return "Unknown";
+    }
+}
+
+enum class ContractStatus : uint8_t {
+    Available = 0,
+    Accepted,
+    InProgress,
+    Completed,
+    Failed,
+    Expired
+};
+
+struct Contract {
+    std::string    contractId;
+    std::string    title;
+    std::string    description;
+    ContractType   type          = ContractType::Delivery;
+    ContractStatus status        = ContractStatus::Available;
+    std::string    issuingFaction;
+    int            creditsReward = 0;
+    int            reputationReward = 0;
+    float          timeLimit     = 0.f;   // 0 = no time limit
+    float          elapsed       = 0.f;
+    int            requiredLevel = 0;
+
+    void accept()   { if (status==ContractStatus::Available) status=ContractStatus::Accepted; }
+    void start()    { if (status==ContractStatus::Accepted)  status=ContractStatus::InProgress; }
+    void complete() { if (status==ContractStatus::InProgress) status=ContractStatus::Completed; }
+    void fail()     { if (status==ContractStatus::InProgress) status=ContractStatus::Failed; }
+
+    [[nodiscard]] bool isActive() const {
+        return status==ContractStatus::Accepted || status==ContractStatus::InProgress;
+    }
+    [[nodiscard]] bool isExpired() const {
+        return timeLimit > 0.f && elapsed >= timeLimit;
+    }
+
+    void tick(float dt) {
+        if (!isActive()) return;
+        elapsed += dt;
+        if (isExpired()) status = ContractStatus::Expired;
+    }
+};
+
+struct BountyTarget {
+    std::string targetId;
+    std::string targetName;
+    std::string factionId;
+    int         creditsReward  = 0;
+    int         reputationCost = 0;   // rep cost with target's faction
+    bool        deadOrAlive    = true; // true = dead or alive, false = alive only
+    bool        claimed        = false;
+
+    void claim() { claimed = true; }
+    [[nodiscard]] bool isClaimable() const { return !claimed; }
+};
+
+class ContractBoard {
+public:
+    void addContract(Contract c) {
+        m_contracts.push_back(std::move(c));
+    }
+
+    void addBounty(BountyTarget b) {
+        m_bounties.push_back(std::move(b));
+    }
+
+    [[nodiscard]] Contract* findContract(const std::string& id) {
+        for (auto& c : m_contracts)
+            if (c.contractId == id) return &c;
+        return nullptr;
+    }
+
+    [[nodiscard]] BountyTarget* findBounty(const std::string& targetId) {
+        for (auto& b : m_bounties)
+            if (b.targetId == targetId) return &b;
+        return nullptr;
+    }
+
+    [[nodiscard]] std::vector<const Contract*> availableContracts(int playerLevel) const {
+        std::vector<const Contract*> out;
+        for (auto& c : m_contracts)
+            if (c.status==ContractStatus::Available && c.requiredLevel<=playerLevel)
+                out.push_back(&c);
+        return out;
+    }
+
+    [[nodiscard]] std::vector<const BountyTarget*> activeBounties() const {
+        std::vector<const BountyTarget*> out;
+        for (auto& b : m_bounties)
+            if (!b.claimed) out.push_back(&b);
+        return out;
+    }
+
+    void tick(float dt) {
+        for (auto& c : m_contracts) c.tick(dt);
+    }
+
+    [[nodiscard]] size_t contractCount() const { return m_contracts.size(); }
+    [[nodiscard]] size_t bountyCount()   const { return m_bounties.size(); }
+
+    void removeExpired() {
+        m_contracts.erase(
+            std::remove_if(m_contracts.begin(), m_contracts.end(),
+                [](const Contract& c){ return c.status==ContractStatus::Expired; }),
+            m_contracts.end());
+    }
+
+private:
+    std::vector<Contract>     m_contracts;
+    std::vector<BountyTarget> m_bounties;
+};
+
+// ── G20 Companion System ─────────────────────────────────────────
+
+enum class CompanionRole : uint8_t {
+    Combat = 0,    // Front-line fighter
+    Engineer,      // Repairs, hacks, constructs
+    Medic,         // Heals, revives, buffs
+    Scout,         // Reconnaissance, early warning
+    Pilot,         // Improved ship handling
+    Trader,        // Better prices, extra inventory
+    Count
+};
+
+inline const char* companionRoleName(CompanionRole r) {
+    switch(r){
+        case CompanionRole::Combat:    return "Combat";
+        case CompanionRole::Engineer:  return "Engineer";
+        case CompanionRole::Medic:     return "Medic";
+        case CompanionRole::Scout:     return "Scout";
+        case CompanionRole::Pilot:     return "Pilot";
+        case CompanionRole::Trader:    return "Trader";
+        default: return "Unknown";
+    }
+}
+
+struct CompanionPersonality {
+    float loyalty      = 0.5f;  // 0..1, affects willingness to follow orders
+    float bravery      = 0.5f;  // 0..1, affects combat engagement threshold
+    float curiosity    = 0.5f;  // 0..1, affects exploration behavior
+    float morale       = 1.0f;  // 0..1, affected by events
+    int   trust        = 0;     // accumulated trust points
+    int   trustToLoyalThreshold = 50;
+
+    void gainTrust(int amount) { trust += amount; }
+    void loseTrust(int amount) { trust -= amount; }
+    [[nodiscard]] bool isLoyal() const { return trust >= trustToLoyalThreshold; }
+
+    void adjustMorale(float delta) {
+        morale = std::clamp(morale + delta, 0.f, 1.f);
+    }
+};
+
+struct CompanionAbility {
+    std::string name;
+    std::string description;
+    float       cooldown        = 30.f;  // seconds
+    float       cooldownElapsed = 0.f;
+    bool        passive         = false; // true = always active, no cooldown
+
+    [[nodiscard]] bool isReady() const {
+        return passive || cooldownElapsed >= cooldown;
+    }
+
+    void use() {
+        if (!passive) cooldownElapsed = 0.f;
+    }
+
+    void tick(float dt) {
+        if (!passive && cooldownElapsed < cooldown)
+            cooldownElapsed += dt;
+    }
+};
+
+class Companion {
+public:
+    void init(const std::string& name, CompanionRole role) {
+        m_name = name;
+        m_role = role;
+        m_health = m_maxHealth = 100.f;
+        m_active = true;
+    }
+
+    [[nodiscard]] const std::string&  name()        const { return m_name; }
+    [[nodiscard]] CompanionRole       role()         const { return m_role; }
+    [[nodiscard]] float               health()       const { return m_health; }
+    [[nodiscard]] float               maxHealth()    const { return m_maxHealth; }
+    [[nodiscard]] bool                isActive()     const { return m_active; }
+    [[nodiscard]] bool                isAlive()      const { return m_health > 0.f; }
+    [[nodiscard]] CompanionPersonality& personality()      { return m_personality; }
+    [[nodiscard]] const CompanionPersonality& personality() const { return m_personality; }
+
+    void addAbility(const CompanionAbility& ab) { m_abilities.push_back(ab); }
+    [[nodiscard]] size_t abilityCount() const { return m_abilities.size(); }
+    [[nodiscard]] CompanionAbility* findAbility(const std::string& abName) {
+        for (auto& ab : m_abilities) if (ab.name == abName) return &ab;
+        return nullptr;
+    }
+
+    void takeDamage(float dmg) {
+        m_health = std::max(0.f, m_health - dmg);
+        if (m_health <= 0.f) m_active = false;
+        m_personality.adjustMorale(-0.05f);
+    }
+
+    void heal(float amount) {
+        m_health = std::min(m_maxHealth, m_health + amount);
+        if (m_health > 0.f) m_active = true;
+    }
+
+    void dismiss()  { m_active = false; }
+    void recall()   { if (isAlive()) m_active = true; }
+
+    void tick(float dt) {
+        for (auto& ab : m_abilities) ab.tick(dt);
+    }
+
+private:
+    std::string           m_name;
+    CompanionRole         m_role    = CompanionRole::Combat;
+    float                 m_health  = 100.f;
+    float                 m_maxHealth = 100.f;
+    bool                  m_active  = true;
+    CompanionPersonality  m_personality;
+    std::vector<CompanionAbility> m_abilities;
+};
+
+class CompanionManager {
+public:
+    static constexpr int kMaxCompanions = 4;
+
+    void addCompanion(Companion c) {
+        if (static_cast<int>(m_companions.size()) < kMaxCompanions)
+            m_companions.push_back(std::move(c));
+    }
+
+    void removeCompanion(const std::string& name) {
+        m_companions.erase(
+            std::remove_if(m_companions.begin(), m_companions.end(),
+                [&](const Companion& c){ return c.name()==name; }),
+            m_companions.end());
+    }
+
+    [[nodiscard]] Companion* findCompanion(const std::string& name) {
+        for (auto& c : m_companions) if (c.name()==name) return &c;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t companionCount()  const { return m_companions.size(); }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t n=0; for(auto& c: m_companions) if(c.isActive()) ++n; return n;
+    }
+
+    void tick(float dt) { for (auto& c : m_companions) c.tick(dt); }
+
+    void healAll(float amount) { for (auto& c : m_companions) c.heal(amount); }
+
+    [[nodiscard]] bool hasRole(CompanionRole role) const {
+        for (auto& c : m_companions)
+            if (c.role()==role && c.isActive()) return true;
+        return false;
+    }
+
+    [[nodiscard]] float averageMorale() const {
+        if (m_companions.empty()) return 0.f;
+        float sum=0.f;
+        for (auto& c : m_companions) sum += c.personality().morale;
+        return sum / static_cast<float>(m_companions.size());
+    }
+
+private:
+    std::vector<Companion> m_companions;
 };
 
 } // namespace NF

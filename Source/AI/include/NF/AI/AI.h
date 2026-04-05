@@ -315,50 +315,50 @@ public:
     [[nodiscard]] virtual bool isInitialized() const = 0;
 };
 
-// ── SwissAgentTool ───────────────────────────────────────────────
+// ── AtlasAIQueryTool ────────────────────────────────────────────
 
-class SwissAgentTool : public ITool {
+class AtlasAIQueryTool : public ITool {
 public:
-    [[nodiscard]] std::string name() const override { return "SwissAgent"; }
+    [[nodiscard]] std::string name() const override { return "AtlasAI.Query"; }
     [[nodiscard]] std::string description() const override { return "Multi-purpose AI assistant agent"; }
 
     void init() override {
         m_initialized = true;
-        NF_LOG_INFO("AI", "SwissAgentTool initialized");
+        NF_LOG_INFO("AI", "AtlasAIQueryTool initialized");
     }
 
     void shutdown() override {
         m_initialized = false;
-        NF_LOG_INFO("AI", "SwissAgentTool shutdown");
+        NF_LOG_INFO("AI", "AtlasAIQueryTool shutdown");
     }
 
     [[nodiscard]] bool isInitialized() const override { return m_initialized; }
 
     [[nodiscard]] std::string processQuery(const std::string& query) const {
         if (!m_initialized) return "";
-        return "SwissAgent response to: " + query;
+        return "AtlasAI response to: " + query;
     }
 
 private:
     bool m_initialized = false;
 };
 
-// ── ArbiterAITool ────────────────────────────────────────────────
+// ── AtlasAIRulesTool ────────────────────────────────────────────
 
-class ArbiterAITool : public ITool {
+class AtlasAIRulesTool : public ITool {
 public:
-    [[nodiscard]] std::string name() const override { return "ArbiterAI"; }
+    [[nodiscard]] std::string name() const override { return "AtlasAI.Rules"; }
     [[nodiscard]] std::string description() const override { return "Rule-based AI evaluation engine"; }
 
     void init() override {
         m_initialized = true;
-        NF_LOG_INFO("AI", "ArbiterAITool initialized");
+        NF_LOG_INFO("AI", "AtlasAIRulesTool initialized");
     }
 
     void shutdown() override {
         m_initialized = false;
         m_rules.clear();
-        NF_LOG_INFO("AI", "ArbiterAITool shutdown");
+        NF_LOG_INFO("AI", "AtlasAIRulesTool shutdown");
     }
 
     [[nodiscard]] bool isInitialized() const override { return m_initialized; }

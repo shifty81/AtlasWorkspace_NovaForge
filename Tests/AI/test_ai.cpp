@@ -331,11 +331,11 @@ TEST_CASE("AISystem update ticks all agents", "[AI][System]") {
     sys.shutdown();
 }
 
-// ── SwissAgentTool ──────────────────────────────────────────────
+// ── AtlasAIQueryTool ────────────────────────────────────────────
 
-TEST_CASE("SwissAgentTool lifecycle", "[AI][Tools]") {
-    NF::SwissAgentTool tool;
-    REQUIRE(tool.name() == "SwissAgent");
+TEST_CASE("AtlasAIQueryTool lifecycle", "[AI][Tools]") {
+    NF::AtlasAIQueryTool tool;
+    REQUIRE(tool.name() == "AtlasAI.Query");
     REQUIRE_FALSE(tool.isInitialized());
 
     // Query before init returns empty
@@ -352,10 +352,10 @@ TEST_CASE("SwissAgentTool lifecycle", "[AI][Tools]") {
     REQUIRE_FALSE(tool.isInitialized());
 }
 
-// ── ArbiterAITool ───────────────────────────────────────────────
+// ── AtlasAIRulesTool ────────────────────────────────────────────
 
-TEST_CASE("ArbiterAITool rules and evaluate", "[AI][Tools]") {
-    NF::ArbiterAITool tool;
+TEST_CASE("AtlasAIRulesTool rules and evaluate", "[AI][Tools]") {
+    NF::AtlasAIRulesTool tool;
     tool.init();
     REQUIRE(tool.isInitialized());
 
@@ -447,15 +447,15 @@ TEST_CASE("ReplayMinimizerTool empty input", "[AI][Tools]") {
 TEST_CASE("ToolRegistry register and find tools", "[AI][Tools]") {
     NF::ToolRegistry reg;
 
-    reg.registerTool(std::make_unique<NF::SwissAgentTool>());
-    reg.registerTool(std::make_unique<NF::ArbiterAITool>());
+    reg.registerTool(std::make_unique<NF::AtlasAIQueryTool>());
+    reg.registerTool(std::make_unique<NF::AtlasAIRulesTool>());
     reg.registerTool(std::make_unique<NF::BlenderGeneratorTool>());
 
     REQUIRE(reg.toolCount() == 3);
 
-    auto* swiss = reg.findTool("SwissAgent");
+    auto* swiss = reg.findTool("AtlasAI.Query");
     REQUIRE(swiss != nullptr);
-    REQUIRE(swiss->name() == "SwissAgent");
+    REQUIRE(swiss->name() == "AtlasAI.Query");
 
     REQUIRE(reg.findTool("NonExistent") == nullptr);
 
@@ -490,8 +490,8 @@ TEST_CASE("EditorAIAssistant unavailable without registry", "[AI][Editor]") {
 
 TEST_CASE("EditorAIAssistant with registry", "[AI][Editor]") {
     NF::ToolRegistry reg;
-    reg.registerTool(std::make_unique<NF::SwissAgentTool>());
-    reg.registerTool(std::make_unique<NF::ArbiterAITool>());
+    reg.registerTool(std::make_unique<NF::AtlasAIQueryTool>());
+    reg.registerTool(std::make_unique<NF::AtlasAIRulesTool>());
 
     NF::EditorAIAssistant assistant;
     assistant.setToolRegistry(&reg);

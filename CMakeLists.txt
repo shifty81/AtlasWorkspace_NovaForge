@@ -37,11 +37,22 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# ── Build mode ────────────────────────────────────────────────────
+option(NF_STANDALONE "Standalone build (all targets enabled by default)" ON)
+option(NF_HOSTED     "Workspace-hosted build (targets disabled by default, Workspace controls)" OFF)
+
+# In hosted mode, disable executables by default (Workspace controls them)
+if(NF_HOSTED AND NOT NF_STANDALONE)
+    set(_NF_DEFAULT_BUILD_TARGETS OFF)
+else()
+    set(_NF_DEFAULT_BUILD_TARGETS ON)
+endif()
+
 # Build options
-option(NF_BUILD_EDITOR  "Build NovaForge Editor"        ON)
-option(NF_BUILD_GAME    "Build NovaForge Game Runtime"  ON)
-option(NF_BUILD_SERVER  "Build NovaForge Dedicated Server" ON)
-option(NF_BUILD_TESTS   "Build test suite"              OFF)
+option(NF_BUILD_EDITOR  "Build NovaForge Editor"             ${_NF_DEFAULT_BUILD_TARGETS})
+option(NF_BUILD_GAME    "Build NovaForge Game Runtime"       ${_NF_DEFAULT_BUILD_TARGETS})
+option(NF_BUILD_SERVER  "Build NovaForge Dedicated Server"   ${_NF_DEFAULT_BUILD_TARGETS})
+option(NF_BUILD_TESTS   "Build test suite"                   OFF)
 
 # Core modules (static libraries)
 add_subdirectory(Source/Core)
@@ -80,6 +91,8 @@ endif()
 
 message(STATUS "")
 message(STATUS "=== NovaForge ${PROJECT_VERSION} ===")
+message(STATUS "  Standalone:    ${NF_STANDALONE}")
+message(STATUS "  Hosted:        ${NF_HOSTED}")
 message(STATUS "  Build Editor:  ${NF_BUILD_EDITOR}")
 message(STATUS "  Build Game:    ${NF_BUILD_GAME}")
 message(STATUS "  Build Server:  ${NF_BUILD_SERVER}")
