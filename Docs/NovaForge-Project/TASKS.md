@@ -27,4 +27,3 @@
 - implement client and server startup
 - implement validation suite
 - implement packaging and release pipeline
-- [x] M2/S1: Dev World Editing – PCG tuning panel, entity placement tool, voxel paint tool, editor undo system, world preview service

@@ -763,3 +763,35 @@ Spec Pack delivered:
 - 25 documentation files (game design, system specs, audit reports, roadmap)
 - 24 new tests, all passing
 Total: 884 tests, 0 failures.
+
+## M2/S1 — Dev World Editing ✅
+
+- [x] M2-1: Vec3i integer vector type for voxel coordinates
+- [x] M2-2: NoiseParams struct (frequency, amplitude, octaves, lacunarity, persistence, seed)
+- [x] M2-3: PCGPreset struct and PCGTuningPanel (EditorPanel subclass, DockSlot::Right)
+  - Noise parameter editing, preset management, seed control, dirty tracking
+- [x] M2-4: PlacedEntity struct and EntityPlacementTool
+  - Template-based entity placement, grid snap, auto-incrementing IDs
+- [x] M2-5: VoxelBrushShape enum, VoxelBrushSettings, PaintStroke, VoxelPaintTool
+  - Brush editing (sphere/cube/cylinder), stroke recording, material palette (8 slots)
+- [x] M2-6: PlaceEntityCommand, RemoveEntityCommand, PaintStrokeCommand, PCGParamChangeCommand
+  - All implement ICommand for full undo/redo through CommandStack
+- [x] M2-7: EditorUndoSystem — composite undo manager wrapping CommandStack
+  - executePlaceEntity, executeRemoveEntity, executePaintStroke, executePCGChange
+- [x] M2-8: WorldPreviewService — live world preview state management
+  - PreviewState enum (Idle/Loading/Ready/Error), view center/radius, dirty tracking
+- [x] M2-9: EditorApp integration — member variables, accessors, menu items, commands
+  - PCG Tuning panel added to Edit menu, Entity Placement and Voxel Paint to Tools menu
+- [x] M2-10: test_m2_editor.cpp — 25 new Catch2 test cases
+- [x] Build verification: 909/909 tests pass (884 existing + 25 new)
+- [x] Update Docs/Game/ROADMAP.md — M2/S1 marked Done
+
+## M2/S1 Complete ✅
+
+M2/S1 (Dev World Editing) fully delivered:
+- 5 new systems: PCGTuningPanel, EntityPlacementTool, VoxelPaintTool, EditorUndoSystem, WorldPreviewService
+- 4 undo commands: PlaceEntityCommand, RemoveEntityCommand, PaintStrokeCommand, PCGParamChangeCommand
+- Supporting types: Vec3i, NoiseParams, PCGPreset, PlacedEntity, VoxelBrushShape, VoxelBrushSettings, PaintStroke, PreviewState
+- Fully wired into EditorApp with menu items and commands
+- 25 new tests, all passing
+Total: 909 tests, 0 failures.

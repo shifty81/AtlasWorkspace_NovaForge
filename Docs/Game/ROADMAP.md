@@ -82,7 +82,7 @@
 | **C4–C11** — Remaining repos | See `Docs/CONSOLIDATION_PLAN.md` | ⬜ Queued |
 | **M1** — Usable Editor | Real GLFW/ImGui window, viewport clear, basic panels | ✅ Done |
 | **SP** — Spec Pack | 6 system contracts, 6 schemas, 25 docs, audit + roadmap | ✅ Done |
-| **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | 🔜 Next |
+| **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | ✅ Done |
 | **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | 📋 Planned |
 | **M4 / S3** — Asset Pipeline | AssetDatabase (GUID), mesh/texture importers, content browser hot-reload | 📋 Planned |
 | **S4** — Blender Bridge | novaforge_bridge.py add-on (BG-1→5), engine-side auto-import | 📋 Planned |
