@@ -647,3 +647,20 @@
 - [x] Update Docs/Game/ROADMAP.md — S2 marked Done
 - [x] Update Docs/Game/TASKS.md — S2 checklist added
 - [x] Update Tools/BlenderGenerator/README.md — BG tasks marked Done
+
+## Phase 11 — Suite Integration (S3: SwissAgent Integration) ✅
+
+- [x] Add AnalysisRequest, AnalysisResult, BrokerSession structs to Pipeline.h
+- [x] Add WorkspaceBroker class to Pipeline.h — session management, context indexing, analysis
+- [x] SA-1: Session management — create, resume, close, list active sessions
+- [x] SA-2: Context indexing — per-file event tracking, hot-path detection
+- [x] SA-3: Analysis requests — event analysis with summary and recommendations
+- [x] SA-4: Broker statistics — totalAnalyses, totalEventsIndexed counters
+- [x] SA-5: Full pipeline integration — attachToWatcher with feedback loop prevention
+- [x] Implement WorkspaceBroker.cpp source file, update Pipeline CMakeLists
+- [x] Add test_workspace_broker.cpp with 18 tests covering all SA milestones
+- [x] End-to-end test: PipelineWatcher → ToolRegistry + WorkspaceBroker
+- [x] Feedback loop prevention: SwissAgent events skipped to avoid infinite loops
+- [x] Build verification: 795/795 tests pass (777 existing + 18 new)
+- [x] Update Docs/Game/ROADMAP.md — S3 marked Done
+- [x] Update Docs/Game/TASKS.md — S3 checklist added

@@ -435,4 +435,125 @@ private:
     std::vector<std::unique_ptr<ToolAdapter>> m_tools;
 };
 
+// ── AnalysisRequest ──────────────────────────────────────────────
+// A pipeline event forwarded to the AI workspace broker for analysis.
+
+struct AnalysisRequest {
+    ChangeEvent       event;           // The original pipeline event
+    std::string       sessionId;       // Broker session that owns this request
+    int64_t           requestTime = 0; // When the request was created
+};
+
+// ── AnalysisResult ───────────────────────────────────────────────
+// The broker's response after processing an AnalysisRequest.
+
+struct AnalysisResult {
+    std::string       sessionId;
+    std::string       requestPath;     // Path from the original event
+    ChangeEventType   sourceEventType = ChangeEventType::Unknown;
+    std::string       summary;         // Human-readable analysis summary
+    std::string       recommendation;  // Suggested action (may be empty)
+    int64_t           analysisTime = 0;
+    bool              success = false;
+};
+
+// ── BrokerSession ────────────────────────────────────────────────
+// Tracks a single AI analysis session with conversation history.
+
+struct BrokerSession {
+    std::string                    id;
+    std::string                    projectName;
+    int64_t                        createdAt = 0;
+    int64_t                        lastActiveAt = 0;
+    std::vector<AnalysisRequest>   requests;
+    std::vector<AnalysisResult>    results;
+    bool                           active = true;
+};
+
+// ── WorkspaceBroker ──────────────────────────────────────────────
+// S3: SwissAgent workspace broker that manages AI sessions, context
+// indexing, and analysis routing.  Processes pipeline events, tracks
+// workspace state, and emits analysis results back into the pipeline.
+//
+// The broker maintains:
+//  - Named sessions (create/resume/close)
+//  - Per-session event history and analysis results
+//  - Workspace context (event index for lookup)
+//  - File activity tracking for hot-path detection
+
+class WorkspaceBroker {
+public:
+    WorkspaceBroker();
+
+    // ── SA-1: Session management ──────────────────────────────────
+
+    // Create a new session.  Returns the generated session ID.
+    std::string createSession(const std::string& projectName);
+
+    // Resume an existing session by ID.  Returns true if found.
+    bool resumeSession(const std::string& sessionId);
+
+    // Close a session.  Returns true if found and closed.
+    bool closeSession(const std::string& sessionId);
+
+    // Get a session by ID (nullptr if not found).
+    const BrokerSession* session(const std::string& sessionId) const;
+
+    // List all active session IDs.
+    std::vector<std::string> activeSessions() const;
+
+    size_t sessionCount() const noexcept { return m_sessions.size(); }
+
+    // ── SA-2: Context indexing ────────────────────────────────────
+
+    // Index a pipeline event into the workspace context.
+    // Tracks file activity and event history per session.
+    void indexEvent(const std::string& sessionId, const ChangeEvent& event);
+
+    // Get the number of events indexed for a given file path.
+    size_t eventCountForPath(const std::string& path) const;
+
+    // Get the most recent event type for a given file path.
+    ChangeEventType lastEventTypeForPath(const std::string& path) const;
+
+    // Get all tracked file paths (hot-path detection).
+    std::vector<std::string> trackedPaths() const;
+
+    // ── SA-3: Analysis requests ───────────────────────────────────
+
+    // Submit a pipeline event for AI analysis within a session.
+    // Returns the analysis result.
+    AnalysisResult analyzeEvent(const std::string& sessionId,
+                                const ChangeEvent& event,
+                                const PipelineDirectories& dirs);
+
+    // ── SA-4: Broker statistics ───────────────────────────────────
+
+    size_t totalAnalyses() const noexcept { return m_totalAnalyses; }
+    size_t totalEventsIndexed() const noexcept { return m_totalEventsIndexed; }
+
+    // ── SA-5: Full pipeline integration ───────────────────────────
+
+    // Subscribe the broker to a PipelineWatcher.  All incoming events
+    // are indexed and analyzed under the given session.
+    void attachToWatcher(PipelineWatcher& watcher,
+                         const std::string& sessionId,
+                         const PipelineDirectories& dirs);
+
+private:
+    std::unordered_map<std::string, BrokerSession> m_sessions;
+    size_t m_totalAnalyses = 0;
+    size_t m_totalEventsIndexed = 0;
+
+    // Context index: file path → list of (event type, timestamp) pairs.
+    struct FileActivity {
+        std::vector<std::pair<ChangeEventType, int64_t>> events;
+    };
+    std::unordered_map<std::string, FileActivity> m_fileIndex;
+
+    static std::string generateSessionId();
+    std::string generateSummary(const ChangeEvent& event) const;
+    std::string generateRecommendation(const ChangeEvent& event) const;
+};
+
 } // namespace NF
