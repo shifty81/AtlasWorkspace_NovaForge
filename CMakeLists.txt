@@ -37,6 +37,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# ── Third-party packages ──────────────────────────────────────────
+find_package(imgui CONFIG REQUIRED)
+
 # ── Build mode ────────────────────────────────────────────────────
 option(NF_STANDALONE "Standalone build (all targets enabled by default)" ON)
 option(NF_HOSTED     "Workspace-hosted build (targets disabled by default, Workspace controls)" OFF)
