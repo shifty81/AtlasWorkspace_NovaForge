@@ -413,3 +413,19 @@
 - [x] Companion class (init, name, role, health, isAlive, isActive, takeDamage, heal, dismiss, recall, addAbility, findAbility, tick)
 - [x] CompanionManager class (addCompanion, removeCompanion, findCompanion, companionCount, activeCount, tick, healAll, hasRole, averageMorale, kMaxCompanions=4)
 - [x] Comprehensive test coverage (9 new tests)
+
+## Repo Consolidation — Phase C1 (MasterRepoRefactor)
+
+- [x] Create AtlasAI/ directory structure (README.md, Atlas_Arbiter/, Atlas_SwissAgent/)
+- [x] Create AtlasAI/Atlas_Arbiter/README.md (rule engine, AB-1→5 roadmap, pipeline contract)
+- [x] Create AtlasAI/Atlas_SwissAgent/README.md (query agent, SA-1→5 roadmap, pipeline contract)
+- [x] Create Archive/_MasterRepoRefactor/ARCHIVE_SUMMARY.md
+- [x] Create Archive/_MasterRepoRefactor/usable_snippets/atlas_dir_layout.snippet.md
+- [x] Create Archive/_MasterRepoRefactor/docs_archive/.gitkeep
+- [x] Create Scripts/validate_project.sh (56-check project structure validator)
+- [x] Create Tools/BlenderGenerator/README.md (BG-1→5 roadmap, pipeline contract)
+- [x] Update Docs/Architecture/TEMPNOVAFORGE_GAP_AUDIT.md — all 12 GAPs marked ✅
+- [x] Update Docs/Game/ROADMAP.md — G18-G20 done, Phase 10 done, C0/C1 done
+- [x] Update Docs/CONSOLIDATION_PLAN.md — C0/C1 marked done
+- [x] Validate: cmake build succeeds, 641 tests pass
+- [x] Validate: Scripts/validate_project.sh reports 56/56 pass
