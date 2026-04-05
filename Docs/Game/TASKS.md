@@ -429,3 +429,39 @@
 - [x] Update Docs/CONSOLIDATION_PLAN.md — C0/C1 marked done
 - [x] Validate: cmake build succeeds, 641 tests pass
 - [x] Validate: Scripts/validate_project.sh reports 56/56 pass
+
+## Repo Consolidation — Phase C2 (AtlasToolingSuite)
+
+- [x] Land AtlasUI source into active tree (Source/UI/include/NF/UI/AtlasUI/, Source/UI/src/AtlasUI/)
+- [x] AtlasUI Theme system: ThemeTypes, ThemeTokens, Theme, ThemeDefaults (Atlas Dark), ThemeManager singleton
+- [x] AtlasUI Foundation: Interfaces (IWidget, IPanel, ILayoutContext, IPaintContext, IInputContext, IPopupHost), WidgetBase, PanelBase, PanelHost, DrawPrimitives, Contexts, WidgetHelpers, Types
+- [x] AtlasUI Widgets: Button, Panel, TabBar, Splitter, Toolbar, Tooltip, TextInput, Dropdown, PropertyRow, NotificationCard, Container
+- [x] AtlasUI Commands: CommandTypes, CommandRegistry, CommandManager, ShortcutRouter, CommandHelpers, CommandDefaults
+- [x] AtlasUI Services: FocusService, PopupHost, TooltipService, NotificationHost
+- [x] Move spec rollup docs to Docs/SpecRollup/ (12 architecture specs + README + manifest)
+- [x] Update Source/UI/CMakeLists.txt (20 new .cpp source files compiled)
+- [x] AtlasUI Catch2 test suite (36 tests: theme, widgets, commands, services, PanelHost, DrawList)
+- [x] AtlasUI validation scripts: path, symbol, theme, migration-gate validators
+- [x] AtlasUI CI workflow (.github/workflows/atlasui_validation.yml)
+- [x] Update Scripts/validate_project.sh (69 checks, up from 56)
+- [x] Update Docs/CONSOLIDATION_PLAN.md — C2 marked done
+- [x] Validate: cmake build succeeds, 708 tests pass
+- [x] Validate: all AtlasUI validators pass
+- [x] Validate: Scripts/validate_project.sh reports 69/69 pass
+
+## UI Migration — Phase U0 (AtlasUI Shell Standard)
+
+- [x] AtlasUI Shell Standard v1 spec (Docs/SpecRollup/02_ATLASUI_STANDARD.md)
+- [x] AtlasUI Theme + Token Mapping v2 spec (Docs/SpecRollup/04_THEME_AND_TOKEN_SYSTEM_V1.md)
+- [x] AtlasUI Component Pack v1 spec (implemented as active source)
+- [x] AtlasUI Integration Map v1 spec (execution bridge for migration)
+- [x] AtlasUI Repo Enforcement Pack v1 (validation scripts + CI)
+- [x] AtlasUI Validation Rule Set v1 (regex patterns, CI jobs, phase gates)
+- [ ] Migrate InspectorPanel to AtlasUI (Phase U1)
+- [ ] Migrate HierarchyPanel to AtlasUI (Phase U2)
+- [ ] Migrate ContentBrowserPanel to AtlasUI (Phase U3)
+- [ ] Migrate ConsolePanel to AtlasUI (Phase U4)
+- [ ] Migrate IDEPanel to AtlasUI (Phase U5)
+- [ ] Migrate GraphEditorPanel shell to AtlasUI (Phase U6)
+- [ ] Migrate ViewportPanel shell to AtlasUI (Phase U7)
+- [ ] Deprecate legacy UI path (Phase U8)

@@ -88,6 +88,23 @@ check "AtlasAI/Atlas_Arbiter/README.md"      "$(file_exists AtlasAI/Atlas_Arbite
 check "AtlasAI/Atlas_SwissAgent/README.md"   "$(file_exists AtlasAI/Atlas_SwissAgent/README.md)"
 echo ""
 
+# ── AtlasUI structure ─────────────────────────────────
+echo "▸ AtlasUI system"
+check "Source/UI/include/NF/UI/AtlasUI/"                      "$(dir_exists Source/UI/include/NF/UI/AtlasUI)"
+check "Source/UI/src/AtlasUI/"                                 "$(dir_exists Source/UI/src/AtlasUI)"
+check "AtlasUI Theme/"                                         "$(dir_exists Source/UI/include/NF/UI/AtlasUI/Theme)"
+check "AtlasUI Widgets/"                                       "$(dir_exists Source/UI/include/NF/UI/AtlasUI/Widgets)"
+check "AtlasUI Commands/"                                      "$(dir_exists Source/UI/include/NF/UI/AtlasUI/Commands)"
+check "AtlasUI Services/"                                      "$(dir_exists Source/UI/include/NF/UI/AtlasUI/Services)"
+check "ThemeManager.h"                                         "$(file_exists Source/UI/include/NF/UI/AtlasUI/Theme/ThemeManager.h)"
+check "Interfaces.h"                                           "$(file_exists Source/UI/include/NF/UI/AtlasUI/Interfaces.h)"
+check "Button.h"                                               "$(file_exists Source/UI/include/NF/UI/AtlasUI/Widgets/Button.h)"
+check "CommandRegistry.h"                                      "$(file_exists Source/UI/include/NF/UI/AtlasUI/Commands/CommandRegistry.h)"
+check "FocusService.h"                                         "$(file_exists Source/UI/include/NF/UI/AtlasUI/Services/FocusService.h)"
+check "Docs/SpecRollup/"                                       "$(dir_exists Docs/SpecRollup)"
+check "Tools/Validation/"                                      "$(dir_exists Tools/Validation)"
+echo ""
+
 # ── Architecture docs ────────────────────────────────
 echo "▸ Architecture documentation"
 check "Docs/Architecture/NAMING_CANON.md"            "$(file_exists Docs/Architecture/NAMING_CANON.md)"
