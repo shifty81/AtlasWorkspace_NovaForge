@@ -37,6 +37,8 @@
 - [x] Color type with RGBA8 pack/unpack
 - [x] Extended PropertyType enum (Color, Enum support)
 - [ ] Port full Input module (platform-specific backends)
+- [x] Win32 input backend: Win32InputAdapter.h (WM_KEYDOWN/UP, WM_MOUSEMOVE, WM_*BUTTON*, WM_MOUSEWHEEL, WM_KILLFOCUS → InputSystem)
+- [x] Editor main loop wired: Win32InputAdapter + InputSystem integrated into NovaForgeEditor main.cpp message pump
 
 ## Phase 2 — Rendering & Physics
 
@@ -160,7 +162,7 @@
 - [x] Docker server image with OCI labels
 - [x] Modding guide (ship, module, skill, mission JSON format + voxel + graph scripting)
 - [x] Architecture documentation updated (Networking dependency correction)
-- [ ] Final audit
+- [x] Final audit (spaghetti cleanup: My Repos.rtf → Archive/, loose .zip removed from git)
 
 ## Game Phase G1 — First Interaction Loop
 
@@ -357,3 +359,31 @@
 - [x] PlayerInventory class (addItem with stacking, removeItem, countItem, findItem, capacity, toCountMap)
 - [x] EquipmentLoadout class (equip/unequip by slot, slot replace returns previous, computeBonuses aggregate)
 - [x] Comprehensive test coverage (8 new tests)
+
+## Suite Phase S0 — Pipeline Core
+
+- [x] NF::Pipeline module scaffold (CMakeLists.txt, include/NF/Pipeline/Pipeline.h)
+- [x] ChangeEventType enum (7 types: FileAdded, FileModified, FileDeleted, FileRenamed, DirectoryAdded, DirectoryDeleted, ManifestUpdated)
+- [x] ChangeEvent struct (toJson, fromJson, writeToFile, readFromFile)
+- [x] Manifest class (GUID registry, save manifest.json, load manifest.json)
+- [x] WatchLog class (thread-safe append, toJson, fromJson)
+- [x] PipelineDirectories struct (fromRoot, ensureCreated)
+- [x] PipelineWatcher class (poll, start, stop — monitors .novaforge/pipeline/)
+- [x] 17 Catch2 tests covering all pipeline types
+- [x] NF::Editor links NF::Pipeline
+
+## Repo Consolidation — Phase C0 (MasterRepo)
+
+- [x] Update CMakeLists.txt with MasterRepo version (CMP0091, MSVC runtime fix, v3.20)
+- [x] Update vcpkg.json with MasterRepo baseline (pinned baseline, scoped platforms)
+- [x] Add ci-debug and ci-release presets to CMakePresets.json
+- [x] Replace Config/novaforge.project.json with MasterRepo schema
+- [x] Replace Content/Definitions/DevWorld.json with MasterRepo definition
+- [x] Update Docs/Game/ROADMAP.md to MasterRepo phase structure
+- [x] Update Docs/Game/ARCHITECTURE.md with Source/Game domain layout + design locks
+- [x] Update Docs/Game/PROJECT_RULES.md with Hard Boundary (AtlasAI clause)
+- [x] Create Docs/Game/BUILD_RULES.md
+- [x] Create Docs/GITHUB_COPILOT_IMPLEMENTATION_DIRECTIONS.md
+- [x] Create Docs/CONSOLIDATION_PLAN.md
+- [x] Create Archive/_MasterRepo/ARCHIVE_SUMMARY.md
+- [x] Create Archive/_MasterRepo/usable_snippets/cmake_msvc_runtime_fix.snippet.md
