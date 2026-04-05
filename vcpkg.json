@@ -2,23 +2,16 @@
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "novaforge",
   "version": "0.1.0",
-  "description": "NovaForge — Voxel-first PvE space simulator with custom engine, editor, and tooling",
-  "license": "GPL-3.0-only",
+  "description": "NovaForge — unified engine, editor, game, AI, tools monorepo",
   "dependencies": [
     {
       "name": "glfw3",
-      "platform": "windows | osx | linux"
-    },
-    "nlohmann-json",
-    "freetype",
-    {
-      "name": "openal-soft",
-      "platform": "windows | osx | linux"
+      "platform": "windows | osx"
     },
     {
-      "name": "catch2",
-      "features": [],
-      "platform": "!uwp"
+      "name": "opengl",
+      "platform": "windows"
     }
-  ]
+  ],
+  "builtin-baseline": "7516a02de04e8f8ff4e4beb8f8eb00552b67a5f2"
 }
