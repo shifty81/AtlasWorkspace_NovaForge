@@ -326,6 +326,87 @@ public:
                      const PipelineDirectories& dirs) override;
 };
 
+// ── AssetImportStatus ────────────────────────────────────────────
+// Tracks the lifecycle of an asset imported through the pipeline.
+
+enum class AssetImportStatus : uint8_t {
+    Pending,       // Import requested, not yet processed
+    Validated,     // File exists and has valid format
+    Registered,    // Asset registered in Manifest with a GUID
+    Failed,        // Import failed (see errorMessage)
+};
+
+inline const char* assetImportStatusName(AssetImportStatus s) noexcept {
+    switch (s) {
+        case AssetImportStatus::Pending:    return "Pending";
+        case AssetImportStatus::Validated:  return "Validated";
+        case AssetImportStatus::Registered: return "Registered";
+        case AssetImportStatus::Failed:     return "Failed";
+        default:                             return "Unknown";
+    }
+}
+
+// ── AssetImportResult ────────────────────────────────────────────
+// Result of processing an asset through the BlenderBridge.
+
+struct AssetImportResult {
+    std::string       sourcePath;       // Original file path from ChangeEvent
+    std::string       guid;             // GUID assigned by Manifest (empty on failure)
+    std::string       assetType;        // "mesh", "rig", "clip", or "unknown"
+    AssetImportStatus status = AssetImportStatus::Pending;
+    std::string       errorMessage;     // Non-empty only on failure
+    int64_t           importTimestamp = 0;
+};
+
+// ── BlenderBridge ────────────────────────────────────────────────
+// S2: Full BlenderGen Bridge that processes exported assets from
+// Blender, validates them, registers them in the Manifest, and
+// tracks import history.  Designed to be driven by BlenderGenAdapter
+// or used standalone in tests.
+
+class BlenderBridge {
+public:
+    explicit BlenderBridge(Manifest& manifest);
+
+    // Process an asset from BlenderGenerator.  Validates the file,
+    // detects asset type from metadata, registers in Manifest.
+    // Returns a result struct with the outcome.
+    AssetImportResult importAsset(const ChangeEvent& event,
+                                  const PipelineDirectories& dirs);
+
+    // Query import history.
+    const std::vector<AssetImportResult>& importHistory() const { return m_history; }
+    size_t importCount() const noexcept { return m_importCount; }
+    size_t failedCount() const noexcept { return m_failedCount; }
+
+    // Check if an asset path has already been imported.
+    bool isImported(const std::string& path) const;
+
+    // Get the GUID for a previously imported asset.
+    std::string guidForPath(const std::string& path) const;
+
+    // Access the underlying Manifest.
+    Manifest&       manifest()       { return m_manifest; }
+    const Manifest& manifest() const { return m_manifest; }
+
+private:
+    Manifest&                                 m_manifest;
+    std::vector<AssetImportResult>            m_history;
+    std::unordered_map<std::string, size_t>   m_pathIndex;  // path → history index
+    size_t                                    m_importCount = 0;
+    size_t                                    m_failedCount = 0;
+
+    // Detect asset type from event metadata (type=mesh, type=rig, type=clip).
+    static std::string detectAssetType(const ChangeEvent& event);
+
+    // Validate that the asset file exists on disk.
+    static bool validateAssetFile(const std::filesystem::path& fullPath);
+
+    // Resolve the full filesystem path for an asset from its event path.
+    static std::filesystem::path resolveAssetPath(
+        const ChangeEvent& event, const PipelineDirectories& dirs);
+};
+
 // ── ToolRegistry ─────────────────────────────────────────────────
 // Central registry that connects a PipelineWatcher to ToolAdapters.
 // When an event arrives, the registry dispatches it to every adapter
@@ -352,6 +433,257 @@ public:
 
 private:
     std::vector<std::unique_ptr<ToolAdapter>> m_tools;
+};
+
+// ── AnalysisRequest ──────────────────────────────────────────────
+// A pipeline event forwarded to the AI workspace broker for analysis.
+
+struct AnalysisRequest {
+    ChangeEvent       event;           // The original pipeline event
+    std::string       sessionId;       // Broker session that owns this request
+    int64_t           requestTime = 0; // When the request was created
+};
+
+// ── AnalysisResult ───────────────────────────────────────────────
+// The broker's response after processing an AnalysisRequest.
+
+struct AnalysisResult {
+    std::string       sessionId;
+    std::string       requestPath;     // Path from the original event
+    ChangeEventType   sourceEventType = ChangeEventType::Unknown;
+    std::string       summary;         // Human-readable analysis summary
+    std::string       recommendation;  // Suggested action (may be empty)
+    int64_t           analysisTime = 0;
+    bool              success = false;
+};
+
+// ── BrokerSession ────────────────────────────────────────────────
+// Tracks a single AI analysis session with conversation history.
+
+struct BrokerSession {
+    std::string                    id;
+    std::string                    projectName;
+    int64_t                        createdAt = 0;
+    int64_t                        lastActiveAt = 0;
+    std::vector<AnalysisRequest>   requests;
+    std::vector<AnalysisResult>    results;
+    bool                           active = true;
+};
+
+// ── WorkspaceBroker ──────────────────────────────────────────────
+// S3: SwissAgent workspace broker that manages AI sessions, context
+// indexing, and analysis routing.  Processes pipeline events, tracks
+// workspace state, and emits analysis results back into the pipeline.
+//
+// The broker maintains:
+//  - Named sessions (create/resume/close)
+//  - Per-session event history and analysis results
+//  - Workspace context (event index for lookup)
+//  - File activity tracking for hot-path detection
+
+class WorkspaceBroker {
+public:
+    WorkspaceBroker();
+
+    // ── SA-1: Session management ──────────────────────────────────
+
+    // Create a new session.  Returns the generated session ID.
+    std::string createSession(const std::string& projectName);
+
+    // Resume an existing session by ID.  Returns true if found.
+    bool resumeSession(const std::string& sessionId);
+
+    // Close a session.  Returns true if found and closed.
+    bool closeSession(const std::string& sessionId);
+
+    // Get a session by ID (nullptr if not found).
+    const BrokerSession* session(const std::string& sessionId) const;
+
+    // List all active session IDs.
+    std::vector<std::string> activeSessions() const;
+
+    size_t sessionCount() const noexcept { return m_sessions.size(); }
+
+    // ── SA-2: Context indexing ────────────────────────────────────
+
+    // Index a pipeline event into the workspace context.
+    // Tracks file activity and event history per session.
+    void indexEvent(const std::string& sessionId, const ChangeEvent& event);
+
+    // Get the number of events indexed for a given file path.
+    size_t eventCountForPath(const std::string& path) const;
+
+    // Get the most recent event type for a given file path.
+    ChangeEventType lastEventTypeForPath(const std::string& path) const;
+
+    // Get all tracked file paths (hot-path detection).
+    std::vector<std::string> trackedPaths() const;
+
+    // ── SA-3: Analysis requests ───────────────────────────────────
+
+    // Submit a pipeline event for AI analysis within a session.
+    // Returns the analysis result.
+    AnalysisResult analyzeEvent(const std::string& sessionId,
+                                const ChangeEvent& event,
+                                const PipelineDirectories& dirs);
+
+    // ── SA-4: Broker statistics ───────────────────────────────────
+
+    size_t totalAnalyses() const noexcept { return m_totalAnalyses; }
+    size_t totalEventsIndexed() const noexcept { return m_totalEventsIndexed; }
+
+    // ── SA-5: Full pipeline integration ───────────────────────────
+
+    // Subscribe the broker to a PipelineWatcher.  All incoming events
+    // are indexed and analyzed under the given session.
+    void attachToWatcher(PipelineWatcher& watcher,
+                         const std::string& sessionId,
+                         const PipelineDirectories& dirs);
+
+private:
+    std::unordered_map<std::string, BrokerSession> m_sessions;
+    size_t m_totalAnalyses = 0;
+    size_t m_totalEventsIndexed = 0;
+
+    // Context index: file path → list of (event type, timestamp) pairs.
+    struct FileActivity {
+        std::vector<std::pair<ChangeEventType, int64_t>> events;
+    };
+    std::unordered_map<std::string, FileActivity> m_fileIndex;
+
+    static std::string generateSessionId();
+    std::string generateSummary(const ChangeEvent& event) const;
+    std::string generateRecommendation(const ChangeEvent& event) const;
+};
+
+// ── RuleSeverity ─────────────────────────────────────────────────
+// Severity level for Arbiter rule violations.
+
+enum class RuleSeverity : uint8_t {
+    Info,
+    Warning,
+    Error,
+    Critical,
+};
+
+inline const char* ruleSeverityName(RuleSeverity s) noexcept {
+    switch (s) {
+        case RuleSeverity::Info:     return "Info";
+        case RuleSeverity::Warning:  return "Warning";
+        case RuleSeverity::Error:    return "Error";
+        case RuleSeverity::Critical: return "Critical";
+        default:                      return "Unknown";
+    }
+}
+
+// ── ArbiterRule ──────────────────────────────────────────────────
+// A single declarative rule evaluated by the ArbiterReasoner.
+// Schema: { "id": "...", "description": "...", "severity": "...",
+//           "event_type": "...", "path_pattern": "...",
+//           "condition": "...", "suggestion": "..." }
+
+struct ArbiterRule {
+    std::string       id;            // Unique rule identifier (e.g. "R001")
+    std::string       description;   // Human-readable description
+    RuleSeverity      severity = RuleSeverity::Warning;
+    ChangeEventType   eventType = ChangeEventType::Unknown;  // Which event triggers this rule
+    std::string       pathPattern;   // Glob-like path pattern (empty = match all)
+    std::string       condition;     // Condition expression (for future use)
+    std::string       suggestion;    // Recommended fix if violated
+};
+
+// ── RuleViolation ────────────────────────────────────────────────
+// Result of evaluating an ArbiterRule against a pipeline event.
+
+struct RuleViolation {
+    std::string       ruleId;
+    std::string       description;
+    RuleSeverity      severity = RuleSeverity::Warning;
+    std::string       path;          // File path that triggered the violation
+    std::string       suggestion;    // Recommended fix
+    int64_t           timestamp = 0;
+};
+
+// ── ArbiterReasoner ──────────────────────────────────────────────
+// S4: ArbiterAI reasoning engine that evaluates declarative rules
+// against pipeline events.  Manages a rule set, evaluates events,
+// tracks violations, and emits findings back into the pipeline.
+//
+// AB-1: Rule definition and loading
+// AB-2: Rule evaluation engine
+// AB-3: Game balance rule set (pre-built rules)
+// AB-4: Editor integration (violation reporting)
+// AB-5: CI gate integration (pass/fail summary)
+
+class ArbiterReasoner {
+public:
+    ArbiterReasoner();
+
+    // ── AB-1: Rule management ─────────────────────────────────────
+
+    // Add a rule to the rule set.
+    void addRule(ArbiterRule rule);
+
+    // Load rules from a JSON string (array of rule objects).
+    size_t loadRulesFromJson(const std::string& json);
+
+    // Get all registered rules.
+    const std::vector<ArbiterRule>& rules() const { return m_rules; }
+    size_t ruleCount() const noexcept { return m_rules.size(); }
+
+    // Find a rule by ID (nullptr if not found).
+    const ArbiterRule* findRule(const std::string& id) const;
+
+    // ── AB-2: Rule evaluation ─────────────────────────────────────
+
+    // Evaluate all applicable rules against a pipeline event.
+    // Returns the list of violations found.
+    std::vector<RuleViolation> evaluate(const ChangeEvent& event) const;
+
+    // ── AB-3: Built-in game balance rules ─────────────────────────
+
+    // Load a pre-built set of game balance and pipeline quality rules.
+    void loadDefaultRules();
+
+    // ── AB-4: Violation tracking ──────────────────────────────────
+
+    // Process an event: evaluate rules, track violations, emit findings.
+    // Returns the number of violations found.
+    size_t processEvent(const ChangeEvent& event,
+                        const PipelineDirectories& dirs);
+
+    // Get all accumulated violations.
+    const std::vector<RuleViolation>& violations() const { return m_violations; }
+    size_t violationCount() const noexcept { return m_violations.size(); }
+
+    // Get violations for a specific path.
+    std::vector<RuleViolation> violationsForPath(const std::string& path) const;
+
+    // ── AB-5: CI gate summary ─────────────────────────────────────
+
+    // Returns true if there are no Error or Critical violations.
+    bool passesGate() const;
+
+    // Produce a human-readable summary of all violations.
+    std::string summary() const;
+
+    // Total events processed.
+    size_t eventsProcessed() const noexcept { return m_eventsProcessed; }
+
+    // ── Pipeline integration ──────────────────────────────────────
+
+    // Subscribe to a PipelineWatcher.  Incoming events are evaluated
+    // against the rule set and violations are emitted as AIAnalysis events.
+    void attachToWatcher(PipelineWatcher& watcher,
+                         const PipelineDirectories& dirs);
+
+private:
+    std::vector<ArbiterRule>    m_rules;
+    std::vector<RuleViolation>  m_violations;
+    size_t                      m_eventsProcessed = 0;
+
+    bool matchesPath(const std::string& pattern,
+                     const std::string& path) const;
 };
 
 } // namespace NF

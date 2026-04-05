@@ -115,6 +115,10 @@ catch_discover_tests(NF_EditorTests)
 add_executable(NF_PipelineTests
     Pipeline/test_pipeline.cpp
     Pipeline/test_tool_wiring.cpp
+    Pipeline/test_blender_bridge.cpp
+    Pipeline/test_workspace_broker.cpp
+    Pipeline/test_arbiter_reasoner.cpp
+    Pipeline/test_full_suite.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_PipelineTests PRIVATE NF::Pipeline NF::Core Catch2::Catch2)

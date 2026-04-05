@@ -628,3 +628,81 @@
 - [x] Build verification: 762/762 tests pass (745 existing + 17 new)
 - [x] Update Docs/Game/ROADMAP.md — S1 marked Done, Phase 11 marked Active
 - [x] Update Docs/Game/TASKS.md — S1 checklist added
+
+## Phase 11 — Suite Integration (S2: BlenderGen Bridge) ✅
+
+- [x] Add AssetImportStatus enum with name helper to Pipeline.h
+- [x] Add AssetImportResult struct (sourcePath, guid, assetType, status, error)
+- [x] Implement BlenderBridge class — importAsset, isImported, guidForPath, history
+- [x] BlenderBridge validates asset files exist and are non-empty
+- [x] BlenderBridge detects asset type from metadata (type=mesh/rig/clip)
+- [x] BlenderBridge falls back to extension / event type for type detection
+- [x] BlenderBridge registers imported assets in Manifest with GUID
+- [x] BlenderBridge handles re-imports by updating existing Manifest records
+- [x] BlenderBridge tracks import/failure counts and full history
+- [x] Add BlenderBridge.cpp source file, update Pipeline CMakeLists
+- [x] Add test_blender_bridge.cpp with 15 tests covering all bridge functionality
+- [x] End-to-end test: PipelineWatcher → ToolRegistry → BlenderBridge
+- [x] Build verification: 777/777 tests pass (762 existing + 15 new)
+- [x] Update Docs/Game/ROADMAP.md — S2 marked Done
+- [x] Update Docs/Game/TASKS.md — S2 checklist added
+- [x] Update Tools/BlenderGenerator/README.md — BG tasks marked Done
+
+## Phase 11 — Suite Integration (S3: SwissAgent Integration) ✅
+
+- [x] Add AnalysisRequest, AnalysisResult, BrokerSession structs to Pipeline.h
+- [x] Add WorkspaceBroker class to Pipeline.h — session management, context indexing, analysis
+- [x] SA-1: Session management — create, resume, close, list active sessions
+- [x] SA-2: Context indexing — per-file event tracking, hot-path detection
+- [x] SA-3: Analysis requests — event analysis with summary and recommendations
+- [x] SA-4: Broker statistics — totalAnalyses, totalEventsIndexed counters
+- [x] SA-5: Full pipeline integration — attachToWatcher with feedback loop prevention
+- [x] Implement WorkspaceBroker.cpp source file, update Pipeline CMakeLists
+- [x] Add test_workspace_broker.cpp with 18 tests covering all SA milestones
+- [x] End-to-end test: PipelineWatcher → ToolRegistry + WorkspaceBroker
+- [x] Feedback loop prevention: SwissAgent events skipped to avoid infinite loops
+- [x] Build verification: 795/795 tests pass (777 existing + 18 new)
+- [x] Update Docs/Game/ROADMAP.md — S3 marked Done
+- [x] Update Docs/Game/TASKS.md — S3 checklist added
+
+## Phase 11 — Suite Integration (S4: ArbiterAI Integration) ✅
+
+- [x] Add RuleSeverity enum, ArbiterRule, RuleViolation structs to Pipeline.h
+- [x] Add ArbiterReasoner class to Pipeline.h — rule engine, evaluation, CI gate
+- [x] AB-1: Rule management — addRule, loadRulesFromJson, findRule
+- [x] AB-2: Rule evaluation — glob-pattern path matching, event type filtering
+- [x] AB-3: Default game balance rules — 8 built-in rules across all event types
+- [x] AB-4: Violation tracking — processEvent, violationsForPath, event counting
+- [x] AB-5: CI gate — passesGate (Error/Critical = fail), human-readable summary
+- [x] Implement ArbiterReasoner.cpp source file, update Pipeline CMakeLists
+- [x] Add test_arbiter_reasoner.cpp with 22 tests covering all AB milestones
+- [x] End-to-end test: PipelineWatcher → ToolRegistry + ArbiterReasoner
+- [x] Feedback loop prevention: ArbiterAI events skipped to avoid infinite loops
+- [x] Build verification: 817/817 tests pass (795 existing + 22 new)
+- [x] Update Docs/Game/ROADMAP.md — S4 marked Done
+- [x] Update Docs/Game/TASKS.md — S4 checklist added
+
+## Phase 11 — Suite Integration (S5: Full Suite Validation) ✅
+
+- [x] All 5 tool adapters active simultaneously (BlenderGen, ContractScanner, ReplayMinimizer, SwissAgent, Arbiter)
+- [x] BlenderBridge asset import concurrent with tool dispatch
+- [x] WorkspaceBroker AI analysis concurrent with ToolRegistry dispatch
+- [x] ArbiterReasoner rule evaluation concurrent with all other tools
+- [x] Full event matrix test: all 6 event types routed to correct handlers
+- [x] Feedback loop prevention verified: each tool skips its own events
+- [x] Manifest persistence roundtrip after full suite run
+- [x] CI gate summary after full suite run
+- [x] Add test_full_suite.cpp with 9 comprehensive integration tests
+- [x] Build verification: 826/826 tests pass (817 existing + 9 new)
+- [x] Update Docs/Game/ROADMAP.md — S5 marked Done, Phase 11 marked Done
+
+## Phase 11 Complete ✅
+
+Phase 11 (Suite Integration) fully delivered:
+- S0: Pipeline Core — PipelineWatcher, Manifest, WatchLog, ChangeEvent (17 tests)
+- S1: Tool Wiring — 5 ToolAdapters + ToolRegistry (17 tests)
+- S2: BlenderGen Bridge — BlenderBridge asset import + Manifest registration (15 tests)
+- S3: SwissAgent Integration — WorkspaceBroker session/context/analysis (18 tests)
+- S4: ArbiterAI Integration — ArbiterReasoner rules/violations/CI gate (22 tests)
+- S5: Full Suite Validation — all tools active simultaneously (9 tests)
+Total: 826 tests, 0 failures. Pipeline module: 5 source files, 6 test files.

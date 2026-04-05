@@ -20,7 +20,7 @@
 | **Phase 8** — Custom IDE | Project-aware IDE: ProjectIndexer, CodeNavigator, BreadcrumbTrail, IDEPanel | ✅ Done |
 | **Phase 9** — Pipeline Core | NF::Pipeline: PipelineWatcher, Manifest, WatchLog, ChangeEvent (S0) | ✅ Done |
 | **Phase 10** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide, final audit | ✅ Done |
-| **Phase 11** — Suite Integration | Full tool suite wired through pipeline; AtlasAI broker enabled | 🔧 Active |
+| **Phase 11** — Suite Integration | Full tool suite wired through pipeline; AtlasAI broker enabled | ✅ Done |
 
 ---
 
@@ -63,10 +63,10 @@
 |-----------|------|--------|
 | **S0** — Pipeline Core | NF::Pipeline: PipelineWatcher, Manifest, WatchLog, ChangeEvent. 17 tests. | ✅ Done |
 | **S1** — Tool Wiring | All 5 tools respond to pipeline ChangeEvents end-to-end. 17 tests. | ✅ Done |
-| **S2** — BlenderGen Bridge | BG-1→5 fully wired through pipeline into editor asset pipeline | ⬜ Queued |
-| **S3** — SwissAgent Integration | SA-1→5 workspace broker functional in editor | ⬜ Queued |
-| **S4** — ArbiterAI Integration | AB-1→5 AI reasoning broker routes through AtlasAI/ | ⬜ Queued |
-| **S5** — Full Suite Validation | All tools active simultaneously, CI passes with suite tests | ⬜ Queued |
+| **S2** — BlenderGen Bridge | BG-1→5 fully wired through pipeline into editor asset pipeline | ✅ Done |
+| **S3** — SwissAgent Integration | SA-1→5 workspace broker functional in editor | ✅ Done |
+| **S4** — ArbiterAI Integration | AB-1→5 AI reasoning broker routes through AtlasAI/ | ✅ Done |
+| **S5** — Full Suite Validation | All tools active simultaneously, CI passes with suite tests | ✅ Done |
 
 ---
 
