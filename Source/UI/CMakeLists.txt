@@ -1,17 +1,20 @@
 add_library(NF_UI STATIC
     src/UI.cpp
 
+    # AtlasUI — Core
+    src/AtlasUI/AtlasUI.cpp
+    src/AtlasUI/PanelHost.cpp
+
     # AtlasUI — Theme
     src/AtlasUI/Theme/ThemeDefaults.cpp
     src/AtlasUI/Theme/ThemeManager.cpp
-
-    # AtlasUI — Core
-    src/AtlasUI/PanelHost.cpp
 
     # AtlasUI — Widgets
     src/AtlasUI/Widgets/Button.cpp
     src/AtlasUI/Widgets/Panel.cpp
     src/AtlasUI/Widgets/TabBar.cpp
+    src/AtlasUI/Widgets/Tabs.cpp
+    src/AtlasUI/Widgets/StackPanel.cpp
     src/AtlasUI/Widgets/Splitter.cpp
     src/AtlasUI/Widgets/Toolbar.cpp
     src/AtlasUI/Widgets/Tooltip.cpp
@@ -26,6 +29,16 @@ add_library(NF_UI STATIC
     src/AtlasUI/Commands/CommandManager.cpp
     src/AtlasUI/Commands/ShortcutRouter.cpp
     src/AtlasUI/Commands/CommandDefaults.cpp
+
+    # AtlasUI — Panels
+    src/AtlasUI/Panels/InspectorPanel.cpp
+    src/AtlasUI/Panels/HierarchyPanel.cpp
+    src/AtlasUI/Panels/ContentBrowserPanel.cpp
+    src/AtlasUI/Panels/ConsolePanel.cpp
+    src/AtlasUI/Panels/IDEPanel.cpp
+    src/AtlasUI/Panels/GraphEditorPanel.cpp
+    src/AtlasUI/Panels/ViewportPanel.cpp
+    src/AtlasUI/Panels/PipelineMonitorPanel.cpp
 
     # AtlasUI — Services
     src/AtlasUI/Services/FocusService.cpp

@@ -36,13 +36,16 @@ public:
         }
     }
 
-    using WidgetBase::arrange;
-    using WidgetBase::bounds;
-    using WidgetBase::handleInput;
-    using WidgetBase::isVisible;
-    using WidgetBase::measure;
-    using WidgetBase::paint;
-    using WidgetBase::setVisible;
+    // Override IPanel/IWidget virtuals by delegating to WidgetBase implementations.
+    // This resolves the non-virtual diamond inheritance of IWidget from both
+    // IPanel and WidgetBase.
+    void measure(ILayoutContext& ctx) override { WidgetBase::measure(ctx); }
+    void arrange(const NF::Rect& bounds) override { WidgetBase::arrange(bounds); }
+    void paint(IPaintContext& ctx) override { WidgetBase::paint(ctx); }
+    bool handleInput(IInputContext& ctx) override { return WidgetBase::handleInput(ctx); }
+    void setVisible(bool visible) override { WidgetBase::setVisible(visible); }
+    [[nodiscard]] bool isVisible() const override { return WidgetBase::isVisible(); }
+    [[nodiscard]] NF::Rect bounds() const override { return WidgetBase::bounds(); }
 
 protected:
     std::string m_panelId;

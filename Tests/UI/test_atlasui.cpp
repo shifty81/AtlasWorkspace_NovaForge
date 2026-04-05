@@ -481,3 +481,425 @@ TEST_CASE("DrawList clear", "[AtlasUI][DrawList]") {
     REQUIRE(dl.empty());
     REQUIRE(dl.size() == 0);
 }
+
+// ── AtlasUI Panel Tests (U1–U8) ────────────────────────────────
+
+#include "NF/UI/AtlasUI/Panels/InspectorPanel.h"
+#include "NF/UI/AtlasUI/Panels/HierarchyPanel.h"
+#include "NF/UI/AtlasUI/Panels/ContentBrowserPanel.h"
+#include "NF/UI/AtlasUI/Panels/ConsolePanel.h"
+#include "NF/UI/AtlasUI/Panels/IDEPanel.h"
+#include "NF/UI/AtlasUI/Panels/GraphEditorPanel.h"
+#include "NF/UI/AtlasUI/Panels/ViewportPanel.h"
+#include "NF/UI/AtlasUI/Panels/PipelineMonitorPanel.h"
+
+// ── InspectorPanel (U1) ─────────────────────────────────────────
+
+TEST_CASE("InspectorPanel has correct panel ID", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.inspector");
+    REQUIRE(std::string(panel.title()) == "Inspector");
+}
+
+TEST_CASE("InspectorPanel entity selection", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    REQUIRE(panel.selectedEntityId() == -1);
+    panel.setSelectedEntityId(42);
+    REQUIRE(panel.selectedEntityId() == 42);
+}
+
+TEST_CASE("InspectorPanel transform data", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    panel.setTransform(1.f, 2.f, 3.f);
+    REQUIRE(panel.transformX() == 1.f);
+    REQUIRE(panel.transformY() == 2.f);
+    REQUIRE(panel.transformZ() == 3.f);
+}
+
+TEST_CASE("InspectorPanel properties", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    panel.addProperty("Health", "100");
+    panel.addProperty("Name", "Player");
+    REQUIRE(panel.properties().size() == 2);
+    REQUIRE(panel.properties()[0].label == "Health");
+    REQUIRE(panel.properties()[1].value == "Player");
+    panel.clearProperties();
+    REQUIRE(panel.properties().empty());
+}
+
+TEST_CASE("InspectorPanel paint produces draw commands", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    panel.arrange({0.f, 0.f, 300.f, 400.f});
+    panel.setSelectedEntityId(7);
+    panel.setTransform(10.f, 20.f, 30.f);
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+TEST_CASE("InspectorPanel paint with no selection", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    panel.arrange({0.f, 0.f, 300.f, 400.f});
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+TEST_CASE("InspectorPanel state save/load", "[AtlasUI][Panel][Inspector]") {
+    InspectorPanel panel;
+    panel.arrange({10.f, 20.f, 300.f, 400.f});
+    panel.setVisible(false);
+    auto state = panel.saveState();
+    REQUIRE(state.panelId == "atlas.inspector");
+    REQUIRE(state.visible == false);
+
+    InspectorPanel panel2;
+    panel2.loadState(state);
+    REQUIRE(panel2.isVisible() == false);
+}
+
+// ── HierarchyPanel (U2) ────────────────────────────────────────
+
+TEST_CASE("HierarchyPanel has correct panel ID", "[AtlasUI][Panel][Hierarchy]") {
+    HierarchyPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.hierarchy");
+    REQUIRE(std::string(panel.title()) == "Hierarchy");
+}
+
+TEST_CASE("HierarchyPanel entity management", "[AtlasUI][Panel][Hierarchy]") {
+    HierarchyPanel panel;
+    panel.addEntity(1, "Player", true);
+    panel.addEntity(2, "Enemy");
+    panel.addEntity(3, "World", false, 0);
+    REQUIRE(panel.entityCount() == 3);
+    REQUIRE(panel.entities()[0].selected == true);
+    REQUIRE(panel.entities()[1].name == "Enemy");
+    panel.clearEntities();
+    REQUIRE(panel.entityCount() == 0);
+}
+
+TEST_CASE("HierarchyPanel search filter", "[AtlasUI][Panel][Hierarchy]") {
+    HierarchyPanel panel;
+    panel.setSearchFilter("Player");
+    REQUIRE(panel.searchFilter() == "Player");
+}
+
+TEST_CASE("HierarchyPanel paint produces draw commands", "[AtlasUI][Panel][Hierarchy]") {
+    HierarchyPanel panel;
+    panel.arrange({0.f, 0.f, 250.f, 400.f});
+    panel.addEntity(1, "Player", true);
+    panel.addEntity(2, "Enemy");
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── ContentBrowserPanel (U3) ────────────────────────────────────
+
+TEST_CASE("ContentBrowserPanel has correct panel ID", "[AtlasUI][Panel][ContentBrowser]") {
+    ContentBrowserPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.content_browser");
+    REQUIRE(std::string(panel.title()) == "Content Browser");
+}
+
+TEST_CASE("ContentBrowserPanel entry management", "[AtlasUI][Panel][ContentBrowser]") {
+    ContentBrowserPanel panel;
+    panel.addEntry("Models", true);
+    panel.addEntry("player.obj", false);
+    REQUIRE(panel.entryCount() == 2);
+    REQUIRE(panel.entries()[0].isDirectory == true);
+    REQUIRE(panel.entries()[1].name == "player.obj");
+    panel.clearEntries();
+    REQUIRE(panel.entryCount() == 0);
+}
+
+TEST_CASE("ContentBrowserPanel path navigation", "[AtlasUI][Panel][ContentBrowser]") {
+    ContentBrowserPanel panel;
+    REQUIRE(panel.currentPath() == "/");
+    panel.setCurrentPath("/Content/Models");
+    REQUIRE(panel.currentPath() == "/Content/Models");
+}
+
+TEST_CASE("ContentBrowserPanel paint produces draw commands", "[AtlasUI][Panel][ContentBrowser]") {
+    ContentBrowserPanel panel;
+    panel.arrange({0.f, 0.f, 250.f, 400.f});
+    panel.setCurrentPath("/Content");
+    panel.addEntry("Textures", true);
+    panel.addEntry("readme.txt", false);
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── ConsolePanel (U4) ───────────────────────────────────────────
+
+TEST_CASE("ConsolePanel has correct panel ID", "[AtlasUI][Panel][Console]") {
+    ConsolePanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.console");
+    REQUIRE(std::string(panel.title()) == "Console");
+}
+
+TEST_CASE("ConsolePanel message management", "[AtlasUI][Panel][Console]") {
+    ConsolePanel panel;
+    panel.addMessage("Hello", MessageLevel::Info, 0.f);
+    panel.addMessage("Warning!", MessageLevel::Warning, 1.f);
+    panel.addMessage("Error!", MessageLevel::Error, 2.f);
+    REQUIRE(panel.messageCount() == 3);
+    REQUIRE(panel.messages()[0].text == "Hello");
+    REQUIRE(panel.messages()[1].level == MessageLevel::Warning);
+    REQUIRE(panel.messages()[2].level == MessageLevel::Error);
+    panel.clearMessages();
+    REQUIRE(panel.messageCount() == 0);
+}
+
+TEST_CASE("ConsolePanel enforces max message limit", "[AtlasUI][Panel][Console]") {
+    ConsolePanel panel;
+    for (size_t i = 0; i <= ConsolePanel::kMaxMessages; ++i) {
+        panel.addMessage("msg " + std::to_string(i), MessageLevel::Info);
+    }
+    REQUIRE(panel.messageCount() == ConsolePanel::kMaxMessages);
+}
+
+TEST_CASE("ConsolePanel paint produces draw commands", "[AtlasUI][Panel][Console]") {
+    ConsolePanel panel;
+    panel.arrange({0.f, 0.f, 400.f, 200.f});
+    panel.addMessage("Test info", MessageLevel::Info);
+    panel.addMessage("Test warning", MessageLevel::Warning);
+    panel.addMessage("Test error", MessageLevel::Error);
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── IDEPanel (U5) ───────────────────────────────────────────────
+
+TEST_CASE("IDEPanel has correct panel ID", "[AtlasUI][Panel][IDE]") {
+    IDEPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.ide");
+    REQUIRE(std::string(panel.title()) == "IDE");
+}
+
+TEST_CASE("IDEPanel search and results", "[AtlasUI][Panel][IDE]") {
+    IDEPanel panel;
+    panel.setSearchQuery("Entity");
+    REQUIRE(panel.searchQuery() == "Entity");
+
+    panel.addResult("Entity", "Source/Game/Entity.h", 42);
+    panel.addResult("EntityManager", "Source/Game/EntityManager.h", 10);
+    REQUIRE(panel.resultCount() == 2);
+    REQUIRE(panel.results()[0].symbolName == "Entity");
+    REQUIRE(panel.results()[0].line == 42);
+    panel.clearResults();
+    REQUIRE(panel.resultCount() == 0);
+}
+
+TEST_CASE("IDEPanel paint produces draw commands", "[AtlasUI][Panel][IDE]") {
+    IDEPanel panel;
+    panel.arrange({0.f, 0.f, 400.f, 300.f});
+    panel.setSearchQuery("Test");
+    panel.addResult("TestClass", "test.h");
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── GraphEditorPanel (U6) ───────────────────────────────────────
+
+TEST_CASE("GraphEditorPanel has correct panel ID", "[AtlasUI][Panel][GraphEditor]") {
+    GraphEditorPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.graph_editor");
+    REQUIRE(std::string(panel.title()) == "Graph Editor");
+}
+
+TEST_CASE("GraphEditorPanel node management", "[AtlasUI][Panel][GraphEditor]") {
+    GraphEditorPanel panel;
+    panel.setGraphName("TestGraph");
+    REQUIRE(panel.hasOpenGraph());
+    REQUIRE(panel.graphName() == "TestGraph");
+
+    int n1 = panel.addNode("Start", 0.f, 0.f);
+    int n2 = panel.addNode("End", 200.f, 100.f);
+    REQUIRE(panel.nodeCount() == 2);
+    REQUIRE(n1 != n2);
+
+    panel.addLink(n1, n2);
+    REQUIRE(panel.linkCount() == 1);
+
+    panel.selectNode(n1);
+    REQUIRE(panel.selectedNodeId() == n1);
+    panel.clearSelection();
+    REQUIRE(panel.selectedNodeId() == -1);
+
+    REQUIRE(panel.removeNode(n1));
+    REQUIRE(panel.nodeCount() == 1);
+    REQUIRE_FALSE(panel.removeNode(999));
+}
+
+TEST_CASE("GraphEditorPanel clear graph", "[AtlasUI][Panel][GraphEditor]") {
+    GraphEditorPanel panel;
+    panel.setGraphName("G");
+    panel.addNode("A", 0.f, 0.f);
+    panel.addNode("B", 100.f, 0.f);
+    panel.addLink(1, 2);
+    panel.clearGraph();
+    REQUIRE(panel.nodeCount() == 0);
+    REQUIRE(panel.linkCount() == 0);
+    REQUIRE(panel.selectedNodeId() == -1);
+}
+
+TEST_CASE("GraphEditorPanel paint with no graph", "[AtlasUI][Panel][GraphEditor]") {
+    GraphEditorPanel panel;
+    panel.arrange({0.f, 0.f, 400.f, 300.f});
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+TEST_CASE("GraphEditorPanel paint with nodes", "[AtlasUI][Panel][GraphEditor]") {
+    GraphEditorPanel panel;
+    panel.arrange({0.f, 0.f, 400.f, 300.f});
+    panel.setGraphName("MyGraph");
+    panel.addNode("Start", 10.f, 20.f);
+    panel.addNode("End", 150.f, 80.f);
+    panel.addLink(1, 2);
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── ViewportPanel (U7) ──────────────────────────────────────────
+
+TEST_CASE("ViewportPanel has correct panel ID", "[AtlasUI][Panel][Viewport]") {
+    ViewportPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.viewport");
+    REQUIRE(std::string(panel.title()) == "Viewport");
+}
+
+TEST_CASE("ViewportPanel camera and settings", "[AtlasUI][Panel][Viewport]") {
+    ViewportPanel panel;
+    panel.setCameraPosition(10.f, 20.f, 30.f);
+    REQUIRE(panel.cameraX() == 10.f);
+    REQUIRE(panel.cameraY() == 20.f);
+    REQUIRE(panel.cameraZ() == 30.f);
+
+    panel.setGridEnabled(false);
+    REQUIRE(panel.gridEnabled() == false);
+
+    panel.setRenderMode(ViewportRenderMode::Wireframe);
+    REQUIRE(panel.renderMode() == ViewportRenderMode::Wireframe);
+
+    panel.setToolMode(ViewportToolMode::Rotate);
+    REQUIRE(panel.toolMode() == ViewportToolMode::Rotate);
+}
+
+TEST_CASE("ViewportPanel paint produces draw commands", "[AtlasUI][Panel][Viewport]") {
+    ViewportPanel panel;
+    panel.arrange({0.f, 0.f, 800.f, 600.f});
+    panel.setCameraPosition(5.f, 10.f, 15.f);
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+TEST_CASE("ViewportPanel paint without grid", "[AtlasUI][Panel][Viewport]") {
+    ViewportPanel panel;
+    panel.arrange({0.f, 0.f, 800.f, 600.f});
+    panel.setGridEnabled(false);
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── PipelineMonitorPanel ────────────────────────────────────────
+
+TEST_CASE("PipelineMonitorPanel has correct panel ID", "[AtlasUI][Panel][PipelineMonitor]") {
+    PipelineMonitorPanel panel;
+    REQUIRE(std::string(panel.panelId()) == "atlas.pipeline_monitor");
+    REQUIRE(std::string(panel.title()) == "Pipeline Monitor");
+}
+
+TEST_CASE("PipelineMonitorPanel event management", "[AtlasUI][Panel][PipelineMonitor]") {
+    PipelineMonitorPanel panel;
+    panel.addEvent("FileAdded", "blendergen", "model.obj exported", 1.0f);
+    panel.addEvent("ContractIssue", "scanner", "null check missing", 2.0f);
+    REQUIRE(panel.eventCount() == 2);
+    REQUIRE(panel.events()[0].type == "FileAdded");
+    REQUIRE(panel.events()[1].source == "scanner");
+    panel.clearEvents();
+    REQUIRE(panel.eventCount() == 0);
+}
+
+TEST_CASE("PipelineMonitorPanel enforces max event limit", "[AtlasUI][Panel][PipelineMonitor]") {
+    PipelineMonitorPanel panel;
+    for (size_t i = 0; i <= PipelineMonitorPanel::kMaxEvents; ++i) {
+        panel.addEvent("T", "S", "D" + std::to_string(i));
+    }
+    REQUIRE(panel.eventCount() == PipelineMonitorPanel::kMaxEvents);
+}
+
+TEST_CASE("PipelineMonitorPanel paint produces draw commands", "[AtlasUI][Panel][PipelineMonitor]") {
+    PipelineMonitorPanel panel;
+    panel.arrange({0.f, 0.f, 400.f, 200.f});
+    panel.addEvent("FileAdded", "test", "test.txt");
+    TestPaintContext ctx;
+    panel.paint(ctx);
+    REQUIRE(ctx.dl.size() > 0);
+}
+
+// ── Panel PanelHost integration ─────────────────────────────────
+
+TEST_CASE("AtlasUI panels register with PanelHost", "[AtlasUI][Panel][PanelHost]") {
+    PanelHost host;
+
+    auto inspector = std::make_shared<InspectorPanel>();
+    auto hierarchy = std::make_shared<HierarchyPanel>();
+    auto browser = std::make_shared<ContentBrowserPanel>();
+    auto console = std::make_shared<ConsolePanel>();
+    auto ide = std::make_shared<IDEPanel>();
+    auto graph = std::make_shared<GraphEditorPanel>();
+    auto viewport = std::make_shared<ViewportPanel>();
+    auto pipeline = std::make_shared<PipelineMonitorPanel>();
+
+    host.attachPanel(inspector);
+    host.attachPanel(hierarchy);
+    host.attachPanel(browser);
+    host.attachPanel(console);
+    host.attachPanel(ide);
+    host.attachPanel(graph);
+    host.attachPanel(viewport);
+    host.attachPanel(pipeline);
+
+    REQUIRE(host.panels().size() == 8);
+    REQUIRE(host.findPanel("atlas.inspector") != nullptr);
+    REQUIRE(host.findPanel("atlas.hierarchy") != nullptr);
+    REQUIRE(host.findPanel("atlas.content_browser") != nullptr);
+    REQUIRE(host.findPanel("atlas.console") != nullptr);
+    REQUIRE(host.findPanel("atlas.ide") != nullptr);
+    REQUIRE(host.findPanel("atlas.graph_editor") != nullptr);
+    REQUIRE(host.findPanel("atlas.viewport") != nullptr);
+    REQUIRE(host.findPanel("atlas.pipeline_monitor") != nullptr);
+}
+
+TEST_CASE("All AtlasUI panels hidden paint produces no commands", "[AtlasUI][Panel]") {
+    TestPaintContext ctx;
+    InspectorPanel p1;
+    HierarchyPanel p2;
+    ContentBrowserPanel p3;
+    ConsolePanel p4;
+    IDEPanel p5;
+    GraphEditorPanel p6;
+    ViewportPanel p7;
+    PipelineMonitorPanel p8;
+
+    p1.setVisible(false); p1.paint(ctx);
+    p2.setVisible(false); p2.paint(ctx);
+    p3.setVisible(false); p3.paint(ctx);
+    p4.setVisible(false); p4.paint(ctx);
+    p5.setVisible(false); p5.paint(ctx);
+    p6.setVisible(false); p6.paint(ctx);
+    p7.setVisible(false); p7.paint(ctx);
+    p8.setVisible(false); p8.paint(ctx);
+
+    REQUIRE(ctx.dl.empty());
+}
+
