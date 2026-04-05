@@ -578,3 +578,37 @@
 - [x] Build verification: 745 tests passing, no breakage
 - [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 5 marked as extracted
 - [x] Update Archive/_AtlasForge/ARCHIVE_SUMMARY.md — all checklist items complete
+
+## Repo Consolidation — Phase 6 (NovaForge-Project Extraction)
+
+- [x] Audit source repo via GitHub API
+- [x] Extract 21 docs → Docs/NovaForge-Project/ (architecture, rules, specs, migration, runtime)
+- [x] Archive 19 reference files → Archive/_NovaForge-Project/ (scripts, tests, configs, CI)
+- [x] Update Archive/_NovaForge-Project/ARCHIVE_SUMMARY.md — all checklist items complete
+
+## Repo Consolidation — Phases 7-9 (AI Repos Extraction)
+
+- [x] Phase 7: Audit SwissAgent → 30 usable snippets + 6 docs archived
+- [x] Phase 8: Audit ArbiterAI → 3 usable snippets + 1 doc archived
+- [x] Phase 9: Audit Arbiter → 10 usable snippets + 4 docs archived
+- [x] Update all three ARCHIVE_SUMMARY.md files — complete
+
+## Repo Consolidation — Phase 10 (AtlasForge-EveOffline Extraction)
+
+- [x] Audit source repo via GitHub API
+- [x] Extract 56 docs → Docs/AtlasForge-EveOffline/
+- [x] Archive 11 reference files → Archive/_AtlasForge-EveOffline/
+- [x] Update Archive/_AtlasForge-EveOffline/ARCHIVE_SUMMARY.md — complete
+
+## Repo Consolidation — Phase 11 (Blender-Generator-for-AtlasForge Extraction)
+
+- [x] Audit source repo via GitHub API
+- [x] Archive 31 files → Archive/_Blender-Generator-for-AtlasForge/ (Python addon + docs)
+- [x] Update Archive/_Blender-Generator-for-AtlasForge/ARCHIVE_SUMMARY.md — complete
+
+## All 12 Repos Consolidated ✅
+
+- [x] Phases 0-11 complete — all source repos audited, extracted, and archived
+- [x] Build verification: 745/745 tests pass, no regressions
+- [x] Spaghetti audit: 7/8 items resolved (1 deferred to workspace phase)
+- [ ] Post-consolidation: namespace migration (atlas:: → NF::), CMakeLists wiring, include path normalization
