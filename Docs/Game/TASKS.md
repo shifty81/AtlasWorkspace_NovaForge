@@ -612,3 +612,19 @@
 - [x] Build verification: 745/745 tests pass, no regressions
 - [x] Spaghetti audit: 7/8 items resolved (1 deferred to workspace phase)
 - [ ] Post-consolidation: namespace migration (atlas:: → NF::), CMakeLists wiring, include path normalization
+
+## Phase 11 — Suite Integration (S1: Tool Wiring) ✅
+
+- [x] Add AIAnalysis ChangeEventType to Pipeline module
+- [x] Implement ToolAdapter abstract base class with emitEvent helper
+- [x] Implement BlenderGenAdapter — accepts AssetImported, emits AnimationExported
+- [x] Implement ContractScannerAdapter — accepts ScriptUpdated, emits ContractIssue
+- [x] Implement ReplayMinimizerAdapter — accepts ReplayExported, emits minimized replay
+- [x] Implement SwissAgentAdapter — accepts all event types, emits AIAnalysis
+- [x] Implement ArbiterAdapter — accepts ContractIssue + WorldChanged, emits AIAnalysis
+- [x] Implement ToolRegistry — central dispatch connecting PipelineWatcher to adapters
+- [x] Add ToolWiring.cpp source file, update Pipeline CMakeLists
+- [x] Add test_tool_wiring.cpp with 17 tests covering all adapters + registry
+- [x] Build verification: 762/762 tests pass (745 existing + 17 new)
+- [x] Update Docs/Game/ROADMAP.md — S1 marked Done, Phase 11 marked Active
+- [x] Update Docs/Game/TASKS.md — S1 checklist added

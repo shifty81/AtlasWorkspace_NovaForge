@@ -40,6 +40,7 @@ enum class ChangeEventType : uint8_t {
     AnimationExported,
     ContractIssue,
     ReplayExported,
+    AIAnalysis,          // Emitted by AI tools (SwissAgent, Arbiter) as a response
 };
 
 inline const char* changeEventTypeName(ChangeEventType t) noexcept {
@@ -50,6 +51,7 @@ inline const char* changeEventTypeName(ChangeEventType t) noexcept {
         case ChangeEventType::AnimationExported: return "AnimationExported";
         case ChangeEventType::ContractIssue:     return "ContractIssue";
         case ChangeEventType::ReplayExported:    return "ReplayExported";
+        case ChangeEventType::AIAnalysis:        return "AIAnalysis";
         default:                                  return "Unknown";
     }
 }
@@ -61,6 +63,7 @@ inline ChangeEventType changeEventTypeFromString(std::string_view s) noexcept {
     if (s == "AnimationExported") return ChangeEventType::AnimationExported;
     if (s == "ContractIssue")     return ChangeEventType::ContractIssue;
     if (s == "ReplayExported")    return ChangeEventType::ReplayExported;
+    if (s == "AIAnalysis")        return ChangeEventType::AIAnalysis;
     return ChangeEventType::Unknown;
 }
 
@@ -241,6 +244,114 @@ struct PipelineDirectories {
 
     // Create all directories on disk.  Returns false if any creation fails.
     bool ensureCreated() const;
+};
+
+// ── ToolAdapter ──────────────────────────────────────────────────
+// Abstract base class for pipeline-aware tools.  Each tool declares which
+// event types it accepts and processes incoming events.  Tools may emit
+// response events back into the changes directory.
+
+class ToolAdapter {
+public:
+    virtual ~ToolAdapter() = default;
+
+    // Human-readable tool name (e.g. "BlenderGenerator").
+    virtual const char* name() const noexcept = 0;
+
+    // Return true if this tool should receive events of the given type.
+    virtual bool acceptsEvent(ChangeEventType type) const noexcept = 0;
+
+    // Process an incoming event.  The adapter may write response events
+    // to dirs.changes.  Returns true if the event was handled.
+    virtual bool handleEvent(const ChangeEvent& event,
+                             const PipelineDirectories& dirs) = 0;
+
+    // Count of events successfully handled since construction.
+    size_t handledCount() const noexcept { return m_handledCount; }
+
+protected:
+    // Helper: emit a response ChangeEvent back into the pipeline.
+    bool emitEvent(ChangeEventType type,
+                   const std::string& path,
+                   const std::string& metadata,
+                   const PipelineDirectories& dirs);
+
+    size_t m_handledCount = 0;
+};
+
+// ── Concrete Tool Adapters ───────────────────────────────────────
+
+// BlenderGenerator: accepts AssetImported; imports meshes / animations.
+class BlenderGenAdapter final : public ToolAdapter {
+public:
+    const char* name() const noexcept override;
+    bool acceptsEvent(ChangeEventType type) const noexcept override;
+    bool handleEvent(const ChangeEvent& event,
+                     const PipelineDirectories& dirs) override;
+};
+
+// ContractScanner: accepts ScriptUpdated; scans source for violations.
+class ContractScannerAdapter final : public ToolAdapter {
+public:
+    const char* name() const noexcept override;
+    bool acceptsEvent(ChangeEventType type) const noexcept override;
+    bool handleEvent(const ChangeEvent& event,
+                     const PipelineDirectories& dirs) override;
+};
+
+// ReplayMinimizer: accepts ReplayExported; minimizes replay files.
+class ReplayMinimizerAdapter final : public ToolAdapter {
+public:
+    const char* name() const noexcept override;
+    bool acceptsEvent(ChangeEventType type) const noexcept override;
+    bool handleEvent(const ChangeEvent& event,
+                     const PipelineDirectories& dirs) override;
+};
+
+// SwissAgent: accepts all event types; AI analysis broker.
+class SwissAgentAdapter final : public ToolAdapter {
+public:
+    const char* name() const noexcept override;
+    bool acceptsEvent(ChangeEventType type) const noexcept override;
+    bool handleEvent(const ChangeEvent& event,
+                     const PipelineDirectories& dirs) override;
+};
+
+// ArbiterAI: accepts ContractIssue and WorldChanged; AI reasoning.
+class ArbiterAdapter final : public ToolAdapter {
+public:
+    const char* name() const noexcept override;
+    bool acceptsEvent(ChangeEventType type) const noexcept override;
+    bool handleEvent(const ChangeEvent& event,
+                     const PipelineDirectories& dirs) override;
+};
+
+// ── ToolRegistry ─────────────────────────────────────────────────
+// Central registry that connects a PipelineWatcher to ToolAdapters.
+// When an event arrives, the registry dispatches it to every adapter
+// whose acceptsEvent() returns true.
+
+class ToolRegistry {
+public:
+    ToolRegistry() = default;
+
+    // Register a tool adapter.  Ownership is transferred to the registry.
+    void registerTool(std::unique_ptr<ToolAdapter> tool);
+
+    // Attach to a PipelineWatcher.  Subscribes a callback that dispatches
+    // events to all registered tools.  Must be called after all tools are
+    // registered.  The PipelineDirectories are captured for handler use.
+    void attach(PipelineWatcher& watcher, const PipelineDirectories& dirs);
+
+    // Manually dispatch a single event to all matching tools (for testing).
+    int dispatch(const ChangeEvent& event, const PipelineDirectories& dirs);
+
+    // Query registered tools.
+    size_t toolCount() const noexcept { return m_tools.size(); }
+    const ToolAdapter* tool(size_t index) const;
+
+private:
+    std::vector<std::unique_ptr<ToolAdapter>> m_tools;
 };
 
 } // namespace NF
