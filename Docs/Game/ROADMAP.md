@@ -1,53 +1,81 @@
 # NovaForge — Phase-by-Phase Roadmap
 
-> Aligned to MasterRepoV001 phase structure. Each phase has tight, locked deliverables.
+> MasterRepo (v001) is the structural canonical reference. All phases are locked deliverables.
+> tempnovaforge is the consolidation target — it is ahead of MasterRepo on implementation.
+
+---
 
 ## Engine & Editor Phases
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **Phase 0** — Bootstrap | Project scaffold, build system, directory structure | ✅ Done |
-| **Phase 1** — Core Engine | Core, Engine, Input modules compiling with tests | ✅ Done |
-| **Phase 2** — Rendering & Physics | OpenGL RHI, physics, audio, animation | ✅ Done |
-| **Phase 3** — Voxel Runtime | Chunk data, edit API, serialization, game loop | ✅ Done |
-| **Phase 4** — Editor | Docking layout, panels, viewport, editor services | ✅ Done |
-| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types, visual scripting | ✅ Done |
-| **Phase 6** — Multiplayer | Server authority, replication, sessions, lockstep/rollback | ✅ Done |
-| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, Blender generator integration | ✅ Done |
-| **Phase 8** — Custom IDE | Project-aware IDE with cross-module awareness | ✅ Done |
-| **Phase 9** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide | ✅ Done |
+| **Phase 0** — Bootstrap | Project scaffold, build system, directory structure, CMake, presets, vcpkg | ✅ Done |
+| **Phase 1** — Core Engine | Core math/memory/reflection/serialization, Engine ECS, Input module | ✅ Done |
+| **Phase 2** — Rendering & Physics | OpenGL RHI, physics rigid bodies, audio device, animation skeleton | ✅ Done |
+| **Phase 3** — Voxel Runtime | Chunk data, ChunkMesher, WorldState, VoxelPickService, game loop scaffold | ✅ Done |
+| **Phase 4** — Editor | Docking layout, 7-panel UI, viewport, inspector, project path service | ✅ Done |
+| **Phase 5** — Graph VM | Deterministic bytecode VM, 14 graph types, visual scripting compiler | ✅ Done |
+| **Phase 6** — Multiplayer | Server authority, replication, sessions, lockstep/rollback networking | ✅ Done |
+| **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, BlenderGenerator, ContractScanner, ReplayMinimizer | ✅ Done |
+| **Phase 8** — Custom IDE | Project-aware IDE: ProjectIndexer, CodeNavigator, BreadcrumbTrail, IDEPanel | ✅ Done |
+| **Phase 9** — Pipeline Core | NF::Pipeline: PipelineWatcher, Manifest, WatchLog, ChangeEvent (S0) | ✅ Done |
+| **Phase 10** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide, final audit | 🔄 In Progress |
+| **Phase 11** — Suite Integration | Full tool suite wired through pipeline; AtlasAI broker enabled | ⬜ Queued |
+
+---
 
 ## Game Phases (Nova Forge)
 
+> Game phases use the G-series prefix. Each phase has a locked deliverable.
+
 | Phase | Goal | Status |
 |-------|------|--------|
-| **G1** — First Interaction Loop | R.I.G. state, mining tool, resources, inventory, HUD | ✅ Done |
-| **G2** — Voxel Mesh Rendering | Mesher, GPU cache, Phong shader, lit terrain | ✅ Done |
-| **G3** — Movement & FPS Camera | WASD + mouse look, jump, sprint, voxel collision | ✅ Done |
-| **G4** — Ship Systems | Ship classes, modules, combat, flight controls | ✅ Done |
-| **G5** — Fleet AI | AI captains, personality, morale, formation | ✅ Done |
-| **G6** — Economy | Mining, refining, manufacturing, market | ✅ Done |
-| **G7** — Exploration | Probe scanning, wormholes, ancient tech | ✅ Done |
-| **G8** — FPS Interiors | Walkable ships, EVA, survival mechanics | ✅ Done |
-| **G9** — Legend System | Player reputation, world bias, NPC memory | ✅ Done |
-| **G10** — Quest & Mission System | Mission objectives, rewards, quest chains | ✅ Done |
-| **G11** — Dialogue System | Branching dialogue, conditions, effects | ✅ Done |
-| **G12** — Save/Load System | Full game state serialization, auto-save, 5 slots | ✅ Done |
-| **G13** — World Events | Dynamic sector events, severity effects, expiry | ✅ Done |
-| **G14** — Tech Tree | Category-tiered research tree with prereqs and bonuses | ✅ Done |
-| **G15** — Player Progression | XP, levelling (cap 50), skill tree, stat bonuses | ✅ Done |
-| **G16** — Crafting System | Recipes, ingredients, FIFO crafting queue, level-gated | ✅ Done |
-| **G17** — Inventory & Equipment | Stackable items, rarity, slot-based equipment, stat bonuses | ✅ Done |
+| **G1** — First Interaction Loop | R.I.G. state, mining tool, resources, inventory, HUD, GameSession | ✅ Done |
+| **G2** — Voxel Mesh Rendering | ChunkRenderer, VoxelShader, Frustum, ChunkRenderCache, lit terrain | ✅ Done |
+| **G3** — Movement & FPS Camera | FPSCamera, PlayerMovement, VoxelCollider, PlayerController | ✅ Done |
+| **G4** — Ship Systems | ShipClass, ShipModule, Ship, FlightController, CombatSystem | ✅ Done |
+| **G5** — Fleet AI | Formation, CaptainPersonality, AICaptain, Fleet | ✅ Done |
+| **G6** — Economy | Mining, refining, manufacturing, market pricing | ✅ Done |
+| **G7** — Exploration | ProbeScanner, WormholeNetwork, AncientTechRegistry | ✅ Done |
+| **G8** — FPS Interiors | ShipRoom, ShipInterior, EVAState, SurvivalStatus | ✅ Done |
+| **G9** — Legend System | PlayerReputation, WorldBiasMap, NPCMemory, LegendStatus | ✅ Done |
+| **G10** — Quest & Missions | MissionObjective, ActiveMission, MissionLog, QuestChain | ✅ Done |
+| **G11** — Dialogue System | DialogueCondition, DialogueNode, DialogueGraph, DialogueRunner | ✅ Done |
+| **G12** — Save/Load System | SaveSlot, SaveData, GameSaveSerializer, SaveSystem with auto-save | ✅ Done |
+| **G13** — World Events | WorldEventType×7, EventEffect, WorldEvent, WorldEventSystem | ✅ Done |
+| **G14** — Tech Tree | TechCategory×7, TechNode, TechTree with prereqs, tier bonuses | ✅ Done |
+| **G15** — Player Progression | PlayerLevel (cap 50), SkillNode, SkillTree, ProgressionSystem | ✅ Done |
+| **G16** — Crafting System | CraftingRecipe, CraftingQueue FIFO, CraftingSystem level-gated | ✅ Done |
+| **G17** — Inventory & Equipment | ItemRarity×5, PlayerInventory (stacking), EquipmentLoadout | ✅ Done |
+| **G18** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+
+---
 
 ## Workspace Suite Milestones (S-series)
 
-> All tools report back to the suite through the shared pipeline.
-> The editor is the only thing the user launches; all other tools run
-> headlessly or are embedded as panels.
+> All tools communicate only through the shared `.novaforge/pipeline/` directory.
+> The editor is the sole user-facing entry point; all tools run headlessly.
 
 | Milestone | Goal | Status |
 |-----------|------|--------|
-| **S0** — Pipeline Core | `NF::Pipeline` module: PipelineWatcher, Manifest, WatchLog, ChangeEvent. 17 tests. | ✅ Done |
+| **S0** — Pipeline Core | NF::Pipeline: PipelineWatcher, Manifest, WatchLog, ChangeEvent. 17 tests. | ✅ Done |
+| **S1** — Tool Wiring | All 5 tools respond to pipeline ChangeEvents end-to-end | ⬜ Queued |
+| **S2** — BlenderGen Bridge | BG-1→5 fully wired through pipeline into editor asset pipeline | ⬜ Queued |
+| **S3** — SwissAgent Integration | SA-1→5 workspace broker functional in editor | ⬜ Queued |
+| **S4** — ArbiterAI Integration | AB-1→5 AI reasoning broker routes through AtlasAI/ | ⬜ Queued |
+| **S5** — Full Suite Validation | All tools active simultaneously, CI passes with suite tests | ⬜ Queued |
+
+---
+
+## Repo Consolidation Milestones
+
+| Milestone | Source Repo | Status |
+|-----------|-------------|--------|
+| **C0** — MasterRepo seed | MasterRepo (v001) | 🔄 In Progress |
+| **C1** — MasterRepoRefactor | Structure + Atlas dirs | ⬜ Queued |
+| **C2** — AtlasToolingSuite | Full tool suite | ⬜ Queued |
+| **C3** — Nova-Forge-Expeditions | Richest game codebase | ⬜ Queued |
+| **C4–C11** — Remaining repos | See `Docs/CONSOLIDATION_PLAN.md` | ⬜ Queued |
 | **M1** — Usable Editor | Real GLFW/ImGui window, viewport clear, basic panels | 🔜 Next |
 | **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | 📋 Planned |
 | **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | 📋 Planned |

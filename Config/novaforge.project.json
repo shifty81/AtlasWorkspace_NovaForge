@@ -1,39 +1,34 @@
 {
   "project": {
     "name": "NovaForge",
-    "version": "0.1.0",
-    "type": "game",
-    "engine": "NovaForge Engine"
+    "type": "unified-monorepo",
+    "version": "0.1.0-reset",
+    "defaultWorld": "DevWorld",
+    "defaultStartupMode": "Editor"
   },
   "paths": {
-    "content": "Content",
-    "data": "Data",
-    "schemas": "Schemas",
-    "config": "Config",
-    "scripts": "Scripts"
+    "contentRoot": "Content",
+    "configRoot": "Config",
+    "saveRoot": "Saved",
+    "logRoot": "Saved/Logs",
+    "atlasAIRoot": "AtlasAI",
+    "toolsRoot": "Tools",
+    "archiveRoot": "Archive"
   },
-  "build": {
-    "standard": "C++20",
-    "system": "CMake",
-    "minimum_cmake": "3.22"
-  },
-  "editor": {
-    "default_level": "Content/Definitions/DevWorld.json",
-    "ui_framework": "custom",
-    "dpi_aware": true
-  },
-  "game": {
-    "title": "Nova Forge",
-    "genre": "PvE Space Simulator",
-    "render_api": "OpenGL",
-    "render_api_version": "3.3",
-    "voxel_authoritative": true,
-    "deterministic_simulation": true
-  },
-  "server": {
-    "default_port": 27015,
-    "tick_rate": 60,
-    "max_players": 20,
-    "protocol": "lockstep_rollback"
+  "phases": [
+    "Phase0_Bootstrap",
+    "Phase1_DevWorldOnly",
+    "Phase2_VoxelRuntimeOnly",
+    "Phase3_FirstInteractionLoopOnly",
+    "Phase4_VoxelMeshRendering",
+    "Phase5_MovementFPSCamera",
+    "Phase6_MultiplayerFoundation"
+  ],
+  "rules": {
+    "voxelAuthoritative": true,
+    "editorShipsWithGame": false,
+    "allowSuiteFeaturesInRepo": true,
+    "atlasAIBrokerEnabled": true,
+    "workspaceEnabled": true
   }
 }
