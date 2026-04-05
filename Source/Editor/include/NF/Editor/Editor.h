@@ -688,6 +688,10 @@ private:
 };
 
 // ── EditorPanel (abstract) ───────────────────────────────────────
+// DEPRECATED: Legacy panel base class. New panels should derive from
+// NF::UI::AtlasUI::PanelBase instead. See Source/UI/include/NF/UI/AtlasUI/Panels/
+// for the canonical AtlasUI panel implementations.
+// Migration phases U1-U7 provide AtlasUI equivalents for each panel below.
 
 class EditorPanel {
 public:
@@ -707,6 +711,7 @@ private:
 };
 
 // ── ViewportPanel ────────────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::ViewportPanel instead (U7).
 
 enum class RenderMode : uint8_t { Shaded, Wireframe, Unlit };
 enum class ToolMode   : uint8_t { Select, Move, Rotate, Scale, Paint, Erase };
@@ -860,6 +865,7 @@ private:
 };
 
 // ── InspectorPanel ───────────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::InspectorPanel instead (U1).
 
 class InspectorPanel : public EditorPanel {
 public:
@@ -932,6 +938,7 @@ private:
 };
 
 // ── HierarchyPanel ──────────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::HierarchyPanel instead (U2).
 
 class HierarchyPanel : public EditorPanel {
 public:
@@ -1003,6 +1010,7 @@ private:
 };
 
 // ── ConsolePanel ─────────────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::ConsolePanel instead (U4).
 
 enum class ConsoleMessageLevel : uint8_t { Info, Warning, Error };
 
@@ -1077,6 +1085,7 @@ private:
 };
 
 // ── ContentBrowserPanel ──────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::ContentBrowserPanel instead (U3).
 
 enum class ContentViewMode : uint8_t { Grid, List };
 
@@ -1431,6 +1440,7 @@ private:
 };
 
 // ── IDE Panel ────────────────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::IDEPanel instead (U5).
 
 class IDEPanel : public EditorPanel {
 public:
@@ -1839,6 +1849,7 @@ private:
 };
 
 // ── Graph Editor Panel ───────────────────────────────────────────
+// DEPRECATED: Use NF::UI::AtlasUI::GraphEditorPanel instead (U6).
 
 class GraphEditorPanel : public EditorPanel {
 public:
@@ -2028,6 +2039,7 @@ struct PipelineEventEntry {
     float timestamp = 0.f;
 };
 
+// DEPRECATED: Use NF::UI::AtlasUI::PipelineMonitorPanel instead.
 class PipelineMonitorPanel : public EditorPanel {
 public:
     [[nodiscard]] const std::string& name() const override { return m_name; }

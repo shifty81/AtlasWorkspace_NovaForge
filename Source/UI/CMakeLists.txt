@@ -30,6 +30,16 @@ add_library(NF_UI STATIC
     src/AtlasUI/Commands/ShortcutRouter.cpp
     src/AtlasUI/Commands/CommandDefaults.cpp
 
+    # AtlasUI — Panels
+    src/AtlasUI/Panels/InspectorPanel.cpp
+    src/AtlasUI/Panels/HierarchyPanel.cpp
+    src/AtlasUI/Panels/ContentBrowserPanel.cpp
+    src/AtlasUI/Panels/ConsolePanel.cpp
+    src/AtlasUI/Panels/IDEPanel.cpp
+    src/AtlasUI/Panels/GraphEditorPanel.cpp
+    src/AtlasUI/Panels/ViewportPanel.cpp
+    src/AtlasUI/Panels/PipelineMonitorPanel.cpp
+
     # AtlasUI — Services
     src/AtlasUI/Services/FocusService.cpp
     src/AtlasUI/Services/PopupHost.cpp

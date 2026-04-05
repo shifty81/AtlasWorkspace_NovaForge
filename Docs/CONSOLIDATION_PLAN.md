@@ -14,7 +14,7 @@ When a repo is fully merged, its contents are archived under `Archive/_RepoName/
 | 0 | MasterRepo | Structural seed | ✅ Done |
 | 1 | MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
 | 2 | AtlasToolingSuite | Tool suite | ✅ Done |
-| 3 | Nova-Forge-Expeditions | Richest game codebase | ⬜ Queued |
+| 3 | Nova-Forge-Expeditions | Richest game codebase | ✅ Audited |
 | 4 | Atlas-NovaForge | Engine+game merge attempt | ⬜ Queued |
 | 5 | AtlasForge | Original engine | ⬜ Queued |
 | 6 | NovaForge-Project | Game project structure + rules | ⬜ Queued |
@@ -48,6 +48,26 @@ When a repo is fully merged:
 4. Push to tempnovaforge
 5. User pulls locally then removes/archives the source repo on GitHub
 
+## UI Panel Migration (U1–U8)
+
+All legacy `EditorPanel`-derived panels have been migrated to the AtlasUI framework.
+New implementations live under `Source/UI/include/NF/UI/AtlasUI/Panels/` and use
+`NF::UI::AtlasUI::PanelBase` as their base class.
+
+| Phase | Panel | AtlasUI Class | Panel ID | Status |
+|-------|-------|---------------|----------|--------|
+| U1 | InspectorPanel | `InspectorPanel` | `atlas.inspector` | ✅ Done |
+| U2 | HierarchyPanel | `HierarchyPanel` | `atlas.hierarchy` | ✅ Done |
+| U3 | ContentBrowserPanel | `ContentBrowserPanel` | `atlas.content_browser` | ✅ Done |
+| U4 | ConsolePanel | `ConsolePanel` | `atlas.console` | ✅ Done |
+| U5 | IDEPanel | `IDEPanel` | `atlas.ide` | ✅ Done |
+| U6 | GraphEditorPanel | `GraphEditorPanel` | `atlas.graph_editor` | ✅ Done (shell) |
+| U7 | ViewportPanel | `ViewportPanel` | `atlas.viewport` | ✅ Done (shell) |
+| U8 | Legacy deprecation | — | — | ✅ Done |
+
+Legacy `EditorPanel` classes in `Source/Editor/include/NF/Editor/Editor.h` are marked
+as DEPRECATED with comments pointing to the new AtlasUI implementations.
+
 ## Archive Inventory
 
 | Archive Directory | Phase | Status |
@@ -55,7 +75,7 @@ When a repo is fully merged:
 | `Archive/_MasterRepo/` | C0 | ✅ Archived |
 | `Archive/_MasterRepoRefactor/` | C1 | ✅ Archived |
 | `Archive/_AtlasToolingSuite/` | C2 | ✅ Archived |
-| `Archive/_Nova-Forge-Expeditions/` | 3 | ⬜ Scaffolded |
+| `Archive/_Nova-Forge-Expeditions/` | 3 | ✅ Audited |
 | `Archive/_Atlas-NovaForge/` | 4 | ⬜ Scaffolded |
 | `Archive/_AtlasForge/` | 5 | ⬜ Scaffolded |
 | `Archive/_NovaForge-Project/` | 6 | ⬜ Scaffolded |

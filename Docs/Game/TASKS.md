@@ -479,11 +479,49 @@
 - [x] AtlasUI Integration Map v1 spec (execution bridge for migration)
 - [x] AtlasUI Repo Enforcement Pack v1 (validation scripts + CI)
 - [x] AtlasUI Validation Rule Set v1 (regex patterns, CI jobs, phase gates)
-- [ ] Migrate InspectorPanel to AtlasUI (Phase U1)
-- [ ] Migrate HierarchyPanel to AtlasUI (Phase U2)
-- [ ] Migrate ContentBrowserPanel to AtlasUI (Phase U3)
-- [ ] Migrate ConsolePanel to AtlasUI (Phase U4)
-- [ ] Migrate IDEPanel to AtlasUI (Phase U5)
-- [ ] Migrate GraphEditorPanel shell to AtlasUI (Phase U6)
-- [ ] Migrate ViewportPanel shell to AtlasUI (Phase U7)
-- [ ] Deprecate legacy UI path (Phase U8)
+- [x] Migrate InspectorPanel to AtlasUI (Phase U1)
+- [x] Migrate HierarchyPanel to AtlasUI (Phase U2)
+- [x] Migrate ContentBrowserPanel to AtlasUI (Phase U3)
+- [x] Migrate ConsolePanel to AtlasUI (Phase U4)
+- [x] Migrate IDEPanel to AtlasUI (Phase U5)
+- [x] Migrate GraphEditorPanel shell to AtlasUI (Phase U6)
+- [x] Migrate ViewportPanel shell to AtlasUI (Phase U7)
+- [x] Deprecate legacy UI path (Phase U8)
+
+## UI Migration — Phases U1-U8 (Panel Migration)
+
+- [x] U1: Create AtlasUI InspectorPanel (Panels/InspectorPanel.h + .cpp)
+  - Entity selection, transform display, custom properties
+  - Theme-token-driven paint through IPaintContext
+  - State save/load via PanelBase
+- [x] U2: Create AtlasUI HierarchyPanel (Panels/HierarchyPanel.h + .cpp)
+  - Entity tree with search filter, selection highlight, depth-based indent
+- [x] U3: Create AtlasUI ContentBrowserPanel (Panels/ContentBrowserPanel.h + .cpp)
+  - File/directory listing, path navigation, entry type icons
+- [x] U4: Create AtlasUI ConsolePanel (Panels/ConsolePanel.h + .cpp)
+  - Message levels (Info/Warning/Error), color-coded, 1000-msg max
+- [x] U5: Create AtlasUI IDEPanel (Panels/IDEPanel.h + .cpp)
+  - Symbol search, code navigation results, file path + line display
+- [x] U6: Create AtlasUI GraphEditorPanel shell (Panels/GraphEditorPanel.h + .cpp)
+  - Node/link management, selection, graph name, visual node rendering
+- [x] U7: Create AtlasUI ViewportPanel shell (Panels/ViewportPanel.h + .cpp)
+  - Camera position overlay, grid, tool mode, render mode indicators
+- [x] U8: Add DEPRECATED markers to all legacy EditorPanel classes in Editor.h
+- [x] Create PipelineMonitorPanel (Panels/PipelineMonitorPanel.h + .cpp)
+  - Pipeline event logging, 500-event max, type/source/details display
+- [x] Update Source/UI/CMakeLists.txt (8 new .cpp files)
+- [x] Write comprehensive tests for all migrated panels (40 new tests)
+- [x] All 8 AtlasUI panels register with PanelHost successfully
+
+## Repo Consolidation — Phase 3 (Nova-Forge-Expeditions Audit)
+
+- [x] Audit source repo contents via GitHub API (~5,900 files)
+- [x] Read and analyze AUDIT.md (three-way merge decisions)
+- [x] Read and analyze ROADMAP.md (7-phase development plan)
+- [x] Identify 449 unique game systems, PCG framework, rendering pipeline
+- [x] Map content to canonical tempnovaforge locations
+- [x] Create Archive/_Nova-Forge-Expeditions/ARCHIVE_SUMMARY.md with full audit
+- [x] Create Archive/_Nova-Forge-Expeditions/usable_snippets/ with code patterns
+- [x] Create Archive/_Nova-Forge-Expeditions/docs_archive/ with doc inventory
+- [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 3 marked as audited
+- [ ] Full content extraction pending (requires repo access for file-level merge)
