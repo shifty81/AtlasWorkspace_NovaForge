@@ -4313,4 +4313,260 @@ private:
     std::vector<Companion> m_companions;
 };
 
+// ── G21 Faction System ────────────────────────────────────────
+
+enum class FactionType : uint8_t {
+    Military = 0,
+    Corporate,
+    Scientific,
+    Religious,
+    Criminal,
+    Pirate,
+    Colonial,
+    Independent,
+    Count
+};
+
+inline const char* factionTypeName(FactionType t) {
+    switch(t){
+        case FactionType::Military:    return "Military";
+        case FactionType::Corporate:   return "Corporate";
+        case FactionType::Scientific:  return "Scientific";
+        case FactionType::Religious:   return "Religious";
+        case FactionType::Criminal:    return "Criminal";
+        case FactionType::Pirate:      return "Pirate";
+        case FactionType::Colonial:    return "Colonial";
+        case FactionType::Independent: return "Independent";
+        default: return "Unknown";
+    }
+}
+
+enum class FactionStanding : uint8_t {
+    Hostile = 0,
+    Unfriendly,
+    Neutral,
+    Friendly,
+    Allied
+};
+
+inline const char* factionStandingName(FactionStanding s) {
+    switch(s){
+        case FactionStanding::Hostile:    return "Hostile";
+        case FactionStanding::Unfriendly: return "Unfriendly";
+        case FactionStanding::Neutral:    return "Neutral";
+        case FactionStanding::Friendly:   return "Friendly";
+        case FactionStanding::Allied:     return "Allied";
+        default: return "Unknown";
+    }
+}
+
+struct FactionTerritory {
+    std::string sectorId;
+    std::string sectorName;
+    float       controlStrength = 1.0f;
+    int         resourceOutput  = 0;
+    bool        contested       = false;
+
+    void erode(float amount)    { controlStrength = std::clamp(controlStrength - amount, 0.f, 1.f); }
+    void reinforce(float amount){ controlStrength = std::clamp(controlStrength + amount, 0.f, 1.f); }
+    [[nodiscard]] bool isLost() const { return controlStrength <= 0.f; }
+};
+
+class Faction {
+public:
+    void init(const std::string& id, const std::string& name, FactionType type) {
+        m_factionId = id;
+        m_name      = name;
+        m_type      = type;
+        m_influence  = 0.5f;
+        m_wealth     = 0;
+        m_militaryPower = 0;
+        m_territories.clear();
+        m_wealthAccum = 0.f;
+    }
+
+    [[nodiscard]] const std::string& factionId()     const { return m_factionId; }
+    [[nodiscard]] const std::string& name()          const { return m_name; }
+    [[nodiscard]] FactionType        type()          const { return m_type; }
+    [[nodiscard]] float              influence()     const { return m_influence; }
+    [[nodiscard]] int                wealth()        const { return m_wealth; }
+    [[nodiscard]] int                militaryPower() const { return m_militaryPower; }
+
+    void addTerritory(FactionTerritory t) { m_territories.push_back(std::move(t)); }
+
+    void removeTerritory(const std::string& sectorId) {
+        m_territories.erase(
+            std::remove_if(m_territories.begin(), m_territories.end(),
+                [&](const FactionTerritory& t){ return t.sectorId==sectorId; }),
+            m_territories.end());
+    }
+
+    [[nodiscard]] FactionTerritory* findTerritory(const std::string& sectorId) {
+        for (auto& t : m_territories) if (t.sectorId==sectorId) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t territoryCount() const { return m_territories.size(); }
+
+    [[nodiscard]] int totalResourceOutput() const {
+        int sum = 0;
+        for (auto& t : m_territories) sum += t.resourceOutput;
+        return sum;
+    }
+
+    void adjustInfluence(float delta) { m_influence = std::clamp(m_influence + delta, 0.f, 1.f); }
+    void addWealth(int amount)        { m_wealth += amount; }
+    [[nodiscard]] bool spendWealth(int amount) {
+        if (m_wealth < amount) return false;
+        m_wealth -= amount;
+        return true;
+    }
+
+    void setMilitaryPower(int v) { m_militaryPower = v; }
+
+    void tick(float dt) {
+        m_wealthAccum += dt;
+        while (m_wealthAccum >= 1.f) {
+            m_wealthAccum -= 1.f;
+            m_wealth += totalResourceOutput();
+        }
+    }
+
+private:
+    std::string  m_factionId;
+    std::string  m_name;
+    FactionType  m_type         = FactionType::Independent;
+    float        m_influence    = 0.5f;
+    int          m_wealth       = 0;
+    int          m_militaryPower = 0;
+    float        m_wealthAccum  = 0.f;
+    std::vector<FactionTerritory> m_territories;
+};
+
+struct GameFactionRelation {
+    std::string     factionA;
+    std::string     factionB;
+    FactionStanding standing   = FactionStanding::Neutral;
+    int             reputation = 0;
+    bool            atWar      = false;
+    bool            hasTreaty  = false;
+    std::string     treatyType;
+
+    void improve(int amount) {
+        reputation += amount;
+        updateStanding();
+    }
+
+    void degrade(int amount) {
+        reputation -= amount;
+        updateStanding();
+    }
+
+    void declareWar() {
+        atWar    = true;
+        standing = FactionStanding::Hostile;
+        breakTreaty();
+    }
+
+    void declarePeace() {
+        atWar    = false;
+        standing = FactionStanding::Unfriendly;
+    }
+
+    void signTreaty(const std::string& type) {
+        hasTreaty  = true;
+        treatyType = type;
+    }
+
+    void breakTreaty() {
+        hasTreaty  = false;
+        treatyType.clear();
+    }
+
+private:
+    void updateStanding() {
+        if      (reputation < -75) standing = FactionStanding::Hostile;
+        else if (reputation < -25) standing = FactionStanding::Unfriendly;
+        else if (reputation <  25) standing = FactionStanding::Neutral;
+        else if (reputation <  75) standing = FactionStanding::Friendly;
+        else                       standing = FactionStanding::Allied;
+    }
+};
+
+class GameFactionManager {
+public:
+    static constexpr int kMaxFactions = 16;
+
+    void addFaction(Faction f) {
+        if (static_cast<int>(m_factions.size()) < kMaxFactions)
+            m_factions.push_back(std::move(f));
+    }
+
+    void removeFaction(const std::string& id) {
+        m_factions.erase(
+            std::remove_if(m_factions.begin(), m_factions.end(),
+                [&](const Faction& f){ return f.factionId()==id; }),
+            m_factions.end());
+    }
+
+    [[nodiscard]] Faction* findFaction(const std::string& id) {
+        for (auto& f : m_factions) if (f.factionId()==id) return &f;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t factionCount() const { return m_factions.size(); }
+
+    void setRelation(const std::string& a, const std::string& b, GameFactionRelation rel) {
+        auto key = makeKey(a, b);
+        rel.factionA = key.first;
+        rel.factionB = key.second;
+        for (auto& r : m_relations)
+            if (r.factionA==key.first && r.factionB==key.second) { r = std::move(rel); return; }
+        m_relations.push_back(std::move(rel));
+    }
+
+    [[nodiscard]] GameFactionRelation* getRelation(const std::string& a, const std::string& b) {
+        auto key = makeKey(a, b);
+        for (auto& r : m_relations)
+            if (r.factionA==key.first && r.factionB==key.second) return &r;
+        return nullptr;
+    }
+
+    [[nodiscard]] std::vector<const Faction*> alliedFactions(const std::string& factionId) const {
+        std::vector<const Faction*> out;
+        for (auto& r : m_relations) {
+            if (r.standing != FactionStanding::Allied) continue;
+            std::string otherId;
+            if      (r.factionA == factionId) otherId = r.factionB;
+            else if (r.factionB == factionId) otherId = r.factionA;
+            else continue;
+            for (auto& f : m_factions) if (f.factionId()==otherId) { out.push_back(&f); break; }
+        }
+        return out;
+    }
+
+    [[nodiscard]] std::vector<const Faction*> hostileFactions(const std::string& factionId) const {
+        std::vector<const Faction*> out;
+        for (auto& r : m_relations) {
+            if (r.standing != FactionStanding::Hostile) continue;
+            std::string otherId;
+            if      (r.factionA == factionId) otherId = r.factionB;
+            else if (r.factionB == factionId) otherId = r.factionA;
+            else continue;
+            for (auto& f : m_factions) if (f.factionId()==otherId) { out.push_back(&f); break; }
+        }
+        return out;
+    }
+
+    void tick(float dt) { for (auto& f : m_factions) f.tick(dt); }
+
+private:
+    std::vector<Faction>              m_factions;
+    std::vector<GameFactionRelation>  m_relations;
+
+    [[nodiscard]] static std::pair<std::string,std::string> makeKey(const std::string& a, const std::string& b) {
+        return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
+    }
+};
+
 } // namespace NF
