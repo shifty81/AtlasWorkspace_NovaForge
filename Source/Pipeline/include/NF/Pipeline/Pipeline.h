@@ -1,7 +1,7 @@
 #pragma once
 // NF::Pipeline — Shared workspace pipeline for inter-tool communication
 //
-// All tools (editor, Blender bridge, SwissAgent, ArbiterAI, ContractScanner,
+// All tools (editor, Blender bridge, AtlasAI, ContractScanner,
 // ReplayMinimizer) communicate exclusively by reading and writing files under
 // the workspace's .novaforge/pipeline/ directory tree.  No sockets, no RPC.
 //

@@ -15,93 +15,106 @@ include(Catch)
 # Core tests
 add_executable(NF_CoreTests
     Core/test_core.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_CoreTests PRIVATE NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_CoreTests PRIVATE NF::Core Catch2::Catch2)
 catch_discover_tests(NF_CoreTests)
 
 # Engine tests
 add_executable(NF_EngineTests
     Engine/test_engine.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_EngineTests PRIVATE NF::Engine NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_EngineTests PRIVATE NF::Engine NF::Core Catch2::Catch2)
 catch_discover_tests(NF_EngineTests)
 
 # Physics tests
 add_executable(NF_PhysicsTests
     Physics/test_physics.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_PhysicsTests PRIVATE NF::Physics NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_PhysicsTests PRIVATE NF::Physics NF::Core Catch2::Catch2)
 catch_discover_tests(NF_PhysicsTests)
 
 # Game tests
 add_executable(NF_GameTests
     Game/test_game.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_GameTests PRIVATE NF::Game NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_GameTests PRIVATE NF::Game NF::Core Catch2::Catch2)
 catch_discover_tests(NF_GameTests)
 
 # GraphVM tests
 add_executable(NF_GraphVMTests
     GraphVM/test_graphvm.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_GraphVMTests PRIVATE NF::GraphVM NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_GraphVMTests PRIVATE NF::GraphVM NF::Core Catch2::Catch2)
 catch_discover_tests(NF_GraphVMTests)
 
 # Input tests
 add_executable(NF_InputTests
     Input/test_input.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_InputTests PRIVATE NF::Input NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_InputTests PRIVATE NF::Input NF::Core Catch2::Catch2)
 catch_discover_tests(NF_InputTests)
 
 # Renderer tests
 add_executable(NF_RendererTests
     Renderer/test_renderer.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_RendererTests PRIVATE NF::Renderer NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_RendererTests PRIVATE NF::Renderer NF::Core Catch2::Catch2)
 catch_discover_tests(NF_RendererTests)
 
 # Audio tests
 add_executable(NF_AudioTests
     Audio/test_audio.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_AudioTests PRIVATE NF::Audio NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_AudioTests PRIVATE NF::Audio NF::Core Catch2::Catch2)
 catch_discover_tests(NF_AudioTests)
 
 # Animation tests
 add_executable(NF_AnimationTests
     Animation/test_animation.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_AnimationTests PRIVATE NF::Animation NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_AnimationTests PRIVATE NF::Animation NF::Core Catch2::Catch2)
 catch_discover_tests(NF_AnimationTests)
 
 # Networking tests
 add_executable(NF_NetworkingTests
     Networking/test_networking.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_NetworkingTests PRIVATE NF::Networking NF::Engine NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_NetworkingTests PRIVATE NF::Networking NF::Engine NF::Core Catch2::Catch2)
 catch_discover_tests(NF_NetworkingTests)
 
 # AI tests
 add_executable(NF_AITests
     AI/test_ai.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_AITests PRIVATE NF::AI NF::Engine NF::Core NF::GraphVM Catch2::Catch2WithMain)
+target_link_libraries(NF_AITests PRIVATE NF::AI NF::Engine NF::Core NF::GraphVM Catch2::Catch2)
 catch_discover_tests(NF_AITests)
 
 # Editor tests
 add_executable(NF_EditorTests
     Editor/test_editor.cpp
+    catch_main.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE
     NF::Editor NF::Game NF::Renderer NF::UI NF::Engine NF::Core NF::GraphVM
-    Catch2::Catch2WithMain
+    Catch2::Catch2
 )
 catch_discover_tests(NF_EditorTests)
 
 # Pipeline tests
 add_executable(NF_PipelineTests
     Pipeline/test_pipeline.cpp
+    catch_main.cpp
 )
-target_link_libraries(NF_PipelineTests PRIVATE NF::Pipeline NF::Core Catch2::Catch2WithMain)
+target_link_libraries(NF_PipelineTests PRIVATE NF::Pipeline NF::Core Catch2::Catch2)
 catch_discover_tests(NF_PipelineTests)

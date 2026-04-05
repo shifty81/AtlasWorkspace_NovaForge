@@ -3327,3 +3327,268 @@ TEST_CASE("EquipmentLoadout computeBonuses aggregates all slots", "[Game][Equipm
     REQUIRE(b.damage == Catch::Approx(7.f));
     REQUIRE(eq.equippedCount() == 3);
 }
+
+// ── G18 Status Effects ───────────────────────────────────────────
+
+TEST_CASE("StatusEffectType names", "[Game][G18][StatusEffects]") {
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Poison))     == "Poison");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Burn))       == "Burn");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Freeze))     == "Freeze");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Radiation))  == "Radiation");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Bleed))      == "Bleed");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Stun))       == "Stun");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Blind))      == "Blind");
+    REQUIRE(std::string(NF::statusEffectTypeName(NF::StatusEffectType::Overcharge)) == "Overcharge");
+}
+
+TEST_CASE("StatusEffect tick and expiry", "[Game][G18][StatusEffects]") {
+    NF::StatusEffect e;
+    e.type = NF::StatusEffectType::Poison;
+    e.damage = 5.f; e.duration = 3.f; e.tickRate = 1.f;
+    REQUIRE_FALSE(e.isExpired());
+    float dmg = e.tick(1.0f);
+    REQUIRE(dmg == Catch::Approx(5.f));
+    e.tick(1.0f); e.tick(1.0f);
+    REQUIRE(e.isExpired());
+}
+
+TEST_CASE("AilmentStack apply and has", "[Game][G18][StatusEffects]") {
+    NF::AilmentStack stack;
+    NF::StatusEffect burn;
+    burn.type = NF::StatusEffectType::Burn;
+    burn.damage = 3.f; burn.duration = 2.f; burn.tickRate = 1.f;
+    stack.apply(burn);
+    REQUIRE(stack.has(NF::StatusEffectType::Burn));
+    REQUIRE_FALSE(stack.has(NF::StatusEffectType::Freeze));
+    REQUIRE(stack.count() == 1);
+}
+
+TEST_CASE("AilmentStack removes expired", "[Game][G18][StatusEffects]") {
+    NF::AilmentStack stack;
+    NF::StatusEffect e; e.type=NF::StatusEffectType::Stun; e.duration=0.5f; e.tickRate=1.f;
+    stack.apply(e);
+    stack.tick(1.0f); // expires
+    REQUIRE(stack.count() == 0);
+}
+
+TEST_CASE("AilmentStack remove by type", "[Game][G18][StatusEffects]") {
+    NF::AilmentStack stack;
+    NF::StatusEffect e; e.type=NF::StatusEffectType::Blind; e.duration=5.f; e.tickRate=1.f;
+    stack.apply(e);
+    REQUIRE(stack.has(NF::StatusEffectType::Blind));
+    stack.remove(NF::StatusEffectType::Blind);
+    REQUIRE_FALSE(stack.has(NF::StatusEffectType::Blind));
+}
+
+TEST_CASE("StatusEffectSystem multi-entity", "[Game][G18][StatusEffects]") {
+    NF::StatusEffectSystem sys;
+    NF::StatusEffect bleed; bleed.type=NF::StatusEffectType::Bleed;
+    bleed.damage=4.f; bleed.duration=2.f; bleed.tickRate=0.5f;
+    sys.applyEffect(1, bleed);
+    sys.applyEffect(2, bleed);
+    REQUIRE(sys.entityCount() == 2);
+    REQUIRE(sys.hasEffect(1, NF::StatusEffectType::Bleed));
+    sys.clearEntity(1);
+    REQUIRE_FALSE(sys.hasEffect(1, NF::StatusEffectType::Bleed));
+    REQUIRE(sys.entityCount() == 1);
+}
+
+TEST_CASE("StatusEffectSystem tick returns damage map", "[Game][G18][StatusEffects]") {
+    NF::StatusEffectSystem sys;
+    NF::StatusEffect e; e.type=NF::StatusEffectType::Burn;
+    e.damage=10.f; e.duration=5.f; e.tickRate=1.f;
+    sys.applyEffect(42, e);
+    auto dmgMap = sys.tick(1.0f);
+    REQUIRE(dmgMap.count(42) == 1);
+    REQUIRE(dmgMap[42] == Catch::Approx(10.f));
+}
+
+TEST_CASE("AilmentStack refresh on duplicate type", "[Game][G18][StatusEffects]") {
+    NF::AilmentStack stack;
+    NF::StatusEffect e; e.type=NF::StatusEffectType::Freeze;
+    e.duration=2.f; e.tickRate=5.f; e.intensity=0.5f;
+    stack.apply(e);
+    NF::StatusEffect e2=e; e2.intensity=0.9f; e2.duration=4.f;
+    stack.apply(e2);
+    REQUIRE(stack.count() == 1); // refreshed, not doubled
+}
+
+// ── G19 Contracts & Bounties ─────────────────────────────────────
+
+TEST_CASE("ContractType names", "[Game][G19][Contracts]") {
+    REQUIRE(std::string(NF::contractTypeName(NF::ContractType::Delivery))      == "Delivery");
+    REQUIRE(std::string(NF::contractTypeName(NF::ContractType::Assassination)) == "Assassination");
+    REQUIRE(std::string(NF::contractTypeName(NF::ContractType::Escort))        == "Escort");
+    REQUIRE(std::string(NF::contractTypeName(NF::ContractType::Salvage))       == "Salvage");
+    REQUIRE(std::string(NF::contractTypeName(NF::ContractType::Patrol))        == "Patrol");
+    REQUIRE(std::string(NF::contractTypeName(NF::ContractType::Mining))        == "Mining");
+}
+
+TEST_CASE("Contract lifecycle", "[Game][G19][Contracts]") {
+    NF::Contract c;
+    c.contractId="C001"; c.type=NF::ContractType::Delivery;
+    c.creditsReward=5000; c.requiredLevel=3;
+    REQUIRE(c.status == NF::ContractStatus::Available);
+    c.accept();
+    REQUIRE(c.status == NF::ContractStatus::Accepted);
+    c.start();
+    REQUIRE(c.status == NF::ContractStatus::InProgress);
+    REQUIRE(c.isActive());
+    c.complete();
+    REQUIRE(c.status == NF::ContractStatus::Completed);
+    REQUIRE_FALSE(c.isActive());
+}
+
+TEST_CASE("Contract expiry via tick", "[Game][G19][Contracts]") {
+    NF::Contract c;
+    c.contractId="C002"; c.timeLimit=2.f;
+    c.accept(); c.start();
+    c.tick(1.f); REQUIRE(c.status == NF::ContractStatus::InProgress);
+    c.tick(1.5f); REQUIRE(c.status == NF::ContractStatus::Expired);
+}
+
+TEST_CASE("BountyTarget claim", "[Game][G19][Contracts]") {
+    NF::BountyTarget b;
+    b.targetId="pirate_boss"; b.creditsReward=12000;
+    REQUIRE(b.isClaimable());
+    b.claim();
+    REQUIRE_FALSE(b.isClaimable());
+    REQUIRE(b.claimed);
+}
+
+TEST_CASE("ContractBoard available contracts by level", "[Game][G19][Contracts]") {
+    NF::ContractBoard board;
+    NF::Contract c1; c1.contractId="A"; c1.requiredLevel=1;
+    NF::Contract c2; c2.contractId="B"; c2.requiredLevel=10;
+    board.addContract(c1); board.addContract(c2);
+    auto avail = board.availableContracts(5);
+    REQUIRE(avail.size() == 1);
+    REQUIRE(avail[0]->contractId == "A");
+}
+
+TEST_CASE("ContractBoard bounty list", "[Game][G19][Contracts]") {
+    NF::ContractBoard board;
+    NF::BountyTarget b1; b1.targetId="T1";
+    NF::BountyTarget b2; b2.targetId="T2"; b2.claimed=true;
+    board.addBounty(b1); board.addBounty(b2);
+    auto active = board.activeBounties();
+    REQUIRE(active.size() == 1);
+    REQUIRE(active[0]->targetId == "T1");
+}
+
+TEST_CASE("ContractBoard remove expired", "[Game][G19][Contracts]") {
+    NF::ContractBoard board;
+    NF::Contract c; c.contractId="X"; c.timeLimit=0.5f;
+    c.accept(); c.start();
+    board.addContract(c);
+    board.tick(1.0f); // expires
+    board.removeExpired();
+    REQUIRE(board.contractCount() == 0);
+}
+
+// ── G20 Companion System ─────────────────────────────────────────
+
+TEST_CASE("CompanionRole names", "[Game][G20][Companion]") {
+    REQUIRE(std::string(NF::companionRoleName(NF::CompanionRole::Combat))   == "Combat");
+    REQUIRE(std::string(NF::companionRoleName(NF::CompanionRole::Engineer)) == "Engineer");
+    REQUIRE(std::string(NF::companionRoleName(NF::CompanionRole::Medic))    == "Medic");
+    REQUIRE(std::string(NF::companionRoleName(NF::CompanionRole::Scout))    == "Scout");
+    REQUIRE(std::string(NF::companionRoleName(NF::CompanionRole::Pilot))    == "Pilot");
+    REQUIRE(std::string(NF::companionRoleName(NF::CompanionRole::Trader))   == "Trader");
+}
+
+TEST_CASE("Companion init and basic state", "[Game][G20][Companion]") {
+    NF::Companion c;
+    c.init("Zara", NF::CompanionRole::Medic);
+    REQUIRE(c.name() == "Zara");
+    REQUIRE(c.role() == NF::CompanionRole::Medic);
+    REQUIRE(c.isAlive());
+    REQUIRE(c.isActive());
+    REQUIRE(c.health() == Catch::Approx(100.f));
+}
+
+TEST_CASE("Companion take damage and heal", "[Game][G20][Companion]") {
+    NF::Companion c; c.init("Rex", NF::CompanionRole::Combat);
+    c.takeDamage(30.f);
+    REQUIRE(c.health() == Catch::Approx(70.f));
+    c.heal(20.f);
+    REQUIRE(c.health() == Catch::Approx(90.f));
+}
+
+TEST_CASE("Companion death and recall", "[Game][G20][Companion]") {
+    NF::Companion c; c.init("Nox", NF::CompanionRole::Scout);
+    c.takeDamage(200.f);
+    REQUIRE_FALSE(c.isAlive());
+    REQUIRE_FALSE(c.isActive());
+    c.heal(50.f);
+    c.recall();
+    REQUIRE(c.isActive());
+}
+
+TEST_CASE("Companion ability cooldown", "[Game][G20][Companion]") {
+    NF::Companion c; c.init("Ada", NF::CompanionRole::Engineer);
+    NF::CompanionAbility ab; ab.name="Deploy Turret"; ab.cooldown=5.f;
+    ab.cooldownElapsed = 5.f; // ready
+    c.addAbility(ab);
+    REQUIRE(c.abilityCount() == 1);
+    auto* found = c.findAbility("Deploy Turret");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->isReady());
+    found->use();
+    REQUIRE_FALSE(found->isReady());
+    found->tick(5.0f);
+    REQUIRE(found->isReady());
+}
+
+TEST_CASE("CompanionManager add and find", "[Game][G20][Companion]") {
+    NF::CompanionManager mgr;
+    NF::Companion c1; c1.init("Kira", NF::CompanionRole::Medic);
+    NF::Companion c2; c2.init("Bolt", NF::CompanionRole::Combat);
+    mgr.addCompanion(std::move(c1));
+    mgr.addCompanion(std::move(c2));
+    REQUIRE(mgr.companionCount() == 2);
+    REQUIRE(mgr.activeCount() == 2);
+    REQUIRE(mgr.findCompanion("Kira") != nullptr);
+    REQUIRE(mgr.hasRole(NF::CompanionRole::Medic));
+    REQUIRE_FALSE(mgr.hasRole(NF::CompanionRole::Pilot));
+}
+
+TEST_CASE("CompanionManager max capacity", "[Game][G20][Companion]") {
+    NF::CompanionManager mgr;
+    for (int i = 0; i < 6; ++i) {
+        NF::Companion c; c.init("C"+std::to_string(i), NF::CompanionRole::Combat);
+        mgr.addCompanion(std::move(c));
+    }
+    REQUIRE(mgr.companionCount() == NF::CompanionManager::kMaxCompanions);
+}
+
+TEST_CASE("CompanionManager average morale", "[Game][G20][Companion]") {
+    NF::CompanionManager mgr;
+    NF::Companion c1; c1.init("A", NF::CompanionRole::Scout);
+    c1.personality().morale = 0.8f;
+    NF::Companion c2; c2.init("B", NF::CompanionRole::Pilot);
+    c2.personality().morale = 0.4f;
+    mgr.addCompanion(std::move(c1));
+    mgr.addCompanion(std::move(c2));
+    REQUIRE(mgr.averageMorale() == Catch::Approx(0.6f));
+}
+
+TEST_CASE("CompanionPersonality trust and loyalty", "[Game][G20][Companion]") {
+    NF::CompanionPersonality p;
+    REQUIRE_FALSE(p.isLoyal());
+    p.gainTrust(30);
+    REQUIRE_FALSE(p.isLoyal());
+    p.gainTrust(25);
+    REQUIRE(p.isLoyal());
+    p.loseTrust(4);
+    REQUIRE(p.isLoyal()); // still above threshold (55 - 4 = 51 >= 50)
+}
+
+TEST_CASE("CompanionManager remove companion", "[Game][G20][Companion]") {
+    NF::CompanionManager mgr;
+    NF::Companion c; c.init("Temp", NF::CompanionRole::Trader);
+    mgr.addCompanion(std::move(c));
+    REQUIRE(mgr.companionCount() == 1);
+    mgr.removeCompanion("Temp");
+    REQUIRE(mgr.companionCount() == 0);
+}

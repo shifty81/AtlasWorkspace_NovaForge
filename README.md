@@ -192,7 +192,7 @@ Editor Suite Progress:  ██░░░░░░░░░░░░░░░░�
 | System | Description | Status |
 |--------|-------------|--------|
 | Contract Scanner Panel | C++ code issue display, jump-to-line | ⬜ To Build (ContractScanner tool exists) |
-| Balance Checker Panel | ArbiterAI rule-fire display | ⬜ To Build (ArbiterAI tool exists) |
+| Balance Checker Panel | AtlasAI rule-fire display | ⬜ To Build (AtlasAI tool exists) |
 | Performance Profiler | Frame time, draw call, memory overlays | ⬜ To Build |
 | Network Monitor | Live replication/session stats | ⬜ To Build |
 | AI Debug Panel | AtlasAI decision log, memory state | ⬜ To Build |
@@ -306,7 +306,7 @@ Engine Progress:  ████████████████████�
 | `NF::Input` | Keyboard, mouse, gamepad, action mappings | ✅ Done |
 | `NF::Networking` | Sockets, replication, sessions, lockstep/rollback | ✅ Done |
 | `NF::GraphVM` | Deterministic bytecode VM, 14 graph types | ✅ Done |
-| `NF::UI` | Custom 2D renderer — quad batching + stb_easy_font (no ImGui) | ✅ Done |
+| `NF::UI` | Custom 2D renderer — quad batching + stb_easy_font (no ImGui — Custom UI only) | ✅ Done |
 | `NF::World` | World gen, cube-sphere, voxel, terrain, galaxy, streaming | ⬜ In progress |
 | `NF::AI` | Behavior graphs, NPC logic, faction AI | ⬜ Pending AtlasAI merge |
 
@@ -344,11 +344,11 @@ Tools Progress:  █░░░░░░░░░░░░░░░░░░░░
 | Tool | Description | Source | Status |
 |------|-------------|--------|--------|
 | `Atlas_BlenderGen` | Blender addon — ship/station/asteroid procedural gen | Blender-Generator-for-AtlasForge | ⬜ Pending merge |
-| `Atlas_RepoTools` | Repo management, rollup, index tools | AtlasToolingSuite | ⬜ Pending merge |
+| `Atlas_RepoTools` | Repo management, rollup, index tools | Atlas Workspace | ⬜ Pending merge |
 | `Atlas_BuildTools` | CMake helpers, build scripts, Makefile | Multiple repos | 🔄 Partial |
-| `Atlas_DevTools` | dev_mode, stage_manager, workspace tools | SwissAgent, AtlasToolingSuite | ⬜ Pending merge |
+| `Atlas_DevTools` | dev_mode, stage_manager, workspace tools | AtlasAI, Atlas Workspace | ⬜ Pending merge |
 | `ContractScanner` | C++ static analysis — null checks, bad patterns | tempnovaforge (exists) | ✅ Scaffolded |
-| `ArbiterAI (tool)` | Rule-based balance checker, CI gate | tempnovaforge (exists) | ✅ Scaffolded |
+| `AtlasAI (tool)` | Rule-based balance checker, CI gate | tempnovaforge (exists) | ✅ Scaffolded |
 | `Atlas_Installer` | Packaging + installer generation | NovaForge-Project | ⬜ Pending merge |
 
 ---
@@ -489,7 +489,7 @@ cmake --build --preset debug --parallel
 - **AtlasAI is the single broker.** No standalone AI agents. One API, one runtime, all systems route through it.
 - **Voxel layer is authoritative.** Structure, mining, repair, damage, destruction — all voxel operations.
 - **R.I.G. first.** Player suit is the primary gameplay object. Mechanics build outward from R.I.G. state.
-- **No ImGui.** Editor uses a fully custom UI renderer (OpenGL quad batching + stb_easy_font).
+- **No ImGui.** Editor uses a fully custom UI renderer (Custom UI — UIRenderer + GDI/GPU backend).
 - **Determinism first.** All simulation must be bit-exact reproducible.
 - **Phases over features.** Each phase has a tight locked deliverable.
 - **Editor does not ship.** `NovaForgeGame` is the shippable artifact.
@@ -506,7 +506,7 @@ Nova Forge is a **PvE space simulation** — command ships, build fleets, explor
 |--------|-------------|
 | **Command** | Pilot ships from frigate to titan |
 | **Build** | Modular ships, stations, habitats with snap-grid construction |
-| **Lead** | AI fleet captains with personalities, morale, and grudges |
+| **Lead** | AI fleet captains with personalities, morale, and grudges. **Fleet command is a secondary system unlocked after growing your crew beyond 5 members. First-person gameplay is the primary loop.** |
 | **Discover** | Scan anomalies, salvage wrecks, decode ancient tech |
 | **Forge** | Manufacture, refine, research — drive a living NPC economy |
 | **Survive** | FPS interiors, EVA, oxygen management, planetary exploration |
@@ -540,14 +540,14 @@ Nova Forge is a **PvE space simulation** — command ships, build fleets, explor
 |------|------|----------------|
 | [MasterRepo](https://github.com/shifty81/MasterRepo) | v001 structural baseline — seed | 🔄 In Progress |
 | [MasterRepoRefactor](https://github.com/shifty81/MasterRepoRefactor) | Refactored Atlas+NovaForge structure | ⬜ Queued |
-| [AtlasToolingSuite](https://github.com/shifty81/AtlasToolingSuite) | Full tooling suite | ⬜ Queued |
+| [AtlasToolingSuite](https://github.com/shifty81/AtlasToolingSuite) | Atlas Workspace tooling source | ⬜ Queued |
 | [Nova-Forge-Expeditions](https://github.com/shifty81/Nova-Forge-Expeditions) | Richest game codebase | ⬜ Queued |
 | [Atlas-NovaForge](https://github.com/shifty81/Atlas-NovaForge) | Merged engine+game attempt | ⬜ Queued |
 | [AtlasForge](https://github.com/shifty81/AtlasForge) | Original engine | ⬜ Queued |
 | [NovaForge-Project](https://github.com/shifty81/NovaForge-Project) | Game project structure + rules | ⬜ Queued |
-| [SwissAgent](https://github.com/shifty81/SwissAgent) | AI agent → Atlas_SwissAgent | ⬜ Queued |
-| [ArbiterAI](https://github.com/shifty81/ArbiterAI) | AI agent → Atlas_Arbiter | ⬜ Queued |
-| [Arbiter](https://github.com/shifty81/Arbiter) | AI agent → Atlas_Arbiter | ⬜ Queued |
+| [SwissAgent](https://github.com/shifty81/SwissAgent) | AI agent → AtlasAI | ⬜ Queued |
+| [ArbiterAI](https://github.com/shifty81/ArbiterAI) | AI agent → AtlasAI | ⬜ Queued |
+| [Arbiter](https://github.com/shifty81/Arbiter) | AI agent → AtlasAI | ⬜ Queued |
 | [AtlasForge-EveOffline](https://github.com/shifty81/AtlasForge-EveOffline) | Networking prototype | ⬜ Queued |
 | [Blender-Generator-for-AtlasForge](https://github.com/shifty81/Blender-Generator-for-AtlasForge) | Blender ship/station gen | ⬜ Queued |
 

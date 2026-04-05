@@ -387,3 +387,29 @@
 - [x] Create Docs/CONSOLIDATION_PLAN.md
 - [x] Create Archive/_MasterRepo/ARCHIVE_SUMMARY.md
 - [x] Create Archive/_MasterRepo/usable_snippets/cmake_msvc_runtime_fix.snippet.md
+
+## Game Phase G18 — Status Effects
+
+- [x] StatusEffectType enum (Poison, Burn, Freeze, Radiation, Bleed, Stun, Blind, Overcharge) with statusEffectTypeName()
+- [x] StatusEffect struct (damage, duration, elapsed, tickRate, tickTimer, intensity, active, tick, isExpired, remaining)
+- [x] AilmentStack class (apply with refresh-on-duplicate, remove by type, has, tick with auto-removal, count, clear)
+- [x] StatusEffectSystem class (applyEffect, removeEffect, hasEffect, tick→damage map, getStack, clearEntity, clearAll, entityCount)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G19 — Contracts & Bounties
+
+- [x] ContractType enum (Delivery, Assassination, Escort, Salvage, Patrol, Mining) with contractTypeName()
+- [x] ContractStatus enum (Available, Accepted, InProgress, Completed, Failed, Expired)
+- [x] Contract struct (contractId, title, type, status, faction, rewards, timeLimit, tick, lifecycle methods, isActive, isExpired)
+- [x] BountyTarget struct (targetId, name, faction, reward, reputationCost, deadOrAlive, claimed, claim, isClaimable)
+- [x] ContractBoard class (addContract, addBounty, findContract, findBounty, availableContracts by level, activeBounties, tick, removeExpired)
+- [x] Comprehensive test coverage (7 new tests)
+
+## Game Phase G20 — Companion System
+
+- [x] CompanionRole enum (Combat, Engineer, Medic, Scout, Pilot, Trader) with companionRoleName()
+- [x] CompanionPersonality struct (loyalty, bravery, curiosity, morale, trust, gainTrust, loseTrust, isLoyal, adjustMorale)
+- [x] CompanionAbility struct (name, cooldown, isReady, use, tick, passive flag)
+- [x] Companion class (init, name, role, health, isAlive, isActive, takeDamage, heal, dismiss, recall, addAbility, findAbility, tick)
+- [x] CompanionManager class (addCompanion, removeCompanion, findCompanion, companionCount, activeCount, tick, healAll, hasRole, averageMorale, kMaxCompanions=4)
+- [x] Comprehensive test coverage (9 new tests)

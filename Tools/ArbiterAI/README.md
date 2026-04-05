@@ -1,8 +1,10 @@
-# ArbiterAI — Rule-Based Decision Engine
+# AtlasAI — Rule-Based Decision Engine
+
+> **Naming Note**: This tool is now canonically named **AtlasAI**. The folder name `ArbiterAI` is a legacy path and will be updated in a future migration pass. See `Docs/Architecture/NAMING_CANON.md`.
 
 `Tools/ArbiterAI/` — C++ headless evaluation binary.
 
-ArbiterAI evaluates a set of declarative rules against a JSON context
+AtlasAI evaluates a set of declarative rules against a JSON context
 (game stats, world state, economy snapshot) and reports which rules fired
 and what actions they recommend.  Primary use cases are balance checking,
 CI invariant enforcement, and real-time "bad state" detection during PIE.
@@ -14,7 +16,7 @@ CI invariant enforcement, and real-time "bad state" detection during PIE.
 | ID   | Milestone | Goal |
 |------|-----------|------|
 | AB-1 | Rule format | YAML/JSON rule file: `{when: <condition>, then: <action>}` |
-| AB-2 | CLI eval | `arbiter eval rules.yaml context.json` → prints matched rules + actions |
+| AB-2 | CLI eval | `atlasai eval rules.yaml context.json` → prints matched rules + actions |
 | AB-3 | Balance rules | Read economy/combat stats from pipeline → flag balance issues |
 | AB-4 | Editor panel | "Balance Checker" tab shows rule-firing counts for current world state |
 | AB-5 | CI gate | Fails the build if any critical-severity rule fires |
@@ -24,14 +26,14 @@ CI invariant enforcement, and real-time "bad state" detection during PIE.
 ## Pipeline integration
 
 - Reads: `pipeline/worlds/active.world.json`, game stats exported by the engine
-- Writes: `pipeline/changes/<timestamp>_arbiter_ContractIssue.change.json` for flagged issues
+- Writes: `pipeline/changes/<timestamp>_atlasai_ContractIssue.change.json` for flagged issues
 
 ---
 
 ## Usage (AB-2 target)
 
 ```
-arbiter eval rules/balance.yaml pipeline/worlds/active.world.json
+atlasai eval rules/balance.yaml pipeline/worlds/active.world.json
 ```
 
 ### Example rule file
