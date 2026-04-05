@@ -2550,6 +2550,7 @@ public:
     EditorTheme& theme() { return m_theme; }
     UIContext& uiContext() { return m_uiContext; }
     ToolWindowManager& toolManager() { return m_toolManager; }
+    UIRenderer& uiRenderer() { return m_ui; }
 
     [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
     void setCurrentWorldPath(const std::string& path) {
