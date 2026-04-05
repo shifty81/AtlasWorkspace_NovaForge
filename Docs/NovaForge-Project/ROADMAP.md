@@ -15,6 +15,7 @@
 - repair and damage hooks
 - season configuration
 - dev and smoke-test world bootstrap
+- [x] M2/S1: Dev World Editing (PCG tuning, entity placement, voxel paint, undo system, world preview)
 
 ## Phase 3
 - factions

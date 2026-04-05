@@ -642,14 +642,14 @@ TEST_CASE("EditorApp creates default panels on init", "[Editor][EditorApp]") {
     NF::EditorApp app;
     app.init(1280, 720);
 
-    REQUIRE(app.dockLayout().panelCount() == 6);
+    REQUIRE(app.dockLayout().panelCount() == 7);
     REQUIRE(app.dockLayout().findPanel("Viewport") != nullptr);
     REQUIRE(app.dockLayout().findPanel("Inspector") != nullptr);
     REQUIRE(app.dockLayout().findPanel("Hierarchy") != nullptr);
     REQUIRE(app.dockLayout().findPanel("Console") != nullptr);
     REQUIRE(app.dockLayout().findPanel("ContentBrowser") != nullptr);
 
-    REQUIRE(app.editorPanels().size() == 6);
+    REQUIRE(app.editorPanels().size() == 7);
     app.shutdown();
 }
 

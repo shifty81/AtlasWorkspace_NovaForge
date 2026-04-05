@@ -2149,6 +2149,395 @@ private:
     uint64_t m_updateStart = 0;
 };
 
+// ── M2/S1: Dev World Editing ─────────────────────────────────────
+
+// Integer 3D vector for voxel coordinates.
+struct Vec3i {
+    int x = 0, y = 0, z = 0;
+    bool operator==(const Vec3i& o) const { return x == o.x && y == o.y && z == o.z; }
+    bool operator!=(const Vec3i& o) const { return !(*this == o); }
+};
+
+// ── PCG Tuning ──────────────────────────────────────────────────
+
+struct NoiseParams {
+    float frequency   = 1.0f;
+    float amplitude   = 1.0f;
+    int   octaves     = 4;
+    float lacunarity  = 2.0f;
+    float persistence = 0.5f;
+    int   seed        = 42;
+
+    bool operator==(const NoiseParams& o) const {
+        return frequency == o.frequency && amplitude == o.amplitude &&
+               octaves == o.octaves && lacunarity == o.lacunarity &&
+               persistence == o.persistence && seed == o.seed;
+    }
+    bool operator!=(const NoiseParams& o) const { return !(*this == o); }
+};
+
+struct PCGPreset {
+    std::string name;
+    NoiseParams params;
+};
+
+class PCGTuningPanel : public EditorPanel {
+public:
+    PCGTuningPanel() { m_name = "PCGTuning"; }
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Right; }
+    void update(float /*dt*/) override {}
+    void render(UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    void setNoiseParams(const NoiseParams& p) { m_params = p; m_dirty = true; }
+    [[nodiscard]] const NoiseParams& noiseParams() const { return m_params; }
+
+    void addPreset(const PCGPreset& preset) { m_presets.push_back(preset); }
+
+    bool removePreset(const std::string& presetName) {
+        auto it = std::find_if(m_presets.begin(), m_presets.end(),
+                               [&](const PCGPreset& p) { return p.name == presetName; });
+        if (it == m_presets.end()) return false;
+        m_presets.erase(it);
+        return true;
+    }
+
+    bool applyPreset(const std::string& presetName) {
+        auto it = std::find_if(m_presets.begin(), m_presets.end(),
+                               [&](const PCGPreset& p) { return p.name == presetName; });
+        if (it == m_presets.end()) return false;
+        m_params = it->params;
+        m_dirty = true;
+        return true;
+    }
+
+    [[nodiscard]] size_t presetCount() const { return m_presets.size(); }
+    [[nodiscard]] const std::vector<PCGPreset>& presets() const { return m_presets; }
+
+    void setSeed(int seed) { m_params.seed = seed; m_dirty = true; }
+
+    void randomizeSeed() {
+        m_params.seed = static_cast<int>(std::hash<size_t>{}(
+            static_cast<size_t>(m_params.seed) ^ 0x9E3779B97F4A7C15ULL));
+        m_dirty = true;
+    }
+
+    void markDirty() { m_dirty = true; }
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void clearDirty() { m_dirty = false; }
+
+private:
+    std::string m_name;
+    NoiseParams m_params;
+    std::vector<PCGPreset> m_presets;
+    bool m_dirty = false;
+};
+
+// ── Entity Placement ────────────────────────────────────────────
+
+struct PlacedEntity {
+    EntityID    entityId     = INVALID_ENTITY;
+    std::string templateName;
+    Vec3        position;
+    Vec3        rotation;
+    Vec3        scale{1.f, 1.f, 1.f};
+};
+
+class EntityPlacementTool {
+public:
+    void setActiveTemplate(const std::string& tplName) { m_activeTemplate = tplName; }
+    [[nodiscard]] const std::string& activeTemplate() const { return m_activeTemplate; }
+
+    EntityID placeEntity(const Vec3& pos, const Vec3& rot = {}, const Vec3& scl = {1.f, 1.f, 1.f}) {
+        PlacedEntity e;
+        e.entityId = m_nextId++;
+        e.templateName = m_activeTemplate;
+        e.position = m_gridSnap ? snapToGrid(pos) : pos;
+        e.rotation = rot;
+        e.scale = scl;
+        m_entities.push_back(e);
+        return e.entityId;
+    }
+
+    void addEntity(const PlacedEntity& e) {
+        m_entities.push_back(e);
+        if (e.entityId >= m_nextId) m_nextId = e.entityId + 1;
+    }
+
+    bool removeEntity(EntityID id) {
+        auto it = std::find_if(m_entities.begin(), m_entities.end(),
+                               [id](const PlacedEntity& pe) { return pe.entityId == id; });
+        if (it == m_entities.end()) return false;
+        m_entities.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] const std::vector<PlacedEntity>& placedEntities() const { return m_entities; }
+    [[nodiscard]] size_t placedCount() const { return m_entities.size(); }
+
+    void setGridSnap(bool enabled) { m_gridSnap = enabled; }
+    void setGridSize(float size) { m_gridSize = size; }
+    [[nodiscard]] bool isGridSnapEnabled() const { return m_gridSnap; }
+    [[nodiscard]] float gridSize() const { return m_gridSize; }
+
+    [[nodiscard]] Vec3 snapToGrid(const Vec3& v) const {
+        return {
+            std::round(v.x / m_gridSize) * m_gridSize,
+            std::round(v.y / m_gridSize) * m_gridSize,
+            std::round(v.z / m_gridSize) * m_gridSize
+        };
+    }
+
+    void clear() { m_entities.clear(); }
+
+private:
+    std::vector<PlacedEntity> m_entities;
+    std::string m_activeTemplate;
+    EntityID m_nextId = 1;
+    bool  m_gridSnap = false;
+    float m_gridSize = 1.0f;
+};
+
+// ── Voxel Paint ─────────────────────────────────────────────────
+
+enum class VoxelBrushShape : uint8_t { Sphere, Cube, Cylinder };
+
+struct VoxelBrushSettings {
+    VoxelBrushShape shape = VoxelBrushShape::Sphere;
+    int      radius     = 1;
+    uint32_t materialId = 0;
+    float    strength   = 1.0f;
+};
+
+struct PaintStroke {
+    std::vector<Vec3i> positions;
+    uint32_t materialId = 0;
+    VoxelBrushSettings brush;
+};
+
+class VoxelPaintTool {
+public:
+    void setBrush(const VoxelBrushSettings& b) { m_brush = b; }
+    [[nodiscard]] const VoxelBrushSettings& brush() const { return m_brush; }
+
+    void beginStroke() {
+        m_currentStroke = PaintStroke{};
+        m_currentStroke.materialId = m_brush.materialId;
+        m_currentStroke.brush = m_brush;
+        m_stroking = true;
+    }
+
+    void addToStroke(const Vec3i& pos) {
+        if (m_stroking) m_currentStroke.positions.push_back(pos);
+    }
+
+    void endStroke() {
+        if (m_stroking) {
+            m_strokes.push_back(std::move(m_currentStroke));
+            m_currentStroke = PaintStroke{};
+            m_stroking = false;
+        }
+    }
+
+    void addStroke(const PaintStroke& stroke) { m_strokes.push_back(stroke); }
+
+    bool removeLastStroke() {
+        if (m_strokes.empty()) return false;
+        m_strokes.pop_back();
+        return true;
+    }
+
+    [[nodiscard]] bool isStroking() const { return m_stroking; }
+    [[nodiscard]] const std::vector<PaintStroke>& strokes() const { return m_strokes; }
+    [[nodiscard]] size_t strokeCount() const { return m_strokes.size(); }
+
+    void clear() {
+        m_strokes.clear();
+        m_stroking = false;
+        m_currentStroke = PaintStroke{};
+    }
+
+    void setPaletteSlot(int slot, uint32_t materialId) {
+        if (slot < 0) return;
+        if (static_cast<size_t>(slot) >= m_palette.size())
+            m_palette.resize(static_cast<size_t>(slot) + 1, 0);
+        m_palette[static_cast<size_t>(slot)] = materialId;
+    }
+
+    [[nodiscard]] uint32_t getPaletteSlot(int slot) const {
+        if (slot < 0 || static_cast<size_t>(slot) >= m_palette.size()) return 0;
+        return m_palette[static_cast<size_t>(slot)];
+    }
+
+    [[nodiscard]] size_t paletteSize() const { return m_palette.size(); }
+
+    void setActivePaletteSlot(int slot) {
+        m_activePaletteSlot = slot;
+        if (slot >= 0 && static_cast<size_t>(slot) < m_palette.size())
+            m_brush.materialId = m_palette[static_cast<size_t>(slot)];
+    }
+    [[nodiscard]] int activePaletteSlot() const { return m_activePaletteSlot; }
+
+private:
+    VoxelBrushSettings m_brush;
+    PaintStroke m_currentStroke;
+    bool m_stroking = false;
+    std::vector<PaintStroke> m_strokes;
+    std::vector<uint32_t> m_palette;
+    int m_activePaletteSlot = -1;
+};
+
+// ── Editor Undo System ──────────────────────────────────────────
+
+class PlaceEntityCommand : public ICommand {
+public:
+    PlaceEntityCommand(EntityPlacementTool& tool, PlacedEntity entity)
+        : m_tool(tool), m_entity(std::move(entity)) {}
+
+    void execute() override { m_tool.addEntity(m_entity); }
+    void undo() override    { m_tool.removeEntity(m_entity.entityId); }
+    [[nodiscard]] std::string description() const override {
+        return "Place Entity " + m_entity.templateName;
+    }
+
+private:
+    EntityPlacementTool& m_tool;
+    PlacedEntity m_entity;
+};
+
+class RemoveEntityCommand : public ICommand {
+public:
+    RemoveEntityCommand(EntityPlacementTool& tool, EntityID id)
+        : m_tool(tool), m_id(id) {
+        for (auto& e : m_tool.placedEntities()) {
+            if (e.entityId == id) { m_entity = e; break; }
+        }
+    }
+
+    void execute() override { m_tool.removeEntity(m_id); }
+    void undo() override    { m_tool.addEntity(m_entity); }
+    [[nodiscard]] std::string description() const override {
+        return "Remove Entity " + std::to_string(m_id);
+    }
+
+private:
+    EntityPlacementTool& m_tool;
+    EntityID m_id;
+    PlacedEntity m_entity;
+};
+
+class PaintStrokeCommand : public ICommand {
+public:
+    PaintStrokeCommand(VoxelPaintTool& tool, PaintStroke stroke)
+        : m_tool(tool), m_stroke(std::move(stroke)) {}
+
+    void execute() override { m_tool.addStroke(m_stroke); }
+    void undo() override    { m_tool.removeLastStroke(); }
+    [[nodiscard]] std::string description() const override {
+        return "Paint Stroke (" + std::to_string(m_stroke.positions.size()) + " voxels)";
+    }
+
+private:
+    VoxelPaintTool& m_tool;
+    PaintStroke m_stroke;
+};
+
+class PCGParamChangeCommand : public ICommand {
+public:
+    PCGParamChangeCommand(PCGTuningPanel& panel, NoiseParams oldParams, NoiseParams newParams)
+        : m_panel(panel), m_old(std::move(oldParams)), m_new(std::move(newParams)) {}
+
+    void execute() override { m_panel.setNoiseParams(m_new); }
+    void undo() override    { m_panel.setNoiseParams(m_old); }
+    [[nodiscard]] std::string description() const override { return "Change PCG Parameters"; }
+
+private:
+    PCGTuningPanel& m_panel;
+    NoiseParams m_old;
+    NoiseParams m_new;
+};
+
+class EditorUndoSystem {
+public:
+    explicit EditorUndoSystem(CommandStack& stack) : m_stack(stack) {}
+
+    void executePlaceEntity(EntityPlacementTool& tool, const PlacedEntity& entity) {
+        m_stack.execute(std::make_unique<PlaceEntityCommand>(tool, entity));
+    }
+
+    void executeRemoveEntity(EntityPlacementTool& tool, EntityID id) {
+        m_stack.execute(std::make_unique<RemoveEntityCommand>(tool, id));
+    }
+
+    void executePaintStroke(VoxelPaintTool& tool, const PaintStroke& stroke) {
+        m_stack.execute(std::make_unique<PaintStrokeCommand>(tool, stroke));
+    }
+
+    void executePCGChange(PCGTuningPanel& panel, const NoiseParams& oldP, const NoiseParams& newP) {
+        m_stack.execute(std::make_unique<PCGParamChangeCommand>(panel, oldP, newP));
+    }
+
+    bool undo()  { return m_stack.undo(); }
+    bool redo()  { return m_stack.redo(); }
+    [[nodiscard]] bool canUndo() const { return m_stack.canUndo(); }
+    [[nodiscard]] bool canRedo() const { return m_stack.canRedo(); }
+    [[nodiscard]] size_t undoCount() const { return m_stack.undoCount(); }
+    [[nodiscard]] size_t redoCount() const { return m_stack.redoCount(); }
+
+private:
+    CommandStack& m_stack;
+};
+
+// ── World Preview Service ───────────────────────────────────────
+
+enum class PreviewState : uint8_t { Idle, Loading, Ready, Error };
+
+class WorldPreviewService {
+public:
+    void loadPreview(const std::string& path) {
+        m_worldPath = path;
+        if (path.empty()) {
+            m_state = PreviewState::Error;
+            m_lastError = "Empty path";
+            return;
+        }
+        m_state = PreviewState::Loading;
+        m_state = PreviewState::Ready;
+        m_dirty = false;
+    }
+
+    void unloadPreview() {
+        m_worldPath.clear();
+        m_state = PreviewState::Idle;
+        m_dirty = false;
+        m_lastError.clear();
+    }
+
+    [[nodiscard]] PreviewState state() const { return m_state; }
+    [[nodiscard]] const std::string& worldPath() const { return m_worldPath; }
+
+    void setViewCenter(const Vec3& center) { m_viewCenter = center; }
+    [[nodiscard]] const Vec3& viewCenter() const { return m_viewCenter; }
+
+    void setViewRadius(float r) { m_viewRadius = r; }
+    [[nodiscard]] float viewRadius() const { return m_viewRadius; }
+
+    void setDirty() { m_dirty = true; }
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void clearDirty() { m_dirty = false; }
+
+    [[nodiscard]] const std::string& lastError() const { return m_lastError; }
+
+private:
+    PreviewState m_state = PreviewState::Idle;
+    std::string m_worldPath;
+    Vec3 m_viewCenter;
+    float m_viewRadius = 100.0f;
+    bool m_dirty = false;
+    std::string m_lastError;
+};
+
 // ── Editor application ───────────────────────────────────────────
 
 class EditorApp {
@@ -2405,6 +2794,28 @@ public:
             m_dockLayout.setPanelVisible(graphEd->name(), false);  // hidden by default
             m_editorPanels.push_back(std::move(graphEd));
         }
+        {
+            auto pcg = std::make_unique<PCGTuningPanel>();
+            m_dockLayout.addPanel(pcg->name(), pcg->slot());
+            m_dockLayout.setPanelVisible(pcg->name(), false);  // hidden by default
+            m_editorPanels.push_back(std::move(pcg));
+        }
+
+        // M2/S1 undo system
+        m_editorUndo = std::make_unique<EditorUndoSystem>(m_commandStack);
+
+        // M2/S1 tool commands
+        m_commands.registerCommand("view.toggle_pcg_tuning", [this]() {
+            togglePanelVisibility("PCGTuning");
+        }, "Toggle PCG Tuning", "");
+
+        m_commands.registerCommand("tools.entity_placement", [this]() {
+            NF_LOG_INFO("Editor", "Entity Placement tool activated");
+        }, "Entity Placement Tool", "");
+
+        m_commands.registerCommand("tools.voxel_paint", [this]() {
+            NF_LOG_INFO("Editor", "Voxel Paint tool activated");
+        }, "Voxel Paint Tool", "");
 
         // Create default toolbar items
         m_toolbar.addItem("Select", "select", "Select tool", [this]() {
@@ -2655,6 +3066,19 @@ public:
 
     IDEService& ideService() { return m_ideService; }
 
+    // M2/S1 accessors
+    EntityPlacementTool& entityPlacementTool() { return m_entityPlacement; }
+    VoxelPaintTool& voxelPaintTool() { return m_voxelPaint; }
+    EditorUndoSystem& editorUndoSystem() { return *m_editorUndo; }
+    WorldPreviewService& worldPreview() { return m_worldPreview; }
+
+    [[nodiscard]] PCGTuningPanel* pcgTuningPanel() {
+        for (auto& p : m_editorPanels) {
+            if (auto* pcg = dynamic_cast<PCGTuningPanel*>(p.get())) return pcg;
+        }
+        return nullptr;
+    }
+
 private:
     void togglePanelVisibility(const std::string& name) {
         if (auto* p = m_dockLayout.findPanel(name)) {
@@ -2685,6 +3109,8 @@ private:
         edit.addItem("Create Entity",   "entity.create",    "Ctrl+Shift+N");
         edit.addItem("Delete Entity",   "entity.delete",    "Delete");
         edit.addItem("Duplicate Entity","entity.duplicate", "Ctrl+D");
+        edit.addSeparator();
+        edit.addItem("PCG Tuning",      "view.toggle_pcg_tuning", "");
 
         // View menu
         auto& view = m_menuBar.addCategory("View");
@@ -2722,6 +3148,9 @@ private:
         tools.addItem("Atlas AI",           "tools.launch_atlas_ai");
         tools.addSeparator();
         tools.addItem("Pipeline Monitor",   "tools.pipeline_monitor");
+        tools.addSeparator();
+        tools.addItem("Entity Placement",   "tools.entity_placement");
+        tools.addItem("Voxel Paint",        "tools.voxel_paint");
     }
 
     Renderer m_renderer;
@@ -2755,6 +3184,12 @@ private:
     size_t m_logSinkId = 0;
     std::ofstream m_logFile;
     std::mutex m_logFileMutex;
+
+    // M2/S1 world-editing systems
+    EntityPlacementTool m_entityPlacement;
+    VoxelPaintTool m_voxelPaint;
+    std::unique_ptr<EditorUndoSystem> m_editorUndo;
+    WorldPreviewService m_worldPreview;
 
     // ── State persistence ───────────────────────────────────────
 
