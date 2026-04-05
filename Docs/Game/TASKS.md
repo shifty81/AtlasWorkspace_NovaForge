@@ -37,7 +37,8 @@
 - [x] Color type with RGBA8 pack/unpack
 - [x] Extended PropertyType enum (Color, Enum support)
 - [ ] Port full Input module (platform-specific backends)
-- [x] Input module functional for editor use (keyboard/mouse/gamepad action mapping complete)
+- [x] Win32 input backend: Win32InputAdapter.h (WM_KEYDOWN/UP, WM_MOUSEMOVE, WM_*BUTTON*, WM_MOUSEWHEEL, WM_KILLFOCUS → InputSystem)
+- [x] Editor main loop wired: Win32InputAdapter + InputSystem integrated into NovaForgeEditor main.cpp message pump
 
 ## Phase 2 — Rendering & Physics
 
@@ -161,7 +162,7 @@
 - [x] Docker server image with OCI labels
 - [x] Modding guide (ship, module, skill, mission JSON format + voxel + graph scripting)
 - [x] Architecture documentation updated (Networking dependency correction)
-- [ ] Final audit
+- [x] Final audit (spaghetti cleanup: My Repos.rtf → Archive/, loose .zip removed from git)
 
 ## Game Phase G1 — First Interaction Loop
 

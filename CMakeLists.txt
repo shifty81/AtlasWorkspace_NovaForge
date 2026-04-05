@@ -15,6 +15,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ── CMake helper modules ──────────────────────────────────────────
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# Apply Windows-specific compile definitions when targeting Windows.
+if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    include(WindowsToolchain)
+endif()
+
+# ── Global compile settings ───────────────────────────────────────
+# Applied per-target via a common interface library to avoid polluting
+# FetchContent dependencies with our warning flags.
+add_library(NF_CompileOptions INTERFACE)
+target_compile_options(NF_CompileOptions INTERFACE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /Zc:__cplusplus /utf-8 /MP>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+)
+
 # Output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

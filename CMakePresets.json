@@ -134,7 +134,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "NF_BUILD_EDITOR": "OFF",
+        "NF_BUILD_EDITOR": "ON",
         "NF_BUILD_GAME": "ON",
         "NF_BUILD_SERVER": "ON",
         "NF_BUILD_TESTS": "ON"
@@ -149,7 +149,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "NF_BUILD_EDITOR": "OFF",
+        "NF_BUILD_EDITOR": "ON",
         "NF_BUILD_GAME": "ON",
         "NF_BUILD_SERVER": "ON",
         "NF_BUILD_TESTS": "OFF"

@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-linux:
-    name: Linux (GCC)
+    name: Linux Debug (ci-debug)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +21,16 @@ jobs:
             build-essential cmake ninja-build g++
 
       - name: Configure
-        run: cmake --preset debug
+        run: cmake --preset ci-debug
 
       - name: Build
-        run: cmake --build --preset debug
+        run: cmake --build --preset ci-debug
 
       - name: Test
-        run: ctest --preset debug
+        run: ctest --preset ci-debug
 
   build-linux-release:
-    name: Linux Release
+    name: Linux Release (ci-release)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -42,10 +42,10 @@ jobs:
             build-essential cmake ninja-build g++
 
       - name: Configure
-        run: cmake --preset release
+        run: cmake --preset ci-release
 
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset ci-release
 
   build-multiconfig:
     name: Multi-Config (VS .sln equivalent)
