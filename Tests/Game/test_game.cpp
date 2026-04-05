@@ -3592,3 +3592,558 @@ TEST_CASE("CompanionManager remove companion", "[Game][G20][Companion]") {
     mgr.removeCompanion("Temp");
     REQUIRE(mgr.companionCount() == 0);
 }
+
+// ── G21 Faction System Tests ──────────────────────────────────
+
+TEST_CASE("FactionType names", "[Game][G21][Faction]") {
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Military))    == "Military");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Corporate))   == "Corporate");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Scientific))  == "Scientific");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Religious))   == "Religious");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Criminal))    == "Criminal");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Pirate))      == "Pirate");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Colonial))    == "Colonial");
+    REQUIRE(std::string(NF::factionTypeName(NF::FactionType::Independent)) == "Independent");
+    REQUIRE(static_cast<int>(NF::FactionType::Count) == 8);
+}
+
+TEST_CASE("FactionStanding names", "[Game][G21][Faction]") {
+    REQUIRE(std::string(NF::factionStandingName(NF::FactionStanding::Hostile))    == "Hostile");
+    REQUIRE(std::string(NF::factionStandingName(NF::FactionStanding::Unfriendly)) == "Unfriendly");
+    REQUIRE(std::string(NF::factionStandingName(NF::FactionStanding::Neutral))    == "Neutral");
+    REQUIRE(std::string(NF::factionStandingName(NF::FactionStanding::Friendly))   == "Friendly");
+    REQUIRE(std::string(NF::factionStandingName(NF::FactionStanding::Allied))     == "Allied");
+}
+
+TEST_CASE("Faction init and basic state", "[Game][G21][Faction]") {
+    NF::Faction f;
+    f.init("fac_mil", "Iron Guard", NF::FactionType::Military);
+    REQUIRE(f.factionId() == "fac_mil");
+    REQUIRE(f.name() == "Iron Guard");
+    REQUIRE(f.type() == NF::FactionType::Military);
+    REQUIRE(f.influence() == Catch::Approx(0.5f));
+    REQUIRE(f.wealth() == 0);
+    REQUIRE(f.militaryPower() == 0);
+    REQUIRE(f.territoryCount() == 0);
+}
+
+TEST_CASE("Faction territory management", "[Game][G21][Faction]") {
+    NF::Faction f;
+    f.init("fac1", "TestFac", NF::FactionType::Colonial);
+
+    NF::FactionTerritory t1; t1.sectorId = "s1"; t1.sectorName = "Alpha"; t1.resourceOutput = 10;
+    NF::FactionTerritory t2; t2.sectorId = "s2"; t2.sectorName = "Beta";  t2.resourceOutput = 20;
+    f.addTerritory(t1);
+    f.addTerritory(t2);
+    REQUIRE(f.territoryCount() == 2);
+    REQUIRE(f.totalResourceOutput() == 30);
+    REQUIRE(f.findTerritory("s1") != nullptr);
+    REQUIRE(f.findTerritory("s3") == nullptr);
+
+    f.removeTerritory("s1");
+    REQUIRE(f.territoryCount() == 1);
+    REQUIRE(f.totalResourceOutput() == 20);
+}
+
+TEST_CASE("Faction wealth and influence", "[Game][G21][Faction]") {
+    NF::Faction f;
+    f.init("fac1", "Corp", NF::FactionType::Corporate);
+    f.addWealth(100);
+    REQUIRE(f.wealth() == 100);
+    REQUIRE(f.spendWealth(40));
+    REQUIRE(f.wealth() == 60);
+    REQUIRE_FALSE(f.spendWealth(200));
+    REQUIRE(f.wealth() == 60);
+
+    f.adjustInfluence(0.3f);
+    REQUIRE(f.influence() == Catch::Approx(0.8f));
+    f.adjustInfluence(0.5f); // should clamp to 1.0
+    REQUIRE(f.influence() == Catch::Approx(1.0f));
+    f.adjustInfluence(-1.5f); // should clamp to 0.0
+    REQUIRE(f.influence() == Catch::Approx(0.0f));
+}
+
+TEST_CASE("FactionTerritory erosion", "[Game][G21][Faction]") {
+    NF::FactionTerritory t;
+    t.sectorId = "s1";
+    t.controlStrength = 0.5f;
+    REQUIRE_FALSE(t.isLost());
+
+    t.erode(0.3f);
+    REQUIRE(t.controlStrength == Catch::Approx(0.2f));
+    REQUIRE_FALSE(t.isLost());
+
+    t.reinforce(0.6f);
+    REQUIRE(t.controlStrength == Catch::Approx(0.8f));
+
+    t.erode(1.0f); // clamp to 0
+    REQUIRE(t.controlStrength == Catch::Approx(0.0f));
+    REQUIRE(t.isLost());
+
+    t.reinforce(2.0f); // clamp to 1
+    REQUIRE(t.controlStrength == Catch::Approx(1.0f));
+}
+
+TEST_CASE("FactionRelation reputation and standing", "[Game][G21][Faction]") {
+    NF::GameFactionRelation rel;
+    rel.factionA = "a";
+    rel.factionB = "b";
+    REQUIRE(rel.standing == NF::FactionStanding::Neutral);
+    REQUIRE(rel.reputation == 0);
+
+    rel.improve(30);
+    REQUIRE(rel.reputation == 30);
+    REQUIRE(rel.standing == NF::FactionStanding::Friendly);
+
+    rel.improve(50);
+    REQUIRE(rel.reputation == 80);
+    REQUIRE(rel.standing == NF::FactionStanding::Allied);
+
+    rel.degrade(60);
+    REQUIRE(rel.reputation == 20);
+    REQUIRE(rel.standing == NF::FactionStanding::Neutral);
+
+    rel.degrade(50);
+    REQUIRE(rel.reputation == -30);
+    REQUIRE(rel.standing == NF::FactionStanding::Unfriendly);
+
+    rel.degrade(50);
+    REQUIRE(rel.reputation == -80);
+    REQUIRE(rel.standing == NF::FactionStanding::Hostile);
+}
+
+TEST_CASE("FactionRelation war and peace", "[Game][G21][Faction]") {
+    NF::GameFactionRelation rel;
+    rel.factionA = "x";
+    rel.factionB = "y";
+
+    rel.signTreaty("trade");
+    REQUIRE(rel.hasTreaty);
+    REQUIRE(rel.treatyType == "trade");
+
+    rel.declareWar();
+    REQUIRE(rel.atWar);
+    REQUIRE(rel.standing == NF::FactionStanding::Hostile);
+    REQUIRE_FALSE(rel.hasTreaty);
+    REQUIRE(rel.treatyType.empty());
+
+    rel.declarePeace();
+    REQUIRE_FALSE(rel.atWar);
+    REQUIRE(rel.standing == NF::FactionStanding::Unfriendly);
+
+    rel.signTreaty("defense");
+    REQUIRE(rel.hasTreaty);
+    rel.breakTreaty();
+    REQUIRE_FALSE(rel.hasTreaty);
+}
+
+TEST_CASE("FactionManager add and find", "[Game][G21][Faction]") {
+    NF::GameFactionManager mgr;
+    NF::Faction f1; f1.init("f1", "Alpha", NF::FactionType::Military);
+    NF::Faction f2; f2.init("f2", "Beta",  NF::FactionType::Pirate);
+    mgr.addFaction(std::move(f1));
+    mgr.addFaction(std::move(f2));
+    REQUIRE(mgr.factionCount() == 2);
+    REQUIRE(mgr.findFaction("f1") != nullptr);
+    REQUIRE(mgr.findFaction("f1")->name() == "Alpha");
+    REQUIRE(mgr.findFaction("missing") == nullptr);
+
+    mgr.removeFaction("f1");
+    REQUIRE(mgr.factionCount() == 1);
+
+    // max capacity
+    NF::GameFactionManager mgr2;
+    for (int i = 0; i < 20; ++i) {
+        NF::Faction f; f.init("fac"+std::to_string(i), "F"+std::to_string(i), NF::FactionType::Independent);
+        mgr2.addFaction(std::move(f));
+    }
+    REQUIRE(mgr2.factionCount() == static_cast<size_t>(NF::GameFactionManager::kMaxFactions));
+}
+
+TEST_CASE("FactionManager relations and alliances", "[Game][G21][Faction]") {
+    NF::GameFactionManager mgr;
+    NF::Faction f1; f1.init("a", "FacA", NF::FactionType::Military);
+    NF::Faction f2; f2.init("b", "FacB", NF::FactionType::Corporate);
+    NF::Faction f3; f3.init("c", "FacC", NF::FactionType::Pirate);
+    mgr.addFaction(std::move(f1));
+    mgr.addFaction(std::move(f2));
+    mgr.addFaction(std::move(f3));
+
+    NF::GameFactionRelation rel;
+    rel.standing = NF::FactionStanding::Allied;
+    mgr.setRelation("a", "b", rel);
+
+    NF::GameFactionRelation rel2;
+    rel2.standing = NF::FactionStanding::Hostile;
+    rel2.atWar = true;
+    mgr.setRelation("a", "c", rel2);
+
+    auto* r = mgr.getRelation("a", "b");
+    REQUIRE(r != nullptr);
+    REQUIRE(r->standing == NF::FactionStanding::Allied);
+
+    // reverse order should also find it
+    auto* r2 = mgr.getRelation("b", "a");
+    REQUIRE(r2 != nullptr);
+
+    auto allies = mgr.alliedFactions("a");
+    REQUIRE(allies.size() == 1);
+    REQUIRE(allies[0]->factionId() == "b");
+
+    auto hostiles = mgr.hostileFactions("a");
+    REQUIRE(hostiles.size() == 1);
+    REQUIRE(hostiles[0]->factionId() == "c");
+}
+
+// ── SP1 Voxel Material Table Tests ────────────────────────────
+
+TEST_CASE("VoxelMaterialDef properties", "[Game][SP1][Material]") {
+    NF::VoxelMaterialDef stone{NF::VoxelType::Stone, 2.5f, 8.f, false, false, "gravel", 2, 10.f, 6.f};
+    REQUIRE(stone.isSolid());
+    REQUIRE(stone.isMineable());
+    REQUIRE(stone.yieldsItem());
+    REQUIRE(stone.yieldMaterial == "gravel");
+
+    NF::VoxelMaterialDef air{NF::VoxelType::Air, 0.f, 0.f, false, false, "", 0, 0.f, 0.f};
+    REQUIRE_FALSE(air.isSolid());
+    REQUIRE_FALSE(air.isMineable());
+    REQUIRE_FALSE(air.yieldsItem());
+}
+
+TEST_CASE("VoxelMaterialTable load defaults", "[Game][SP1][Material]") {
+    NF::VoxelMaterialTable table;
+    table.loadDefaults();
+    REQUIRE(table.materialCount() == static_cast<size_t>(NF::VoxelType::Count));
+
+    auto& stone = table.get(NF::VoxelType::Stone);
+    REQUIRE(stone.density == Catch::Approx(2.5f));
+    REQUIRE(stone.hardness == Catch::Approx(8.f));
+    REQUIRE_FALSE(stone.isLoose);
+
+    auto& dirt = table.get(NF::VoxelType::Dirt);
+    REQUIRE(dirt.isLoose);
+    REQUIRE(dirt.canCollapse);
+    REQUIRE(dirt.yieldMaterial == "soil");
+
+    auto& iron = table.get(NF::VoxelType::Ore_Iron);
+    REQUIRE(iron.yieldMaterial == "raw_iron");
+    REQUIRE(iron.yieldsItem());
+}
+
+// ── SP2 Centrifuge System Tests ───────────────────────────────
+
+TEST_CASE("CentrifugeState names", "[Game][SP2][Centrifuge]") {
+    REQUIRE(std::string(NF::centrifugeStateName(NF::CentrifugeState::Idle)) == "Idle");
+    REQUIRE(std::string(NF::centrifugeStateName(NF::CentrifugeState::Processing)) == "Processing");
+    REQUIRE(std::string(NF::centrifugeStateName(NF::CentrifugeState::PowerStall)) == "PowerStall");
+}
+
+TEST_CASE("CentrifugeJob progress", "[Game][SP2][Centrifuge]") {
+    NF::CentrifugeJob job;
+    job.processingTime = 10.f;
+    job.elapsed = 5.f;
+    REQUIRE(job.progress() == Catch::Approx(0.5f));
+    REQUIRE_FALSE(job.isComplete());
+    job.elapsed = 10.f;
+    REQUIRE(job.isComplete());
+    REQUIRE(job.progress() == Catch::Approx(1.0f));
+}
+
+TEST_CASE("CentrifugeSystem tier and queue", "[Game][SP2][Centrifuge]") {
+    NF::CentrifugeSystem cs;
+    REQUIRE(cs.tier() == 1);
+    REQUIRE(cs.maxQueueSize() == 4);
+    REQUIRE(cs.state() == NF::CentrifugeState::Idle);
+
+    cs.setTier(2);
+    REQUIRE(cs.tier() == 2);
+    REQUIRE(cs.maxQueueSize() == 6);
+
+    cs.setTier(3);
+    REQUIRE(cs.maxQueueSize() == 8);
+}
+
+TEST_CASE("CentrifugeSystem processing lifecycle", "[Game][SP2][Centrifuge]") {
+    NF::CentrifugeSystem cs;
+    NF::CentrifugeJob job;
+    job.inputMaterial = "raw_iron";
+    job.inputQuantity = 1;
+    job.outputMaterial = "iron_ingot";
+    job.outputQuantity = 1;
+    job.processingTime = 2.0f;
+    job.powerRequired = 5.f;
+
+    REQUIRE(cs.addJob(job));
+    REQUIRE(cs.queueSize() == 1);
+    REQUIRE(cs.state() == NF::CentrifugeState::Loading);
+
+    // Tick with enough power
+    cs.tick(1.0f, 10.f);
+    REQUIRE(cs.state() == NF::CentrifugeState::Processing);
+    REQUIRE(cs.currentProgress() == Catch::Approx(0.5f));
+
+    // Complete
+    cs.tick(1.0f, 10.f);
+    REQUIRE(cs.state() == NF::CentrifugeState::Complete);
+
+    // Collect output
+    cs.collectOutput();
+    REQUIRE(cs.state() == NF::CentrifugeState::Idle);
+    REQUIRE(cs.queueSize() == 0);
+}
+
+TEST_CASE("CentrifugeSystem power stall", "[Game][SP2][Centrifuge]") {
+    NF::CentrifugeSystem cs;
+    NF::CentrifugeJob job;
+    job.processingTime = 5.f;
+    job.powerRequired = 10.f;
+    cs.addJob(job);
+    cs.tick(1.f, 10.f); // Loading → Processing
+
+    // Not enough power
+    cs.tick(1.f, 5.f);
+    REQUIRE(cs.state() == NF::CentrifugeState::PowerStall);
+
+    // Power restored
+    cs.tick(1.f, 10.f);
+    REQUIRE(cs.state() != NF::CentrifugeState::PowerStall);
+}
+
+TEST_CASE("CentrifugeSystem queue capacity", "[Game][SP2][Centrifuge]") {
+    NF::CentrifugeSystem cs;
+    // Tier 1: max 4
+    for (int i = 0; i < 4; ++i) {
+        NF::CentrifugeJob j; j.processingTime = 10.f;
+        REQUIRE(cs.addJob(j));
+    }
+    NF::CentrifugeJob extra; extra.processingTime = 10.f;
+    REQUIRE_FALSE(cs.addJob(extra));
+    REQUIRE(cs.queueSize() == 4);
+}
+
+// ── SP3 Interface Port Tests ──────────────────────────────────
+
+TEST_CASE("LinkState names", "[Game][SP3][InterfacePort]") {
+    REQUIRE(std::string(NF::linkStateName(NF::LinkState::Idle)) == "Idle");
+    REQUIRE(std::string(NF::linkStateName(NF::LinkState::Linked)) == "Linked");
+    REQUIRE(std::string(NF::linkStateName(NF::LinkState::Control)) == "Control");
+}
+
+TEST_CASE("InterfacePort state machine", "[Game][SP3][InterfacePort]") {
+    NF::InterfacePort port;
+    REQUIRE(port.state() == NF::LinkState::Idle);
+    REQUIRE_FALSE(port.isLinked());
+    REQUIRE_FALSE(port.hasControl());
+
+    port.beginContact("terminal_01");
+    REQUIRE(port.state() == NF::LinkState::Contact);
+    REQUIRE(port.currentTarget() == "terminal_01");
+
+    port.attemptLink();
+    REQUIRE(port.state() == NF::LinkState::Linked);
+    REQUIRE(port.isLinked());
+    REQUIRE(port.linkQuality() == Catch::Approx(0.85f));
+
+    port.enterControl();
+    REQUIRE(port.state() == NF::LinkState::Control);
+    REQUIRE(port.hasControl());
+
+    port.disconnect();
+    REQUIRE(port.state() == NF::LinkState::Idle);
+    REQUIRE_FALSE(port.isLinked());
+}
+
+TEST_CASE("InterfacePort link failure and retry", "[Game][SP3][InterfacePort]") {
+    NF::InterfacePort port;
+    port.beginContact("secured_terminal");
+    port.failLink();
+    REQUIRE(port.state() == NF::LinkState::LinkFailed);
+
+    port.retryFromFail();
+    REQUIRE(port.state() == NF::LinkState::Contact);
+}
+
+// ── SP4 Sand Physics Tests ────────────────────────────────────
+
+TEST_CASE("SandPhysicsSystem collapse detection", "[Game][SP4][SandPhysics]") {
+    NF::VoxelMaterialTable table;
+    table.loadDefaults();
+
+    NF::Chunk chunk;
+    chunk.set(5, 5, 5, NF::VoxelType::Dirt); // loose, above air
+
+    NF::SandPhysicsSystem physics;
+    physics.setMaterialTable(&table);
+
+    REQUIRE(physics.wouldCollapse(chunk, 5, 5, 5)); // air below
+    chunk.set(5, 4, 5, NF::VoxelType::Stone); // support below
+    REQUIRE_FALSE(physics.wouldCollapse(chunk, 5, 5, 5));
+}
+
+TEST_CASE("SandPhysicsSystem simulate step", "[Game][SP4][SandPhysics]") {
+    NF::VoxelMaterialTable table;
+    table.loadDefaults();
+
+    NF::Chunk chunk;
+    // Place dirt at y=5 with air below
+    chunk.set(3, 5, 3, NF::VoxelType::Dirt);
+
+    NF::SandPhysicsSystem physics;
+    physics.setMaterialTable(&table);
+
+    int moved = physics.simulateStep(chunk);
+    REQUIRE(moved == 1);
+    REQUIRE(chunk.get(3, 5, 3) == NF::VoxelType::Air); // original position cleared
+    REQUIRE(chunk.get(3, 0, 3) == NF::VoxelType::Dirt); // fell to bottom
+    REQUIRE(physics.lastEvents().size() == 1);
+    REQUIRE(physics.lastEvents()[0].fallDistance == 5);
+}
+
+TEST_CASE("SandPhysicsSystem stone does not collapse", "[Game][SP4][SandPhysics]") {
+    NF::VoxelMaterialTable table;
+    table.loadDefaults();
+
+    NF::Chunk chunk;
+    chunk.set(3, 5, 3, NF::VoxelType::Stone); // not loose
+
+    NF::SandPhysicsSystem physics;
+    physics.setMaterialTable(&table);
+
+    REQUIRE_FALSE(physics.wouldCollapse(chunk, 3, 5, 3));
+    int moved = physics.simulateStep(chunk);
+    REQUIRE(moved == 0);
+}
+
+// ── SP5 Breach Minigame Tests ─────────────────────────────────
+
+TEST_CASE("BreachState names", "[Game][SP5][Breach]") {
+    REQUIRE(std::string(NF::breachStateName(NF::BreachState::Inactive)) == "Inactive");
+    REQUIRE(std::string(NF::breachStateName(NF::BreachState::Active)) == "Active");
+    REQUIRE(std::string(NF::breachStateName(NF::BreachState::Success)) == "Success");
+}
+
+TEST_CASE("BreachMinigame lifecycle", "[Game][SP5][Breach]") {
+    NF::BreachMinigame game;
+    REQUIRE(game.state() == NF::BreachState::Inactive);
+
+    NF::BreachGrid grid{6, 6, 30.f, 3, 2};
+    game.initiate(grid);
+    REQUIRE(game.state() == NF::BreachState::Initiating);
+    REQUIRE(game.timeRemaining() == Catch::Approx(30.f));
+
+    game.start();
+    REQUIRE(game.state() == NF::BreachState::Active);
+
+    // Move trace
+    game.moveTrace(1, 0);
+    REQUIRE(game.traceX() == 1);
+    game.moveTrace(0, 1);
+    REQUIRE(game.traceY() == 1);
+
+    // Collect data nodes to win
+    game.collectDataNode();
+    REQUIRE(game.dataCollected() == 1);
+    game.collectDataNode();
+    REQUIRE(game.state() == NF::BreachState::Success);
+}
+
+TEST_CASE("BreachMinigame timeout", "[Game][SP5][Breach]") {
+    NF::BreachMinigame game;
+    NF::BreachGrid grid{6, 6, 5.f, 3, 2};
+    game.initiate(grid);
+    game.start();
+
+    game.tick(6.f); // exceed time limit
+    REQUIRE(game.state() == NF::BreachState::Failure);
+    REQUIRE(game.timeRemaining() == Catch::Approx(0.f));
+}
+
+TEST_CASE("BreachMinigame partial success", "[Game][SP5][Breach]") {
+    NF::BreachMinigame game;
+    NF::BreachGrid grid{6, 6, 5.f, 3, 2};
+    game.initiate(grid);
+    game.start();
+    game.collectDataNode(); // got 1 of 2
+
+    game.hitIce();
+    REQUIRE(game.state() == NF::BreachState::Partial);
+}
+
+TEST_CASE("BreachMinigame bounds check", "[Game][SP5][Breach]") {
+    NF::BreachMinigame game;
+    NF::BreachGrid grid{6, 6, 30.f, 3, 2};
+    game.initiate(grid);
+    game.start();
+
+    game.moveTrace(-1, 0); // can't go below 0
+    REQUIRE(game.traceX() == 0);
+    game.moveTrace(0, -1);
+    REQUIRE(game.traceY() == 0);
+}
+
+// ── SP6 R.I.G. AI Core Tests ─────────────────────────────────
+
+TEST_CASE("RigAIEvent names", "[Game][SP6][RigAI]") {
+    REQUIRE(std::string(NF::rigAIEventName(NF::RigAIEvent::PowerChanged)) == "PowerChanged");
+    REQUIRE(std::string(NF::rigAIEventName(NF::RigAIEvent::OxygenLow)) == "OxygenLow");
+    REQUIRE(std::string(NF::rigAIEventName(NF::RigAIEvent::SystemFailure)) == "SystemFailure");
+}
+
+TEST_CASE("RigAIFeatures enabled count", "[Game][SP6][RigAI]") {
+    NF::RigAIFeatures feat;
+    REQUIRE(feat.enabledCount() == 1); // vitals only
+    feat.scanning = true;
+    feat.mapping = true;
+    REQUIRE(feat.enabledCount() == 3);
+}
+
+TEST_CASE("RigAICore event routing", "[Game][SP6][RigAI]") {
+    NF::RigAICore ai;
+    NF::RigAIFeatures feat;
+    feat.scanning = true;
+    ai.init(feat);
+    REQUIRE(ai.isInitialized());
+    REQUIRE(ai.pendingAlerts() == 0);
+
+    ai.onEvent(NF::RigAIEvent::OxygenLow);
+    REQUIRE(ai.pendingAlerts() == 1);
+    REQUIRE(ai.alerts()[0].severity == Catch::Approx(1.0f)); // critical
+
+    ai.onEvent(NF::RigAIEvent::ScanResult); // scanning enabled
+    REQUIRE(ai.pendingAlerts() == 2);
+
+    ai.clearAlerts();
+    REQUIRE(ai.pendingAlerts() == 0);
+}
+
+TEST_CASE("RigAICore feature gating", "[Game][SP6][RigAI]") {
+    NF::RigAICore ai;
+    NF::RigAIFeatures feat;
+    // scanning disabled by default
+    ai.init(feat);
+
+    ai.onEvent(NF::RigAIEvent::ScanResult); // should be filtered
+    REQUIRE(ai.pendingAlerts() == 0);
+
+    ai.enableFeature("scanning");
+    ai.onEvent(NF::RigAIEvent::ScanResult);
+    REQUIRE(ai.pendingAlerts() == 1);
+
+    ai.disableFeature("scanning");
+    ai.onEvent(NF::RigAIEvent::ScanResult); // filtered again
+    REQUIRE(ai.pendingAlerts() == 1); // no new alert
+}
+
+TEST_CASE("RigAICore enable/disable features", "[Game][SP6][RigAI]") {
+    NF::RigAICore ai;
+    NF::RigAIFeatures feat;
+    ai.init(feat);
+    REQUIRE(ai.features().enabledCount() == 1);
+
+    ai.enableFeature("droneControl");
+    ai.enableFeature("fleetCommand");
+    REQUIRE(ai.features().enabledCount() == 3);
+
+    ai.disableFeature("droneControl");
+    REQUIRE(ai.features().enabledCount() == 2);
+}

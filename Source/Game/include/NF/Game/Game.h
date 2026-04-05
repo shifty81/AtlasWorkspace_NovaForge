@@ -7,6 +7,7 @@
 #include <map>
 #include <unordered_map>
 #include <vector>
+#include <array>
 #include <algorithm>
 #include <cstdint>
 
@@ -4311,6 +4312,696 @@ public:
 
 private:
     std::vector<Companion> m_companions;
+};
+
+// ── G21 Faction System ────────────────────────────────────────
+
+enum class FactionType : uint8_t {
+    Military = 0,
+    Corporate,
+    Scientific,
+    Religious,
+    Criminal,
+    Pirate,
+    Colonial,
+    Independent,
+    Count
+};
+
+inline const char* factionTypeName(FactionType t) {
+    switch(t){
+        case FactionType::Military:    return "Military";
+        case FactionType::Corporate:   return "Corporate";
+        case FactionType::Scientific:  return "Scientific";
+        case FactionType::Religious:   return "Religious";
+        case FactionType::Criminal:    return "Criminal";
+        case FactionType::Pirate:      return "Pirate";
+        case FactionType::Colonial:    return "Colonial";
+        case FactionType::Independent: return "Independent";
+        default: return "Unknown";
+    }
+}
+
+enum class FactionStanding : uint8_t {
+    Hostile = 0,
+    Unfriendly,
+    Neutral,
+    Friendly,
+    Allied
+};
+
+inline const char* factionStandingName(FactionStanding s) {
+    switch(s){
+        case FactionStanding::Hostile:    return "Hostile";
+        case FactionStanding::Unfriendly: return "Unfriendly";
+        case FactionStanding::Neutral:    return "Neutral";
+        case FactionStanding::Friendly:   return "Friendly";
+        case FactionStanding::Allied:     return "Allied";
+        default: return "Unknown";
+    }
+}
+
+struct FactionTerritory {
+    std::string sectorId;
+    std::string sectorName;
+    float       controlStrength = 1.0f;
+    int         resourceOutput  = 0;
+    bool        contested       = false;
+
+    void erode(float amount)    { controlStrength = std::clamp(controlStrength - amount, 0.f, 1.f); }
+    void reinforce(float amount){ controlStrength = std::clamp(controlStrength + amount, 0.f, 1.f); }
+    [[nodiscard]] bool isLost() const { return controlStrength <= 0.f; }
+};
+
+class Faction {
+public:
+    void init(const std::string& id, const std::string& name, FactionType type) {
+        m_factionId = id;
+        m_name      = name;
+        m_type      = type;
+        m_influence  = 0.5f;
+        m_wealth     = 0;
+        m_militaryPower = 0;
+        m_territories.clear();
+        m_wealthAccum = 0.f;
+    }
+
+    [[nodiscard]] const std::string& factionId()     const { return m_factionId; }
+    [[nodiscard]] const std::string& name()          const { return m_name; }
+    [[nodiscard]] FactionType        type()          const { return m_type; }
+    [[nodiscard]] float              influence()     const { return m_influence; }
+    [[nodiscard]] int                wealth()        const { return m_wealth; }
+    [[nodiscard]] int                militaryPower() const { return m_militaryPower; }
+
+    void addTerritory(FactionTerritory t) { m_territories.push_back(std::move(t)); }
+
+    void removeTerritory(const std::string& sectorId) {
+        m_territories.erase(
+            std::remove_if(m_territories.begin(), m_territories.end(),
+                [&](const FactionTerritory& t){ return t.sectorId==sectorId; }),
+            m_territories.end());
+    }
+
+    [[nodiscard]] FactionTerritory* findTerritory(const std::string& sectorId) {
+        for (auto& t : m_territories) if (t.sectorId==sectorId) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t territoryCount() const { return m_territories.size(); }
+
+    [[nodiscard]] int totalResourceOutput() const {
+        int sum = 0;
+        for (auto& t : m_territories) sum += t.resourceOutput;
+        return sum;
+    }
+
+    void adjustInfluence(float delta) { m_influence = std::clamp(m_influence + delta, 0.f, 1.f); }
+    void addWealth(int amount)        { m_wealth += amount; }
+    [[nodiscard]] bool spendWealth(int amount) {
+        if (m_wealth < amount) return false;
+        m_wealth -= amount;
+        return true;
+    }
+
+    void setMilitaryPower(int v) { m_militaryPower = v; }
+
+    void tick(float dt) {
+        m_wealthAccum += dt;
+        while (m_wealthAccum >= 1.f) {
+            m_wealthAccum -= 1.f;
+            m_wealth += totalResourceOutput();
+        }
+    }
+
+private:
+    std::string  m_factionId;
+    std::string  m_name;
+    FactionType  m_type         = FactionType::Independent;
+    float        m_influence    = 0.5f;
+    int          m_wealth       = 0;
+    int          m_militaryPower = 0;
+    float        m_wealthAccum  = 0.f;
+    std::vector<FactionTerritory> m_territories;
+};
+
+struct GameFactionRelation {
+    std::string     factionA;
+    std::string     factionB;
+    FactionStanding standing   = FactionStanding::Neutral;
+    int             reputation = 0;
+    bool            atWar      = false;
+    bool            hasTreaty  = false;
+    std::string     treatyType;
+
+    void improve(int amount) {
+        reputation += amount;
+        updateStanding();
+    }
+
+    void degrade(int amount) {
+        reputation -= amount;
+        updateStanding();
+    }
+
+    void declareWar() {
+        atWar    = true;
+        standing = FactionStanding::Hostile;
+        breakTreaty();
+    }
+
+    void declarePeace() {
+        atWar    = false;
+        standing = FactionStanding::Unfriendly;
+    }
+
+    void signTreaty(const std::string& type) {
+        hasTreaty  = true;
+        treatyType = type;
+    }
+
+    void breakTreaty() {
+        hasTreaty  = false;
+        treatyType.clear();
+    }
+
+private:
+    void updateStanding() {
+        if      (reputation < -75) standing = FactionStanding::Hostile;
+        else if (reputation < -25) standing = FactionStanding::Unfriendly;
+        else if (reputation <  25) standing = FactionStanding::Neutral;
+        else if (reputation <  75) standing = FactionStanding::Friendly;
+        else                       standing = FactionStanding::Allied;
+    }
+};
+
+class GameFactionManager {
+public:
+    static constexpr int kMaxFactions = 16;
+
+    void addFaction(Faction f) {
+        if (static_cast<int>(m_factions.size()) < kMaxFactions)
+            m_factions.push_back(std::move(f));
+    }
+
+    void removeFaction(const std::string& id) {
+        m_factions.erase(
+            std::remove_if(m_factions.begin(), m_factions.end(),
+                [&](const Faction& f){ return f.factionId()==id; }),
+            m_factions.end());
+    }
+
+    [[nodiscard]] Faction* findFaction(const std::string& id) {
+        for (auto& f : m_factions) if (f.factionId()==id) return &f;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t factionCount() const { return m_factions.size(); }
+
+    void setRelation(const std::string& a, const std::string& b, GameFactionRelation rel) {
+        auto key = makeKey(a, b);
+        rel.factionA = key.first;
+        rel.factionB = key.second;
+        for (auto& r : m_relations)
+            if (r.factionA==key.first && r.factionB==key.second) { r = std::move(rel); return; }
+        m_relations.push_back(std::move(rel));
+    }
+
+    [[nodiscard]] GameFactionRelation* getRelation(const std::string& a, const std::string& b) {
+        auto key = makeKey(a, b);
+        for (auto& r : m_relations)
+            if (r.factionA==key.first && r.factionB==key.second) return &r;
+        return nullptr;
+    }
+
+    [[nodiscard]] std::vector<const Faction*> alliedFactions(const std::string& factionId) const {
+        std::vector<const Faction*> out;
+        for (auto& r : m_relations) {
+            if (r.standing != FactionStanding::Allied) continue;
+            std::string otherId;
+            if      (r.factionA == factionId) otherId = r.factionB;
+            else if (r.factionB == factionId) otherId = r.factionA;
+            else continue;
+            for (auto& f : m_factions) if (f.factionId()==otherId) { out.push_back(&f); break; }
+        }
+        return out;
+    }
+
+    [[nodiscard]] std::vector<const Faction*> hostileFactions(const std::string& factionId) const {
+        std::vector<const Faction*> out;
+        for (auto& r : m_relations) {
+            if (r.standing != FactionStanding::Hostile) continue;
+            std::string otherId;
+            if      (r.factionA == factionId) otherId = r.factionB;
+            else if (r.factionB == factionId) otherId = r.factionA;
+            else continue;
+            for (auto& f : m_factions) if (f.factionId()==otherId) { out.push_back(&f); break; }
+        }
+        return out;
+    }
+
+    void tick(float dt) { for (auto& f : m_factions) f.tick(dt); }
+
+private:
+    std::vector<Faction>              m_factions;
+    std::vector<GameFactionRelation>  m_relations;
+
+    [[nodiscard]] static std::pair<std::string,std::string> makeKey(const std::string& a, const std::string& b) {
+        return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
+    }
+};
+
+// ── SP1 Voxel Material Table ──────────────────────────────────
+
+struct VoxelMaterialDef {
+    VoxelType   type        = VoxelType::Air;
+    float       density     = 0.f;    // kg/m³ ÷ 1000
+    float       hardness    = 0.f;    // 0-10 mining resistance
+    bool        isLoose     = false;  // subject to collapse physics
+    bool        canCollapse = false;  // falls when unsupported
+    std::string yieldMaterial;        // raw material produced
+    int         yieldQuantity = 0;    // units per voxel
+    float       structuralStrength = 0.f; // load-bearing capacity
+    float       blastResistance    = 0.f; // explosion resistance
+
+    [[nodiscard]] bool isSolid()     const { return type != VoxelType::Air && type != VoxelType::Water; }
+    [[nodiscard]] bool isMineable()  const { return isSolid() && hardness > 0.f; }
+    [[nodiscard]] bool yieldsItem()  const { return !yieldMaterial.empty() && yieldQuantity > 0; }
+};
+
+class VoxelMaterialTable {
+public:
+    void registerMaterial(const VoxelMaterialDef& def) {
+        auto idx = static_cast<size_t>(def.type);
+        if (idx < m_defs.size()) m_defs[idx] = def;
+    }
+
+    [[nodiscard]] const VoxelMaterialDef& get(VoxelType t) const {
+        auto idx = static_cast<size_t>(t);
+        if (idx < m_defs.size()) return m_defs[idx];
+        return m_defs[0]; // Air fallback
+    }
+
+    void loadDefaults() {
+        registerMaterial({VoxelType::Air, 0.f, 0.f, false, false, "", 0, 0.f, 0.f});
+        registerMaterial({VoxelType::Stone, 2.5f, 8.f, false, false, "gravel", 2, 10.f, 6.f});
+        registerMaterial({VoxelType::Dirt, 1.5f, 2.f, true, true, "soil", 2, 1.f, 0.5f});
+        registerMaterial({VoxelType::Grass, 1.3f, 2.f, true, true, "soil", 1, 1.f, 0.5f});
+        registerMaterial({VoxelType::Metal, 7.8f, 9.f, false, false, "scrap_metal", 1, 15.f, 9.f});
+        registerMaterial({VoxelType::Glass, 2.2f, 3.f, false, false, "silica", 1, 2.f, 1.f});
+        registerMaterial({VoxelType::Water, 1.0f, 0.f, true, false, "", 0, 0.f, 0.f});
+        registerMaterial({VoxelType::Ore_Iron, 5.0f, 7.f, false, false, "raw_iron", 1, 8.f, 5.f});
+        registerMaterial({VoxelType::Ore_Gold, 8.0f, 6.f, false, false, "raw_gold", 1, 7.f, 4.f});
+        registerMaterial({VoxelType::Ore_Crystal, 3.0f, 5.f, false, false, "raw_crystal", 1, 5.f, 3.f});
+    }
+
+    [[nodiscard]] size_t materialCount() const {
+        return static_cast<size_t>(VoxelType::Count);
+    }
+
+private:
+    std::array<VoxelMaterialDef, static_cast<size_t>(VoxelType::Count)> m_defs{};
+};
+
+// ── SP2 Centrifuge System ─────────────────────────────────────
+
+enum class CentrifugeState : uint8_t {
+    Idle = 0, Loading, Processing, Complete, PowerStall
+};
+
+inline const char* centrifugeStateName(CentrifugeState s) {
+    switch (s) {
+    case CentrifugeState::Idle:       return "Idle";
+    case CentrifugeState::Loading:    return "Loading";
+    case CentrifugeState::Processing: return "Processing";
+    case CentrifugeState::Complete:   return "Complete";
+    case CentrifugeState::PowerStall: return "PowerStall";
+    default: return "Unknown";
+    }
+}
+
+struct CentrifugeJob {
+    std::string inputMaterial;
+    int         inputQuantity  = 0;
+    std::string outputMaterial;
+    int         outputQuantity = 0;
+    float       processingTime = 10.f;
+    float       elapsed        = 0.f;
+    float       powerRequired  = 3.f;
+
+    [[nodiscard]] bool isComplete() const { return elapsed >= processingTime; }
+    [[nodiscard]] float progress()  const {
+        return processingTime > 0.f ? std::clamp(elapsed / processingTime, 0.f, 1.f) : 1.f;
+    }
+};
+
+class CentrifugeSystem {
+public:
+    static constexpr int kMaxQueueSize = 8;
+
+    void setTier(int tier) {
+        m_tier = std::clamp(tier, 1, 3);
+        switch (m_tier) {
+        case 1: m_speedMult = 1.0f; m_maxQueue = 4; break;
+        case 2: m_speedMult = 1.5f; m_maxQueue = 6; break;
+        case 3: m_speedMult = 2.5f; m_maxQueue = 8; break;
+        }
+    }
+
+    [[nodiscard]] int tier() const { return m_tier; }
+
+    bool addJob(CentrifugeJob job) {
+        if (static_cast<int>(m_queue.size()) >= m_maxQueue) return false;
+        m_queue.push_back(std::move(job));
+        if (m_state == CentrifugeState::Idle) m_state = CentrifugeState::Loading;
+        return true;
+    }
+
+    void tick(float dt, float availablePower) {
+        if (m_queue.empty()) { m_state = CentrifugeState::Idle; return; }
+        auto& current = m_queue.front();
+        if (m_state == CentrifugeState::Loading) m_state = CentrifugeState::Processing;
+        if (m_state == CentrifugeState::Processing || m_state == CentrifugeState::PowerStall) {
+            if (availablePower < current.powerRequired) {
+                m_state = CentrifugeState::PowerStall; return;
+            }
+            m_state = CentrifugeState::Processing;
+            current.elapsed += dt * m_speedMult;
+            if (current.isComplete()) m_state = CentrifugeState::Complete;
+        }
+    }
+
+    void collectOutput() {
+        if (m_state != CentrifugeState::Complete || m_queue.empty()) return;
+        m_queue.erase(m_queue.begin());
+        m_state = m_queue.empty() ? CentrifugeState::Idle : CentrifugeState::Loading;
+    }
+
+    [[nodiscard]] CentrifugeState     state()       const { return m_state; }
+    [[nodiscard]] size_t              queueSize()   const { return m_queue.size(); }
+    [[nodiscard]] int                 maxQueueSize() const { return m_maxQueue; }
+    [[nodiscard]] const CentrifugeJob* currentJob() const {
+        return m_queue.empty() ? nullptr : &m_queue.front();
+    }
+    [[nodiscard]] float currentProgress() const {
+        return m_queue.empty() ? 0.f : m_queue.front().progress();
+    }
+
+private:
+    int                        m_tier      = 1;
+    float                      m_speedMult = 1.0f;
+    int                        m_maxQueue  = 4;
+    CentrifugeState            m_state     = CentrifugeState::Idle;
+    std::vector<CentrifugeJob> m_queue;
+};
+
+// ── SP3 Interface Port ────────────────────────────────────────
+
+enum class LinkState : uint8_t {
+    Idle = 0, Contact, Linking, Linked, Control, LinkFailed
+};
+
+inline const char* linkStateName(LinkState s) {
+    switch (s) {
+    case LinkState::Idle:       return "Idle";
+    case LinkState::Contact:    return "Contact";
+    case LinkState::Linking:    return "Linking";
+    case LinkState::Linked:     return "Linked";
+    case LinkState::Control:    return "Control";
+    case LinkState::LinkFailed: return "LinkFailed";
+    default: return "Unknown";
+    }
+}
+
+class InterfacePort {
+public:
+    void beginContact(const std::string& targetId) {
+        if (m_state != LinkState::Idle) return;
+        m_targetId = targetId; m_state = LinkState::Contact;
+    }
+    void attemptLink() {
+        if (m_state != LinkState::Contact) return;
+        m_state = LinkState::Linking; m_linkQuality = 0.85f; m_state = LinkState::Linked;
+    }
+    void enterControl() {
+        if (m_state != LinkState::Linked) return;
+        m_state = LinkState::Control;
+    }
+    void disconnect() {
+        m_state = LinkState::Idle; m_targetId.clear(); m_linkQuality = 0.f;
+    }
+    void failLink() { m_state = LinkState::LinkFailed; }
+    void retryFromFail() {
+        if (m_state != LinkState::LinkFailed) return;
+        m_state = LinkState::Contact;
+    }
+
+    [[nodiscard]] LinkState          state()         const { return m_state; }
+    [[nodiscard]] const std::string& currentTarget() const { return m_targetId; }
+    [[nodiscard]] float              linkQuality()   const { return m_linkQuality; }
+    [[nodiscard]] bool               isLinked()      const { return m_state == LinkState::Linked || m_state == LinkState::Control; }
+    [[nodiscard]] bool               hasControl()    const { return m_state == LinkState::Control; }
+
+private:
+    LinkState   m_state       = LinkState::Idle;
+    std::string m_targetId;
+    float       m_linkQuality = 0.f;
+};
+
+// ── SP4 Sand Physics System ──────────────────────────────────
+
+struct CollapseEvent {
+    int x = 0, y = 0, z = 0;
+    VoxelType material = VoxelType::Air;
+    int fallDistance = 0;
+};
+
+class SandPhysicsSystem {
+public:
+    void setMaterialTable(const VoxelMaterialTable* table) { m_materials = table; }
+
+    [[nodiscard]] bool wouldCollapse(const Chunk& chunk, int x, int y, int z) const {
+        if (!m_materials) return false;
+        auto type = chunk.get(x, y, z);
+        const auto& mat = m_materials->get(type);
+        if (!mat.canCollapse) return false;
+        if (y <= 0) return false;
+        return chunk.get(x, y - 1, z) == VoxelType::Air || chunk.get(x, y - 1, z) == VoxelType::Water;
+    }
+
+    int simulateStep(Chunk& chunk) {
+        m_lastEvents.clear();
+        if (!m_materials) return 0;
+        int moved = 0;
+        for (int y = 1; y < CHUNK_SIZE; ++y) {
+            for (int z = 0; z < CHUNK_SIZE; ++z) {
+                for (int x = 0; x < CHUNK_SIZE; ++x) {
+                    if (!wouldCollapse(chunk, x, y, z)) continue;
+                    auto type = chunk.get(x, y, z);
+                    int targetY = y - 1;
+                    while (targetY > 0 && chunk.get(x, targetY - 1, z) == VoxelType::Air) --targetY;
+                    chunk.set(x, y, z, VoxelType::Air);
+                    chunk.set(x, targetY, z, type);
+                    m_lastEvents.push_back({x, y, z, type, y - targetY});
+                    ++moved;
+                }
+            }
+        }
+        return moved;
+    }
+
+    int simulateUntilStable(Chunk& chunk, int maxIterations = 64) {
+        int total = 0;
+        for (int i = 0; i < maxIterations; ++i) {
+            int moved = simulateStep(chunk);
+            if (moved == 0) break;
+            total += moved;
+        }
+        return total;
+    }
+
+    [[nodiscard]] const std::vector<CollapseEvent>& lastEvents() const { return m_lastEvents; }
+
+private:
+    const VoxelMaterialTable* m_materials = nullptr;
+    std::vector<CollapseEvent> m_lastEvents;
+};
+
+// ── SP5 Breach Minigame ──────────────────────────────────────
+
+enum class BreachState : uint8_t {
+    Inactive = 0, Initiating, Active, Success, Failure, Partial, Cooldown
+};
+
+inline const char* breachStateName(BreachState s) {
+    switch (s) {
+    case BreachState::Inactive:   return "Inactive";
+    case BreachState::Initiating: return "Initiating";
+    case BreachState::Active:     return "Active";
+    case BreachState::Success:    return "Success";
+    case BreachState::Failure:    return "Failure";
+    case BreachState::Partial:    return "Partial";
+    case BreachState::Cooldown:   return "Cooldown";
+    default: return "Unknown";
+    }
+}
+
+struct BreachGrid {
+    int   width       = 6;
+    int   height      = 6;
+    float timeLimit   = 30.f;
+    int   iceNodes    = 3;
+    int   dataNodes   = 2;
+};
+
+class BreachMinigame {
+public:
+    void initiate(const BreachGrid& grid) {
+        m_grid = grid; m_timeRemaining = grid.timeLimit;
+        m_dataCollected = 0; m_traceX = 0; m_traceY = 0;
+        m_state = BreachState::Initiating;
+    }
+    void start() {
+        if (m_state != BreachState::Initiating) return;
+        m_state = BreachState::Active;
+    }
+    void tick(float dt) {
+        if (m_state != BreachState::Active) return;
+        m_timeRemaining -= dt;
+        if (m_timeRemaining <= 0.f) {
+            m_timeRemaining = 0.f;
+            m_state = (m_dataCollected > 0) ? BreachState::Partial : BreachState::Failure;
+        }
+    }
+    void moveTrace(int dx, int dy) {
+        if (m_state != BreachState::Active) return;
+        int nx = m_traceX + dx, ny = m_traceY + dy;
+        if (nx < 0 || nx >= m_grid.width || ny < 0 || ny >= m_grid.height) return;
+        m_traceX = nx; m_traceY = ny;
+    }
+    void collectDataNode() {
+        if (m_state != BreachState::Active) return;
+        ++m_dataCollected;
+        if (m_dataCollected >= m_grid.dataNodes) m_state = BreachState::Success;
+    }
+    void hitIce() {
+        if (m_state != BreachState::Active) return;
+        m_state = (m_dataCollected > 0) ? BreachState::Partial : BreachState::Failure;
+    }
+    void reset() { m_state = BreachState::Inactive; }
+
+    [[nodiscard]] BreachState       state()         const { return m_state; }
+    [[nodiscard]] float             timeRemaining() const { return m_timeRemaining; }
+    [[nodiscard]] int               dataCollected() const { return m_dataCollected; }
+    [[nodiscard]] int               traceX()        const { return m_traceX; }
+    [[nodiscard]] int               traceY()        const { return m_traceY; }
+    [[nodiscard]] const BreachGrid& grid()          const { return m_grid; }
+
+private:
+    BreachState m_state         = BreachState::Inactive;
+    BreachGrid  m_grid;
+    float       m_timeRemaining = 0.f;
+    int         m_dataCollected = 0;
+    int         m_traceX        = 0;
+    int         m_traceY        = 0;
+};
+
+// ── SP6 R.I.G. AI Event System ────────────────────────────────
+
+enum class RigAIEvent : uint8_t {
+    PowerChanged = 0, HealthChanged, OxygenLow, ScanResult, ThreatDetected,
+    EnvironmentChanged, ModuleInstalled, ModuleRemoved, DroneStatus, SystemFailure,
+    Count
+};
+
+inline const char* rigAIEventName(RigAIEvent e) {
+    switch (e) {
+    case RigAIEvent::PowerChanged:       return "PowerChanged";
+    case RigAIEvent::HealthChanged:      return "HealthChanged";
+    case RigAIEvent::OxygenLow:          return "OxygenLow";
+    case RigAIEvent::ScanResult:         return "ScanResult";
+    case RigAIEvent::ThreatDetected:     return "ThreatDetected";
+    case RigAIEvent::EnvironmentChanged: return "EnvironmentChanged";
+    case RigAIEvent::ModuleInstalled:    return "ModuleInstalled";
+    case RigAIEvent::ModuleRemoved:      return "ModuleRemoved";
+    case RigAIEvent::DroneStatus:        return "DroneStatus";
+    case RigAIEvent::SystemFailure:      return "SystemFailure";
+    default: return "Unknown";
+    }
+}
+
+struct RigAIFeatures {
+    bool vitals        = true;
+    bool scanning      = false;
+    bool mapping       = false;
+    bool navigation    = false;
+    bool droneControl  = false;
+    bool healingControl= false;
+    bool fleetCommand  = false;
+
+    [[nodiscard]] int enabledCount() const {
+        int n = 0;
+        if (vitals)         ++n;
+        if (scanning)       ++n;
+        if (mapping)        ++n;
+        if (navigation)     ++n;
+        if (droneControl)   ++n;
+        if (healingControl) ++n;
+        if (fleetCommand)   ++n;
+        return n;
+    }
+};
+
+struct RigAIAlert {
+    RigAIEvent  event;
+    std::string message;
+    float       severity = 0.f;
+};
+
+class RigAICore {
+public:
+    void init(const RigAIFeatures& features) { m_features = features; m_initialized = true; }
+
+    void onEvent(RigAIEvent event, float value = 0.f) {
+        if (!m_initialized) return;
+        switch (event) {
+        case RigAIEvent::ScanResult:  if (!m_features.scanning) return; break;
+        case RigAIEvent::DroneStatus: if (!m_features.droneControl) return; break;
+        default: break;
+        }
+        float sev = (event == RigAIEvent::OxygenLow || event == RigAIEvent::SystemFailure) ? 1.0f :
+                     (event == RigAIEvent::ThreatDetected) ? 0.8f : 0.3f;
+        m_alerts.push_back({event, rigAIEventName(event), sev});
+        (void)value;
+    }
+
+    void tick(float /*dt*/) {}
+    void enableFeature(const std::string& f) {
+        if      (f == "scanning")       m_features.scanning = true;
+        else if (f == "mapping")        m_features.mapping = true;
+        else if (f == "navigation")     m_features.navigation = true;
+        else if (f == "droneControl")   m_features.droneControl = true;
+        else if (f == "healingControl") m_features.healingControl = true;
+        else if (f == "fleetCommand")   m_features.fleetCommand = true;
+    }
+    void disableFeature(const std::string& f) {
+        if      (f == "scanning")       m_features.scanning = false;
+        else if (f == "mapping")        m_features.mapping = false;
+        else if (f == "navigation")     m_features.navigation = false;
+        else if (f == "droneControl")   m_features.droneControl = false;
+        else if (f == "healingControl") m_features.healingControl = false;
+        else if (f == "fleetCommand")   m_features.fleetCommand = false;
+    }
+
+    [[nodiscard]] const RigAIFeatures&        features()      const { return m_features; }
+    [[nodiscard]] bool                         isInitialized() const { return m_initialized; }
+    [[nodiscard]] size_t                       pendingAlerts() const { return m_alerts.size(); }
+    [[nodiscard]] const std::vector<RigAIAlert>& alerts()      const { return m_alerts; }
+    void clearAlerts() { m_alerts.clear(); }
+
+private:
+    RigAIFeatures           m_features;
+    bool                    m_initialized = false;
+    std::vector<RigAIAlert> m_alerts;
 };
 
 } // namespace NF

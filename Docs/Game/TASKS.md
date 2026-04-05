@@ -706,3 +706,60 @@ Phase 11 (Suite Integration) fully delivered:
 - S4: ArbiterAI Integration — ArbiterReasoner rules/violations/CI gate (22 tests)
 - S5: Full Suite Validation — all tools active simultaneously (9 tests)
 Total: 826 tests, 0 failures. Pipeline module: 5 source files, 6 test files.
+
+## M1 — Usable Editor ✅
+
+- [x] GLFWWindowProvider: GLFW window creation/lifecycle abstraction (stub-compilable without GLFW)
+- [x] ImGuiLayer: ImGui initialization, frame lifecycle, docking space, panel helpers
+- [x] ImGuiBackend: UIBackend subclass routing through ImGui draw lists
+- [x] GLFWInputAdapter: GLFW callbacks → InputSystem bridge with event injection
+- [x] Editor main.cpp: NF_USE_GLFW path alongside existing Win32/GDI backend
+- [x] Add test_m1_editor.cpp with 23 comprehensive tests
+- [x] Build verification: 850/850 tests pass (826 existing + 24 new)
+- [x] Update Docs/Game/ROADMAP.md — M1 marked Done
+
+## G21 — Faction System ✅
+
+- [x] FactionType enum (Military, Corporate, Scientific, Religious, Criminal, Pirate, Colonial, Independent) + name function
+- [x] FactionStanding enum (Hostile, Unfriendly, Neutral, Friendly, Allied) + name function
+- [x] FactionTerritory struct: sector control, resource output, erosion/reinforcement
+- [x] Faction class: identity, influence, wealth, military power, territory management, tick
+- [x] GameFactionRelation struct: reputation-based standing transitions, war/peace, treaties
+- [x] GameFactionManager class: add/find/remove factions, relation management, allied/hostile queries
+- [x] Add 10 test cases for G21 (FactionType names, standing names, init, territory, wealth, erosion, reputation, war/peace, manager CRUD, alliances)
+- [x] Build verification: 860/860 tests pass (850 existing + 10 new)
+- [x] Update Docs/Game/ROADMAP.md — G21 marked Done
+
+## M1 + G21 Complete ✅
+
+M1 (Usable Editor) fully delivered:
+- GLFWWindowProvider, ImGuiLayer, ImGuiBackend, GLFWInputAdapter (4 new headers)
+- Editor main.cpp updated with NF_USE_GLFW path
+- 23 new tests, all passing
+
+G21 (Faction System) fully delivered:
+- FactionType×8, FactionStanding×5, FactionTerritory, Faction, GameFactionRelation, GameFactionManager
+- 10 new tests, all passing
+Total: 860 tests, 0 failures.
+
+## SP — Spec Pack (System Contracts) ✅
+
+- [x] SP1: VoxelMaterialDef + VoxelMaterialTable — material properties with mining yields
+- [x] SP2: CentrifugeState + CentrifugeJob + CentrifugeSystem — resource processing with tiers and power
+- [x] SP3: LinkState + InterfacePort — physical interaction state machine
+- [x] SP4: CollapseEvent + SandPhysicsSystem — voxel collapse simulation
+- [x] SP5: BreachState + BreachGrid + BreachMinigame — hacking minigame
+- [x] SP6: RigAIEvent + RigAIFeatures + RigAICore — R.I.G. AI event bus
+- [x] 6 new JSON schemas: rig, material, interaction, power, recipe, centrifuge
+- [x] 25 documentation files across core, systems, rig, gameplay, workspace, roadmap, audit
+- [x] 24 new Catch2 tests (SP1-SP6)
+- [x] Build verification: 884/884 tests pass (860 existing + 24 new)
+
+## SP Complete ✅
+
+Spec Pack delivered:
+- 6 C++ contract stubs (VoxelMaterialTable, CentrifugeSystem, InterfacePort, SandPhysicsSystem, BreachMinigame, RigAICore)
+- 6 JSON schemas (rig, material, interaction, power, recipe, centrifuge)
+- 25 documentation files (game design, system specs, audit reports, roadmap)
+- 24 new tests, all passing
+Total: 884 tests, 0 failures.
