@@ -1,7 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 :: ---------------------------------------------------------------------------
-:: build.cmd — Build NovaForge from a Developer Command Prompt for VS 2022.
+:: build.cmd — Build NovaForge with MSBuild (VS 2022/2019).
+::
+:: Can be run from ANY Command Prompt — MSBuild is auto-located via
+:: vswhere.exe if it is not already on PATH.
 ::
 :: Usage:
 ::   build.cmd                Build Debug (default)
@@ -33,17 +36,33 @@ echo  NovaForge build started: %DATE% %TIME%                   >> "%LOGFILE%"
 echo ========================================================== >> "%LOGFILE%"
 
 :: Detect VS MSBuild --------------------------------------------------------
+:: Prefer msbuild already on PATH (Developer Command Prompt). Otherwise
+:: fall back to vswhere.exe to locate the VS 2022 (or 2019) C++ MSBuild.
+set "MSBUILD=msbuild.exe"
 where msbuild.exe >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo [ERROR] msbuild.exe not found.
-    echo         Open a "Developer Command Prompt for VS 2022" and try again.
-    echo         Do NOT use "dotnet build" — the .NET SDK MSBuild lacks C++ targets.
-    echo.
-    echo [ERROR] msbuild.exe not found. >> "%LOGFILE%"
-    echo Build log saved to: %LOGFILE%
-    pause
-    exit /b 1
+    set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if not exist "!VSWHERE!" set "VSWHERE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if exist "!VSWHERE!" (
+        for /f "usebackq delims=" %%i in (
+            `"!VSWHERE!" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`
+        ) do set "MSBUILD=%%i"
+    )
+    "!MSBUILD!" /version >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] MSBuild.exe not found.
+        echo         Make sure Visual Studio 2022 ^(or 2019^) with the
+        echo         "Desktop development with C++" workload is installed,
+        echo         OR open a "Developer Command Prompt for VS 2022" and retry.
+        echo         Do NOT use "dotnet build" -- the .NET SDK MSBuild lacks C++ targets.
+        echo.
+        echo [ERROR] MSBuild.exe not found. >> "%LOGFILE%"
+        echo Build log saved to: %LOGFILE%
+        pause
+        exit /b 1
+    )
+    echo [INFO] Located MSBuild via vswhere: !MSBUILD!
 )
 
 :: Parse arguments -----------------------------------------------------------
@@ -85,7 +104,7 @@ echo.
 echo === NovaForge %CONFIG% %TARGET% === >> "%LOGFILE%"
 echo. >> "%LOGFILE%"
 
-msbuild "%SLN_PATH%" /t:%TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /m %EXTRA_ARGS%
+"!MSBUILD!" "%SLN_PATH%" /t:%TARGET% /p:Configuration=%CONFIG% /p:Platform=x64 /m %EXTRA_ARGS%
 set BUILD_EXIT=!ERRORLEVEL!
 
 :: Also append to log (without blocking the console output above).
