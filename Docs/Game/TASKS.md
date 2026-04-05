@@ -449,6 +449,28 @@
 - [x] Validate: all AtlasUI validators pass
 - [x] Validate: Scripts/validate_project.sh reports 69/69 pass
 
+## Repo Consolidation — Phase C3 (Internal Consolidation)
+
+- [x] Create Archive/_AtlasToolingSuite/ with ARCHIVE_SUMMARY.md (C2 archive was missing)
+- [x] Integrate remaining Additions/ starter pack content into Source/UI/:
+  - AtlasUI.h umbrella header
+  - SimplePanel.h (concrete panel implementation)
+  - Widgets/Label.h (text label widget)
+  - Widgets/Tabs.h + Tabs.cpp (tab container widget)
+  - Widgets/StackPanel.h + StackPanel.cpp (stack layout widget)
+  - Widgets/WidgetKit.h (widget umbrella header)
+- [x] Update Source/UI/CMakeLists.txt (3 new .cpp files: AtlasUI, Tabs, StackPanel)
+- [x] Consolidate duplicate AtlasAI directories: Tools/AtlasAI/ → root AtlasAI/ canonical
+- [x] Merge ATLAS_AI_OVERVIEW.md into root AtlasAI/
+- [x] Deprecate legacy tool directories with clear forwarding READMEs:
+  - Tools/ArbiterAI/ → AtlasAI/Atlas_Arbiter/
+  - Tools/SwissAgent/ → AtlasAI/Atlas_SwissAgent/
+  - Tools/AtlasAI/ → AtlasAI/ (repo root)
+- [x] Scaffold archive stubs for remaining merge phases 3–11 (9 repos)
+- [x] Update Docs/CONSOLIDATION_PLAN.md with C3 tasks, archive inventory, canonical paths
+- [x] Update spaghetti audit: 6 items resolved, 2 deferred to workspace/future phases
+- [x] Update Docs/Game/TASKS.md with C3 phase tracking
+
 ## UI Migration — Phase U0 (AtlasUI Shell Standard)
 
 - [x] AtlasUI Shell Standard v1 spec (Docs/SpecRollup/02_ATLASUI_STANDARD.md)
