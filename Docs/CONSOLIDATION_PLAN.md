@@ -15,7 +15,7 @@ When a repo is fully merged, its contents are archived under `Archive/_RepoName/
 | 1 | MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
 | 2 | AtlasToolingSuite | Tool suite | ✅ Done |
 | 3 | Nova-Forge-Expeditions | Richest game codebase | ✅ Extracted |
-| 4 | Atlas-NovaForge | Engine+game merge attempt | ⬜ Queued |
+| 4 | Atlas-NovaForge | Engine+game merge attempt | ✅ Extracted |
 | 5 | AtlasForge | Original engine | ⬜ Queued |
 | 6 | NovaForge-Project | Game project structure + rules | ⬜ Queued |
 | 7 | SwissAgent | AI → Atlas_SwissAgent | ⬜ Queued |
@@ -103,7 +103,7 @@ as DEPRECATED with comments pointing to the new AtlasUI implementations.
 | `Archive/_MasterRepoRefactor/` | C1 | ✅ Archived |
 | `Archive/_AtlasToolingSuite/` | C2 | ✅ Archived |
 | `Archive/_Nova-Forge-Expeditions/` | 3 | ✅ Extracted |
-| `Archive/_Atlas-NovaForge/` | 4 | ⬜ Scaffolded |
+| `Archive/_Atlas-NovaForge/` | 4 | ✅ Extracted |
 | `Archive/_AtlasForge/` | 5 | ⬜ Scaffolded |
 | `Archive/_NovaForge-Project/` | 6 | ⬜ Scaffolded |
 | `Archive/_SwissAgent/` | 7 | ⬜ Scaffolded |
