@@ -28,7 +28,7 @@ void StackPanel::arrange(const NF::Rect& bounds) {
     size_t visibleCount = 0;
     for (const auto& child : m_children) if (child && child->isVisible()) ++visibleCount;
     if (visibleCount == 0) return;
-    const float totalSpacing = m_spacing * static_cast<float>(visibleCount > 0 ? visibleCount - 1 : 0);
+    const float totalSpacing = m_spacing * static_cast<float>(visibleCount - 1);
     const float slotExtent = m_orientation == StackOrientation::Vertical
         ? std::max(0.f, (bounds.h - totalSpacing) / static_cast<float>(visibleCount))
         : std::max(0.f, (bounds.w - totalSpacing) / static_cast<float>(visibleCount));

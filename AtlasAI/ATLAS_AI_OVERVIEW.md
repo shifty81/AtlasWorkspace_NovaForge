@@ -8,9 +8,9 @@ AtlasAI is the unified AI layer for the NovaForge + Atlas engine suite. It repla
 
 | Old Name     | Old Repo                  | New Name / Location         |
 |--------------|---------------------------|-----------------------------|
-| ArbiterAI    | shifty81/ArbiterAI        | Tools/AtlasAI               |
-| Arbiter      | shifty81/Arbiter          | Tools/AtlasAI               |
-| SwissAgent   | shifty81/SwissAgent       | Tools/AtlasAI/Atlas_SwissAgent |
+| ArbiterAI    | shifty81/ArbiterAI        | AtlasAI/Atlas_Arbiter       |
+| Arbiter      | shifty81/Arbiter          | AtlasAI/Atlas_Arbiter       |
+| SwissAgent   | shifty81/SwissAgent       | AtlasAI/Atlas_SwissAgent    |
 
 ## Subsystem Modules
 
@@ -33,15 +33,15 @@ Examples:
 ## Integration Points
 
 - Engine: `Source/AI/` (C++ runtime AI)
-- Tools: `Tools/AtlasAI/` (Python/JS/C# tooling)
+- Broker: `AtlasAI/` (repo root — canonical AI location)
 - Docs: `Docs/AI/`
 
 ## Status
 
 | Module              | Status        |
 |---------------------|---------------|
-| Atlas_Arbiter       | Migrating     |
-| Atlas_SwissAgent    | Migrating     |
+| Atlas_Arbiter       | Scaffolded    |
+| Atlas_SwissAgent    | Scaffolded    |
 | Atlas_NPC           | Planned       |
 | Atlas_Pathfinding   | Planned       |
 | Atlas_Dialogue      | Planned       |

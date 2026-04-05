@@ -5,11 +5,9 @@ namespace NF::UI::AtlasUI {
 
 void Tabs::addTab(std::string title, std::shared_ptr<IWidget> content) {
     m_tabs.push_back({std::move(title), std::move(content)});
-    if (!m_tabs.empty()) {
-        m_children.clear();
-        for (auto& tab : m_tabs) {
-            if (tab.content) m_children.push_back(tab.content);
-        }
+    m_children.clear();
+    for (auto& tab : m_tabs) {
+        if (tab.content) m_children.push_back(tab.content);
     }
 }
 
