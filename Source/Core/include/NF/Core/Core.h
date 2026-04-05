@@ -16,6 +16,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cassert>
+#include <mutex>
 
 namespace NF {
 
@@ -32,6 +33,8 @@ enum class LogLevel : uint8_t {
 
 class Logger {
 public:
+    using SinkCallback = std::function<void(LogLevel, std::string_view, std::string_view)>;
+
     static Logger& instance() {
         static Logger s;
         return s;
@@ -50,14 +53,53 @@ public:
         std::cout << std::format("[{:02}:{:02}:{:02}] [{}] [{}] {}\n",
             tm.tm_hour, tm.tm_min, tm.tm_sec,
             levelString(level), category, message);
+
+        // Notify registered sinks (thread-safe copy)
+        std::vector<SinkCallback> sinks;
+        {
+            std::lock_guard<std::mutex> lock(m_sinkMutex);
+            sinks = m_sinks;
+        }
+        for (auto& sink : sinks) {
+            if (sink) sink(level, category, message);
+        }
+    }
+
+    /// Register a callback that receives every log message.
+    /// Returns an ID that can be passed to removeSink().
+    size_t addSink(SinkCallback cb) {
+        std::lock_guard<std::mutex> lock(m_sinkMutex);
+        size_t id = m_nextSinkId++;
+        m_sinks.push_back(std::move(cb));
+        m_sinkIds.push_back(id);
+        return id;
+    }
+
+    /// Remove a previously registered sink by ID.
+    void removeSink(size_t id) {
+        std::lock_guard<std::mutex> lock(m_sinkMutex);
+        for (size_t i = 0; i < m_sinkIds.size(); ++i) {
+            if (m_sinkIds[i] == id) {
+                m_sinks.erase(m_sinks.begin() + static_cast<ptrdiff_t>(i));
+                m_sinkIds.erase(m_sinkIds.begin() + static_cast<ptrdiff_t>(i));
+                return;
+            }
+        }
     }
 
     void setMinLevel(LogLevel level) { m_minLevel = level; }
     LogLevel minLevel() const { return m_minLevel; }
 
+    /// Public accessor for the level string (used by log sinks for file output).
+    static constexpr const char* levelTag(LogLevel level) { return levelString(level); }
+
 private:
     Logger() = default;
     LogLevel m_minLevel = LogLevel::Info;
+    std::vector<SinkCallback> m_sinks;
+    std::vector<size_t> m_sinkIds;
+    size_t m_nextSinkId = 1;
+    mutable std::mutex m_sinkMutex;
 
     static constexpr const char* levelString(LogLevel level) {
         switch (level) {

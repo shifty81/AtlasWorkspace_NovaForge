@@ -32,10 +32,18 @@ target_compile_options(NF_CompileOptions INTERFACE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
 
-# Output directories
+# Output directories — applications land in bin/, tests in bin/Tests/
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Per-config output directories (Visual Studio / multi-config generators)
+foreach(CFG Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER ${CFG} CFG_UPPER)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CFG_UPPER} ${CMAKE_BINARY_DIR}/bin/${CFG})
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${CFG_UPPER} ${CMAKE_BINARY_DIR}/lib/${CFG})
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CFG_UPPER} ${CMAKE_BINARY_DIR}/lib/${CFG})
+endforeach()
 
 # ── Third-party packages ──────────────────────────────────────────
 find_package(imgui CONFIG QUIET)
