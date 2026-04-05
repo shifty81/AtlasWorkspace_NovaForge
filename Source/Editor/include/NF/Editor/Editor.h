@@ -9,6 +9,7 @@
 #include "NF/Input/Input.h"
 #include "NF/UI/UIWidgets.h"
 #include <filesystem>
+#include <fstream>
 #include <set>
 #include <deque>
 
@@ -668,6 +669,12 @@ public:
     [[nodiscard]] float topHeight()    const { return m_topHeight; }
     [[nodiscard]] float bottomHeight() const { return m_bottomHeight; }
 
+    // Setters for restoring persisted sizes
+    void setLeftWidth(float w)    { m_leftWidth    = std::clamp(w, kMinPanelSize, 600.f); }
+    void setRightWidth(float w)   { m_rightWidth   = std::clamp(w, kMinPanelSize, 600.f); }
+    void setTopHeight(float h)    { m_topHeight    = std::clamp(h, kMinPanelSize, 500.f); }
+    void setBottomHeight(float h) { m_bottomHeight = std::clamp(h, kMinPanelSize, 500.f); }
+
     static constexpr float kMinPanelSize = 100.f;
     static constexpr float kDefaultLeftWidth   = 250.f;
     static constexpr float kDefaultRightWidth  = 300.f;
@@ -1071,6 +1078,15 @@ public:
         if (m_messages.size() > kMaxMessages) {
             m_messages.erase(m_messages.begin());
         }
+    }
+
+    /// Called by the log sink to feed NF_LOG_* messages into the console.
+    void addLogMessage(LogLevel level, std::string_view category, std::string_view message) {
+        ConsoleMessageLevel cl = ConsoleMessageLevel::Info;
+        if (level == LogLevel::Warn)  cl = ConsoleMessageLevel::Warning;
+        if (level == LogLevel::Error || level == LogLevel::Fatal) cl = ConsoleMessageLevel::Error;
+        std::string text = std::string("[") + std::string(category) + "] " + std::string(message);
+        addMessage(text, cl, 0.f);
     }
 
     void clearMessages() { m_messages.clear(); }
@@ -2414,6 +2430,40 @@ public:
         // Load default hotkeys from registered commands
         m_hotkeyDispatcher.loadDefaults(m_commands);
 
+        // ── Register log sink to feed ConsolePanel ──────────────────
+        m_logSinkId = Logger::instance().addSink(
+            [this](LogLevel level, std::string_view category, std::string_view message) {
+                // Feed the console panel
+                for (auto& p : m_editorPanels) {
+                    if (auto* cp = dynamic_cast<ConsolePanel*>(p.get())) {
+                        cp->addLogMessage(level, category, message);
+                        break;
+                    }
+                }
+                // Write to log file
+                if (m_logFile.is_open()) {
+                    m_logFile << "[" << Logger::levelTag(level) << "] ["
+                              << category << "] " << message << "\n";
+                    m_logFile.flush();
+                }
+            });
+
+        // ── Open log file in Logs/ directory ────────────────────────
+        {
+            std::string logDir = m_projectPaths.resolvePath("Logs");
+            std::filesystem::create_directories(logDir);
+            std::string logPath = logDir + "/editor.log";
+            m_logFile.open(logPath, std::ios::out | std::ios::app);
+            if (m_logFile.is_open()) {
+                auto now = std::chrono::system_clock::now();
+                auto time = std::chrono::system_clock::to_time_t(now);
+                m_logFile << "\n=== Editor Session Started: " << std::ctime(&time);
+            }
+        }
+
+        // ── Load persisted layout from Saved/ ───────────────────────
+        loadEditorState();
+
         NF_LOG_INFO("Editor", "NovaForge Editor initialized");
         return true;
     }
@@ -2422,6 +2472,19 @@ public:
     bool init(int width, int height) { return init(width, height, "."); }
 
     void shutdown() {
+        // ── Save editor state before shutdown ───────────────────────
+        saveEditorState();
+
+        // ── Remove log sink ─────────────────────────────────────────
+        if (m_logSinkId != 0) {
+            Logger::instance().removeSink(m_logSinkId);
+            m_logSinkId = 0;
+        }
+        if (m_logFile.is_open()) {
+            m_logFile << "=== Editor Session Ended ===\n";
+            m_logFile.close();
+        }
+
         m_ideService.shutdown();
         m_editorPanels.clear();
         m_ui.shutdown();
@@ -2686,6 +2749,127 @@ private:
     EditorTheme m_theme;
     UIContext m_uiContext;
     ToolWindowManager m_toolManager;
+    size_t m_logSinkId = 0;
+    std::ofstream m_logFile;
+
+    // ── State persistence ───────────────────────────────────────
+
+    /// Resolve the Saved/ directory path relative to project root.
+    std::string savedDir() const {
+        std::string dir = m_projectPaths.resolvePath("Saved");
+        std::filesystem::create_directories(dir);
+        return dir;
+    }
+
+    /// Save editor state (panel visibility, dock sizes, settings) to Saved/editor_state.json.
+    void saveEditorState() {
+        std::string path = savedDir() + "/editor_state.json";
+        std::ofstream out(path);
+        if (!out.is_open()) return;
+
+        out << "{\n";
+        out << "  \"version\": 1,\n";
+        out << "  \"darkMode\": " << (m_editorSettings.settings().darkMode ? "true" : "false") << ",\n";
+        out << "  \"dockSizes\": {\n";
+        out << "    \"left\": " << m_dockLayout.leftWidth() << ",\n";
+        out << "    \"right\": " << m_dockLayout.rightWidth() << ",\n";
+        out << "    \"top\": " << m_dockLayout.topHeight() << ",\n";
+        out << "    \"bottom\": " << m_dockLayout.bottomHeight() << "\n";
+        out << "  },\n";
+        out << "  \"panels\": [\n";
+        auto& panels = m_dockLayout.panels();
+        for (size_t i = 0; i < panels.size(); ++i) {
+            out << "    {\"name\": \"" << panels[i].name
+                << "\", \"visible\": " << (panels[i].visible ? "true" : "false") << "}";
+            if (i + 1 < panels.size()) out << ",";
+            out << "\n";
+        }
+        out << "  ],\n";
+        out << "  \"lastWorldPath\": \"" << m_currentWorldPath << "\",\n";
+
+        // Save recent files
+        out << "  \"recentFiles\": [\n";
+        auto& recent = m_recentFiles.files();
+        for (size_t i = 0; i < recent.size(); ++i) {
+            out << "    \"" << recent[i] << "\"";
+            if (i + 1 < recent.size()) out << ",";
+            out << "\n";
+        }
+        out << "  ]\n";
+        out << "}\n";
+
+        NF_LOG_INFO("Editor", "Editor state saved to " + path);
+    }
+
+    /// Load editor state from Saved/editor_state.json if it exists.
+    void loadEditorState() {
+        std::string path = savedDir() + "/editor_state.json";
+        std::ifstream in(path);
+        if (!in.is_open()) {
+            NF_LOG_INFO("Editor", "No saved editor state found (first run)");
+            return;
+        }
+
+        std::string json((std::istreambuf_iterator<char>(in)),
+                          std::istreambuf_iterator<char>());
+
+        // Minimal JSON extraction — we use simple key scanning since
+        // the format is our own well-known structure.
+        auto extractFloat = [&](const std::string& key) -> float {
+            auto pos = json.find("\"" + key + "\"");
+            if (pos == std::string::npos) return -1.f;
+            pos = json.find(':', pos);
+            if (pos == std::string::npos) return -1.f;
+            return std::stof(json.substr(pos + 1));
+        };
+
+        auto extractBool = [&](const std::string& key) -> int {
+            auto pos = json.find("\"" + key + "\"");
+            if (pos == std::string::npos) return -1;
+            pos = json.find(':', pos);
+            if (pos == std::string::npos) return -1;
+            auto val = json.substr(pos + 1, 10);
+            if (val.find("true") != std::string::npos) return 1;
+            if (val.find("false") != std::string::npos) return 0;
+            return -1;
+        };
+
+        // Restore dark mode
+        int darkMode = extractBool("darkMode");
+        if (darkMode >= 0) {
+            m_editorSettings.setDarkMode(darkMode == 1);
+            m_editorSettings.applyTheme(m_theme);
+        }
+
+        // Restore dock sizes
+        float left = extractFloat("left");
+        float right = extractFloat("right");
+        float top = extractFloat("top");
+        float bottom = extractFloat("bottom");
+        if (left > 0.f)   m_dockLayout.setLeftWidth(left);
+        if (right > 0.f)  m_dockLayout.setRightWidth(right);
+        if (top > 0.f)    m_dockLayout.setTopHeight(top);
+        if (bottom > 0.f) m_dockLayout.setBottomHeight(bottom);
+
+        // Restore panel visibility
+        for (auto& dp : m_dockLayout.panels()) {
+            std::string key = "\"name\": \"" + dp.name + "\"";
+            auto pos = json.find(key);
+            if (pos != std::string::npos) {
+                auto vis = json.find("\"visible\"", pos);
+                if (vis != std::string::npos && vis < pos + 200) {
+                    auto colon = json.find(':', vis);
+                    if (colon != std::string::npos) {
+                        auto val = json.substr(colon + 1, 10);
+                        bool visible = val.find("true") != std::string::npos;
+                        m_dockLayout.setPanelVisible(dp.name, visible);
+                    }
+                }
+            }
+        }
+
+        NF_LOG_INFO("Editor", "Editor state restored from " + path);
+    }
 };
 
 // ── Property Editor ──────────────────────────────────────────────
