@@ -16,18 +16,18 @@ as the authoritative action list for bringing the repo to a production-ready sta
 ## Current State Summary
 
 - Engine phases 0–9: ✅ Complete
-- Game phases G1–G17: ✅ Complete
-- Game phases G18–G20: 🔄 In Progress
-- Build system: ✅ CMake 3.20 with presets
+- Game phases G1–G20: ✅ Complete (641 Catch2 tests)
+- Build system: ✅ CMake 3.20 with presets (NF_STANDALONE/NF_HOSTED)
 - Test suite: ✅ Catch2 v3.5.2, 13 test executables
-- Naming consistency: ❌ Legacy names (ArbiterAI, SwissAgent, Arbiter) still present
-- Project manifest: ❌ Missing `Project/project.atlas.json`
-- Hosted build mode: ❌ `NF_HOSTED` CMake option not implemented
-- Documentation: ❌ Missing Architecture, Gameplay, Systems docs
-- Directory stubs: ❌ Missing Logs/, Codex/, Content/Incoming/
-- VS2022 test build: ❌ `Catch2::Catch2WithMain` causes MSVC LNK4098 on VS generator
-- Program mains: ❌ No real Win32 window in Editor/Game programs
-- Season config: ❌ Missing Config/season.config.json
+- Naming consistency: ✅ AtlasAI canonical name established; AtlasAI/ directory created
+- Project manifest: ✅ `Project/project.atlas.json` exists and valid
+- Hosted build mode: ✅ `NF_HOSTED` / `NF_STANDALONE` CMake options implemented
+- Documentation: ✅ Architecture, Gameplay, Systems docs created
+- Directory stubs: ✅ Logs/, Codex/, Content/Incoming/ exist with .gitkeep
+- VS2022 test build: ✅ `catch_main.cpp` approach — uses `Catch2::Catch2` directly
+- Program mains: ✅ Real Win32 window in Editor with GDI double-buffer rendering
+- Season config: ✅ `Config/season.config.json` exists
+- Project validator: ✅ `Scripts/validate_project.sh` — 56 checks, all pass
 
 ---
 
@@ -39,15 +39,13 @@ as the authoritative action list for bringing the repo to a production-ready sta
 tool identities. The canonical name is `AtlasAI` for all AI broker functionality.
 **Action:** Create `Docs/Architecture/NAMING_CANON.md`. Update all READMEs in
 `Tools/ArbiterAI/` and `Tools/SwissAgent/`. Update README.md.
-**Status:** 🔄 Addressed in this pass
-
-### GAP 2 — Missing Project Manifest
+**Status:** ✅ Resolved — AtlasAI/ directory created; all READMEs updated; NAMING_CANON.md established
 **Severity:** HIGH
 **Problem:** `Project/project.atlas.json` does not exist. This is the authoritative
 contract required for Atlas Workspace hosted loading.
 **Action:** Create `Project/project.atlas.json` with full entrypoints, paths, build
 config, pipeline config, and atlas_workspace contract block.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — `Project/project.atlas.json` created with full contract
 
 ### GAP 3 — No Hosted Build Mode
 **Severity:** HIGH
@@ -55,7 +53,7 @@ config, pipeline config, and atlas_workspace contract block.
 Workspace controls the build, there is no way to disable executables by default.
 **Action:** Add `NF_STANDALONE` (ON) and `NF_HOSTED` (OFF) options. Gate
 `NF_BUILD_EDITOR`, `NF_BUILD_GAME`, `NF_BUILD_SERVER` defaults on `_NF_DEFAULT_BUILD_TARGETS`.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — NF_STANDALONE/NF_HOSTED options in CMakeLists.txt
 
 ### GAP 4 — VS2022 Test Build Failure (LNK4098)
 **Severity:** HIGH
@@ -64,7 +62,7 @@ Visual Studio generator, causing `LNK4098` linker warnings and potential test fa
 **Action:** Create `Tests/catch_main.cpp` with explicit `Catch::Session().run(argc, argv)`.
 Update all 13 test targets in `Tests/CMakeLists.txt` to use `Catch2::Catch2` and include
 `catch_main.cpp` directly.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — Tests/catch_main.cpp with Catch2::Catch2 (not WithMain)
 
 ### GAP 5 — No Real Win32 Window in Editor/Game
 **Severity:** MEDIUM
@@ -73,7 +71,7 @@ have no real Win32 window creation. The editor shows nothing on Windows — it i
 effectively headless.
 **Action:** Replace both mains with full Win32 window creation (double-buffered GDI),
 proper WndProc, message loop, and frame timing. Editor renders the full panel layout.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — Full Win32 window with GDI double-buffer, 7-panel layout
 
 ### GAP 6 — Game Phases G18–G20 Not Implemented
 **Severity:** HIGH
@@ -81,7 +79,7 @@ proper WndProc, message loop, and frame timing. Editor renders the full panel la
 are tracked in the roadmap but have no code or tests.
 **Action:** Implement G18, G19, G20 in `Source/Game/include/NF/Game/Game.h`.
 Add comprehensive tests to `Tests/Game/test_game.cpp`.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — G18 (Status Effects), G19 (Contracts & Bounties), G20 (Companion System) implemented with tests
 
 ### GAP 7 — Missing Architecture Documentation
 **Severity:** MEDIUM
@@ -90,19 +88,19 @@ The codebase has no single source of truth for naming, build modes, voxel pipeli
 hosted contract, or deferred workspace items.
 **Action:** Create: NAMING_CANON.md, CURRENT_DIRECTION.md, HOSTED_PROJECT_CONTRACT.md,
 BUILD_MODES.md, VOXEL_RENDER_PIPELINE.md, DEFERRED_TO_WORKSPACE.md.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — All architecture docs created (NAMING_CANON, CURRENT_DIRECTION, HOSTED_PROJECT_CONTRACT, BUILD_MODES, VOXEL_RENDER_PIPELINE, DEFERRED_TO_WORKSPACE)
 
 ### GAP 8 — Missing Gameplay Documentation
 **Severity:** MEDIUM
 **Problem:** No `Docs/Gameplay/` directory or R.I.G. system specification exists.
 **Action:** Create `Docs/Gameplay/RIG_SYSTEM.md`.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — `Docs/Gameplay/RIG_SYSTEM.md` created
 
 ### GAP 9 — Missing Systems Documentation
 **Severity:** MEDIUM
 **Problem:** No `Docs/Systems/` directory or GraphVM visual scripting documentation exists.
 **Action:** Create `Docs/Systems/VISUAL_SCRIPTING.md`.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — `Docs/Systems/VISUAL_SCRIPTING.md` created
 
 ### GAP 10 — Missing Directory Stubs
 **Severity:** LOW
@@ -110,14 +108,14 @@ BUILD_MODES.md, VOXEL_RENDER_PIPELINE.md, DEFERRED_TO_WORKSPACE.md.
 and `Content/Incoming/` are referenced in contracts and configs but do not exist
 as tracked directories.
 **Action:** Create `.gitkeep` files in each directory.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — All stubs created with .gitkeep
 
 ### GAP 11 — Missing Logger Format and Season Config
 **Severity:** LOW
 **Problem:** `Logs/build.logger` format is undocumented. `Config/season.config.json`
 does not exist despite season system being part of the game design.
 **Action:** Create `Logs/logger.format.md` and `Config/season.config.json`.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — `Logs/logger.format.md` and `Config/season.config.json` created
 
 ### GAP 12 — AtlasToolingSuite Reference in README
 **Severity:** LOW
@@ -126,11 +124,25 @@ canonical name is `Atlas Workspace`. The consolidation table still shows depreca
 repo names without proper canonical mapping.
 **Action:** Surgical README.md updates — replace deprecated names, add fleet note,
 remove ImGui references.
-**Status:** 🔄 Addressed in this pass
+**Status:** ✅ Resolved — README.md updated with canonical AtlasAI naming
 
 ---
 
-## Documentation Reset Required
+## Documentation Reset — Complete
+
+All required documents have been created:
+
+| File | Status |
+|---|---|
+| `Docs/Architecture/NAMING_CANON.md` | ✅ Created |
+| `Docs/Architecture/CURRENT_DIRECTION.md` | ✅ Created |
+| `Docs/Architecture/HOSTED_PROJECT_CONTRACT.md` | ✅ Created |
+| `Docs/Architecture/BUILD_MODES.md` | ✅ Created |
+| `Docs/Architecture/VOXEL_RENDER_PIPELINE.md` | ✅ Created |
+| `Docs/Architecture/DEFERRED_TO_WORKSPACE.md` | ✅ Created |
+| `Docs/Gameplay/RIG_SYSTEM.md` | ✅ Created |
+| `Docs/Systems/VISUAL_SCRIPTING.md` | ✅ Created |
+| `Logs/logger.format.md` | ✅ Created |
 
 The following documents need to be created (none existed before this audit):
 
@@ -161,11 +173,13 @@ The following documents need to be created (none existed before this audit):
 ## Success Condition
 
 The audit is resolved when:
-- [ ] `cmake --preset debug -DNF_BUILD_TESTS=ON && cmake --build --preset debug` succeeds
-- [ ] `ctest --preset debug` reports 0 failures
-- [ ] No source file references ArbiterAI, SwissAgent, or ImGui outside Archive/
-- [ ] `Project/project.atlas.json` exists and is valid JSON
-- [ ] All 12 GAPs above are marked ✅
+- [x] `cmake --preset debug -DNF_BUILD_TESTS=ON && cmake --build --preset debug` succeeds
+- [x] `ctest --preset debug` reports 0 failures (641 tests)
+- [x] No source file references ArbiterAI, SwissAgent, or ImGui outside Archive/
+- [x] `Project/project.atlas.json` exists and is valid JSON
+- [x] All 12 GAPs above are marked ✅
+- [x] `Scripts/validate_project.sh` reports 56/56 checks pass
+- [x] `AtlasAI/` directory structure established
 
 ---
 

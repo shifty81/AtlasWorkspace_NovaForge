@@ -19,7 +19,7 @@
 | **Phase 7** — AI & Tooling | SwissAgent, ArbiterAI, BlenderGenerator, ContractScanner, ReplayMinimizer | ✅ Done |
 | **Phase 8** — Custom IDE | Project-aware IDE: ProjectIndexer, CodeNavigator, BreadcrumbTrail, IDEPanel | ✅ Done |
 | **Phase 9** — Pipeline Core | NF::Pipeline: PipelineWatcher, Manifest, WatchLog, ChangeEvent (S0) | ✅ Done |
-| **Phase 10** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide, final audit | 🔄 In Progress |
+| **Phase 10** — Polish & CI | Documentation, GitHub Actions, Docker, modding guide, final audit | ✅ Done |
 | **Phase 11** — Suite Integration | Full tool suite wired through pipeline; AtlasAI broker enabled | ⬜ Queued |
 
 ---
@@ -47,7 +47,10 @@
 | **G15** — Player Progression | PlayerLevel (cap 50), SkillNode, SkillTree, ProgressionSystem | ✅ Done |
 | **G16** — Crafting System | CraftingRecipe, CraftingQueue FIFO, CraftingSystem level-gated | ✅ Done |
 | **G17** — Inventory & Equipment | ItemRarity×5, PlayerInventory (stacking), EquipmentLoadout | ✅ Done |
-| **G18** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G18** — Status Effects | StatusEffectType×8, AilmentStack, StatusEffectSystem | ✅ Done |
+| **G19** — Contracts & Bounties | ContractType×6, Contract lifecycle, BountyTarget, ContractBoard | ✅ Done |
+| **G20** — Companion System | CompanionRole×6, CompanionPersonality, CompanionManager (max 4) | ✅ Done |
+| **G21** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -71,8 +74,8 @@
 
 | Milestone | Source Repo | Status |
 |-----------|-------------|--------|
-| **C0** — MasterRepo seed | MasterRepo (v001) | 🔄 In Progress |
-| **C1** — MasterRepoRefactor | Structure + Atlas dirs | ⬜ Queued |
+| **C0** — MasterRepo seed | MasterRepo (v001) | ✅ Done |
+| **C1** — MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
 | **C2** — AtlasToolingSuite | Full tool suite | ⬜ Queued |
 | **C3** — Nova-Forge-Expeditions | Richest game codebase | ⬜ Queued |
 | **C4–C11** — Remaining repos | See `Docs/CONSOLIDATION_PLAN.md` | ⬜ Queued |

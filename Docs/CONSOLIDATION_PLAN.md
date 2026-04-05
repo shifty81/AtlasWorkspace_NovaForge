@@ -11,8 +11,8 @@ When a repo is fully merged, its contents are archived under `Archive/_RepoName/
 
 | Phase | Repo | Priority | Status |
 |-------|------|----------|--------|
-| 0 | MasterRepo | Structural seed | 🔄 In Progress |
-| 1 | MasterRepoRefactor | Structure + Atlas dirs | ⬜ Queued |
+| 0 | MasterRepo | Structural seed | ✅ Done |
+| 1 | MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
 | 2 | AtlasToolingSuite | Tool suite | ⬜ Queued |
 | 3 | Nova-Forge-Expeditions | Richest game codebase | ⬜ Queued |
 | 4 | Atlas-NovaForge | Engine+game merge attempt | ⬜ Queued |
