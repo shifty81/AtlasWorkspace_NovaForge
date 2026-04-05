@@ -513,7 +513,7 @@
 - [x] Write comprehensive tests for all migrated panels (40 new tests)
 - [x] All 8 AtlasUI panels register with PanelHost successfully
 
-## Repo Consolidation — Phase 3 (Nova-Forge-Expeditions Audit)
+## Repo Consolidation — Phase 3 (Nova-Forge-Expeditions Extraction)
 
 - [x] Audit source repo contents via GitHub API (~5,900 files)
 - [x] Read and analyze AUDIT.md (three-way merge decisions)
@@ -524,4 +524,17 @@
 - [x] Create Archive/_Nova-Forge-Expeditions/usable_snippets/ with code patterns
 - [x] Create Archive/_Nova-Forge-Expeditions/docs_archive/ with doc inventory
 - [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 3 marked as audited
-- [ ] Full content extraction pending (requires repo access for file-level merge)
+- [x] Full content extraction (1,708 files extracted from source repo):
+  - [x] 3A: 449 game systems → Source/Game/src/Systems/
+  - [x] 3B: 541 server headers → Source/Game/include/NF/Game/Server/
+  - [x] 3C: 548 game tests → Tests/Game/Server/
+  - [x] 3D: 36 PCG framework files → Source/Engine/src/PCG/
+  - [x] 3E: 28 rendering pipeline files → Source/Renderer/src/Pipeline/
+  - [x] 3F: 40 editor tool files → Source/Editor/src/Tools/
+  - [x] 3G: 8 gameplay module files → Source/Game/src/Modules/
+  - [x] 3H: 8 blender addon files → Tools/BlenderGenerator/blender-addon/
+  - [x] 3I: 40 unique docs → Docs/Nova-Forge-Expeditions/
+  - [x] 3J: 7 superseded AtlasUI files → Archive (reference only)
+  - [x] AUDIT.md + ROADMAP.md → Archive/_Nova-Forge-Expeditions/docs_archive/
+- [x] Build verification: 745 tests passing, no breakage
+- [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 3 marked as extracted

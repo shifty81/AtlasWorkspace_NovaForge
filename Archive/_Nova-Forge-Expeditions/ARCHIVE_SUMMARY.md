@@ -3,7 +3,7 @@
 **Archived:** 2026-04-05
 **Source:** https://github.com/shifty81/Nova-Forge-Expeditions
 **Merge Phase:** Phase 3
-**Status:** ✅ Audited — content mapped
+**Status:** ✅ Extracted — 1,708 files merged into tempnovaforge
 
 ## Description
 
@@ -78,14 +78,22 @@ This repo represents a prior consolidation of 3 other repos:
 - [x] Audit source repo contents
 - [x] Identify usable code, docs, and assets
 - [x] Map content to canonical tempnovaforge locations
-- [ ] Extract game systems (449 systems) into Source/Game/
-- [ ] Extract PCG framework into Source/Engine/
-- [ ] Extract rendering additions into Source/Renderer/
-- [ ] Merge Blender addon updates into Tools/BlenderGenerator/
-- [ ] Merge unique docs into Docs/
-- [ ] Update CONSOLIDATION_PLAN.md — Phase 3 marked done
-- [ ] Update TASKS.md
-- [ ] Verify no regressions (build + tests)
+- [x] Extract game systems (449 systems) into Source/Game/src/Systems/
+- [x] Extract server headers (541 files) into Source/Game/include/NF/Game/Server/
+- [x] Extract game tests (548 tests) into Tests/Game/Server/
+- [x] Extract PCG framework (36 files) into Source/Engine/src/PCG/
+- [x] Extract rendering pipeline (28 files) into Source/Renderer/src/Pipeline/
+- [x] Extract editor tools (40 files) into Source/Editor/src/Tools/
+- [x] Extract gameplay modules (8 files) into Source/Game/src/Modules/
+- [x] Merge Blender addon (8 files) into Tools/BlenderGenerator/blender-addon/
+- [x] Merge unique docs (40 files) into Docs/Nova-Forge-Expeditions/
+- [x] Archive superseded AtlasUI (7 files) → superseded/engine_ui_atlas/
+- [x] Archive AUDIT.md + ROADMAP.md → docs_archive/
+- [x] Update CONSOLIDATION_PLAN.md — Phase 3 marked extracted
+- [x] Update TASKS.md
+- [x] Verify no regressions (build + tests: 745/745 passing)
+
+**Total extracted: 1,708 files**
 
 ## Original Repo
 

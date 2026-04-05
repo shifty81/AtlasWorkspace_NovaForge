@@ -14,7 +14,7 @@ When a repo is fully merged, its contents are archived under `Archive/_RepoName/
 | 0 | MasterRepo | Structural seed | ✅ Done |
 | 1 | MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
 | 2 | AtlasToolingSuite | Tool suite | ✅ Done |
-| 3 | Nova-Forge-Expeditions | Richest game codebase | ✅ Audited |
+| 3 | Nova-Forge-Expeditions | Richest game codebase | ✅ Extracted |
 | 4 | Atlas-NovaForge | Engine+game merge attempt | ⬜ Queued |
 | 5 | AtlasForge | Original engine | ⬜ Queued |
 | 6 | NovaForge-Project | Game project structure + rules | ⬜ Queued |
@@ -38,6 +38,33 @@ content that was already present in the repo but not yet landed in the main tree
 | C3-5 | Scaffold archive stubs for phases 3–11 | ✅ Done — `Archive/_RepoName/ARCHIVE_SUMMARY.md` for each |
 | C3-6 | Update CMakeLists.txt with new sources | ✅ Done — 3 new .cpp files |
 | C3-7 | Update tracking docs | ✅ Done |
+
+## Phase 3 Extraction (Nova-Forge-Expeditions)
+
+Phase 3 performed a file-level extraction of unique content from `shifty81/Nova-Forge-Expeditions`
+(~5,900 files, three-way merge of AtlasForge + NovaForge + Atlas-NovaForge).
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 3A | `cpp_server/src/systems/` | `Source/Game/src/Systems/` | 449 | ✅ Extracted |
+| 3B | `cpp_server/include/` | `Source/Game/include/NF/Game/Server/` | 541 | ✅ Extracted |
+| 3C | `cpp_server/tests/` | `Tests/Game/Server/` | 548 | ✅ Extracted |
+| 3D | `engine/procedural/` | `Source/Engine/src/PCG/` | 36 | ✅ Extracted |
+| 3E | `engine/render/` | `Source/Renderer/src/Pipeline/` | 28 | ✅ Extracted |
+| 3F | `engine/tools/` | `Source/Editor/src/Tools/` | 40 | ✅ Extracted |
+| 3G | `modules/atlas_gameplay/` | `Source/Game/src/Modules/` | 8 | ✅ Extracted |
+| 3H | `tools/blender-addon/` | `Tools/BlenderGenerator/blender-addon/` | 8 | ✅ Extracted |
+| 3I | `docs/` (unique) | `Docs/Nova-Forge-Expeditions/` | 40 | ✅ Extracted |
+| 3J | `engine/ui/atlas/` | `Archive/_Nova-Forge-Expeditions/superseded/` | 7 | ✅ Archived |
+
+**Total extracted: 1,708 files**
+
+**Note:** Extracted files use `atlas::` namespace conventions from the source repo.
+They are not yet compiled into the tempnovaforge build. Future refactoring work includes:
+- Namespace migration: `atlas::` → `NF::` (for files that will be compiled)
+- Include path adaptation to match tempnovaforge conventions
+- CMakeLists.txt wiring for active compilation
+- Game system template migration (`SingleComponentSystem<C>` per ROADMAP Phase A1)
 
 ## Archive Protocol
 
@@ -75,7 +102,7 @@ as DEPRECATED with comments pointing to the new AtlasUI implementations.
 | `Archive/_MasterRepo/` | C0 | ✅ Archived |
 | `Archive/_MasterRepoRefactor/` | C1 | ✅ Archived |
 | `Archive/_AtlasToolingSuite/` | C2 | ✅ Archived |
-| `Archive/_Nova-Forge-Expeditions/` | 3 | ✅ Audited |
+| `Archive/_Nova-Forge-Expeditions/` | 3 | ✅ Extracted |
 | `Archive/_Atlas-NovaForge/` | 4 | ⬜ Scaffolded |
 | `Archive/_AtlasForge/` | 5 | ⬜ Scaffolded |
 | `Archive/_NovaForge-Project/` | 6 | ⬜ Scaffolded |
