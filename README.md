@@ -1,39 +1,37 @@
-# NovaForge — Unified Monorepo
+# NovaForge — Atlas Engine Suite
+> **Active Development Repo** | All projects converging here
 
-> **One repo. Engine. Editor Suite. Game. AI Broker. Tools. Everything.**
-> C++20 · Python · CMake · GPL-3.0
+**tempnovaforge** is the single canonical repository for the entire NovaForge game + Atlas engine suite.
 
----
+[![Status](https://img.shields.io/badge/status-active%20convergence-orange)]()
+[![Engine](https://img.shields.io/badge/engine-AtlasForge-blue)]()
+[![Language](https://img.shields.io/badge/language-C%2B%2B%2FPython-brightgreen)]()
 
-## 🔄 REPO RESET IN PROGRESS
+## What is this?
 
-> **MasterRepo (v001) is the structural baseline. Everything converges here into `tempnovaforge`.**
-> All other repos are being audited, refactored, and merged in. Each completed merge lands in `Archive/`.
+This repo is the merger target for 12+ repos being consolidated into one coherent project:
+- **Atlas Engine** (C++ game engine: rendering, physics, audio, input, networking, animation)
+- **NovaForge Game** (voxel space game built on Atlas Engine)
+- **AtlasAI** (unified AI tooling: Arbiter + SwissAgent + NPC runtime)
+- **Atlas Editor** (level/world editor, formerly MasterRepoV001)
+- **Atlas Tools** (BlenderGenerator, ContractScanner, ReplayMinimizer)
 
-### Overall Consolidation Progress
+## Quick Navigation
 
-```
-████████░░░░░░░░░░░░░░░░░░░░░░░░  8%   Phase 0 in progress
-```
+| Area | Location |
+|------|----------|
+| Engine source | `Source/` |
+| Game source | `Source/Game/` |
+| Editor | `Source/Editor/` |
+| AI Tools | `Tools/AtlasAI/` |
+| Documentation | `Docs/` |
+| Roadmap | `Docs/roadmap.md` |
+| Architecture | `Docs/Architecture/` |
+| Archives | `Archive/` |
 
-| # | Repo | Status | Archive Ready |
-|---|------|--------|---------------|
-| 0 | **MasterRepo** ← structural seed | 🔄 In Progress | ⬜ |
-| 1 | **MasterRepoRefactor** | ⬜ Queued | ⬜ |
-| 2 | **AtlasToolingSuite** | ⬜ Queued | ⬜ |
-| 3 | **Nova-Forge-Expeditions** | ⬜ Queued | ⬜ |
-| 4 | **Atlas-NovaForge** | ⬜ Queued | ⬜ |
-| 5 | **AtlasForge** | ⬜ Queued | ⬜ |
-| 6 | **NovaForge-Project** | ⬜ Queued | ⬜ |
-| 7 | **SwissAgent → AtlasAI** | ⬜ Queued | ⬜ |
-| 8 | **ArbiterAI → AtlasAI** | ⬜ Queued | ⬜ |
-| 9 | **Arbiter → AtlasAI** | ⬜ Queued | ⬜ |
-| 10 | **AtlasForge-EveOffline** | ⬜ Queued | ⬜ |
-| 11 | **Blender-Generator → Atlas_BlenderGen** | ⬜ Queued | ⬜ |
+## Roadmap
 
-**Legend:** ✅ Done · 🔄 In Progress · ⬜ Queued · 📦 Archived
-
-> Full merge plan and per-repo action items: [`Docs/CONSOLIDATION_PLAN.md`](Docs/CONSOLIDATION_PLAN.md)
+See [`Docs/roadmap.md`](Docs/roadmap.md) for the full convergence plan.
 
 ---
 
