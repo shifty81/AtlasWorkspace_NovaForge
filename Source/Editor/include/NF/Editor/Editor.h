@@ -7,6 +7,7 @@
 #include "NF/Game/Game.h"
 #include "NF/GraphVM/GraphVM.h"
 #include "NF/Input/Input.h"
+#include "NF/UI/UIWidgets.h"
 #include <filesystem>
 #include <set>
 #include <deque>
@@ -476,6 +477,43 @@ struct EditorTheme {
         t.propertyValue       = 0x1E1E1EFF;
         return t;
     }
+
+    UITheme toUITheme() const {
+        UITheme t;
+        t.panelBackground    = panelBackground;
+        t.panelHeader        = panelHeader;
+        t.panelBorder        = panelBorder;
+        t.panelText          = panelText;
+        t.selectionHighlight = selectionHighlight;
+        t.selectionBorder    = selectionBorder;
+        t.hoverHighlight     = hoverHighlight;
+        t.inputBackground    = inputBackground;
+        t.inputBorder        = inputBorder;
+        t.inputText          = inputText;
+        t.inputFocusBorder   = inputFocusBorder;
+        t.buttonBackground   = buttonBackground;
+        t.buttonHover        = buttonHover;
+        t.buttonPressed      = buttonPressed;
+        t.buttonText         = buttonText;
+        t.buttonDisabledText = buttonDisabledText;
+        t.toolbarBackground  = toolbarBackground;
+        t.toolbarSeparator   = toolbarSeparator;
+        t.statusBarBackground= statusBarBackground;
+        t.statusBarText      = statusBarText;
+        t.viewportBackground = viewportBackground;
+        t.gridColor          = gridColor;
+        t.propertyLabel      = propertyLabel;
+        t.propertyValue      = propertyValue;
+        t.propertySeparator  = propertySeparator;
+        t.dirtyIndicator     = dirtyIndicator;
+        t.fontSize           = fontSize;
+        t.headerFontSize     = headerFontSize;
+        t.smallFontSize      = smallFontSize;
+        t.panelPadding       = panelPadding;
+        t.itemSpacing        = itemSpacing;
+        t.sectionSpacing     = sectionSpacing;
+        return t;
+    }
 };
 
 // ── DockLayout ───────────────────────────────────────────────────
@@ -523,10 +561,10 @@ public:
         for (auto& p : m_panels) {
             if (!p.visible) continue;
             switch (p.slot) {
-                case DockSlot::Left:   leftWidth   = kDefaultLeftWidth;   break;
-                case DockSlot::Right:  rightWidth  = kDefaultRightWidth;  break;
-                case DockSlot::Top:    topHeight   = kDefaultTopHeight;   break;
-                case DockSlot::Bottom: bottomHeight = kDefaultBottomHeight; break;
+                case DockSlot::Left:   leftWidth   = m_leftWidth;   break;
+                case DockSlot::Right:  rightWidth  = m_rightWidth;  break;
+                case DockSlot::Top:    topHeight   = m_topHeight;   break;
+                case DockSlot::Bottom: bottomHeight = m_bottomHeight; break;
                 default: break;
             }
         }
@@ -560,6 +598,77 @@ public:
     [[nodiscard]] size_t panelCount() const { return m_panels.size(); }
     [[nodiscard]] const std::vector<DockPanel>& panels() const { return m_panels; }
 
+    static constexpr int kDockSlotCount = 5;
+
+    // ── Splitter resizing ────────────────────────────────────────
+    void beginResize(DockSlot slot, float mousePos) {
+        m_resizingSlot = slot;
+        m_resizeStart = mousePos;
+        m_resizing = true;
+    }
+
+    void updateResize(float mousePos) {
+        if (!m_resizing) return;
+        float delta = mousePos - m_resizeStart;
+        m_resizeStart = mousePos;
+        switch (m_resizingSlot) {
+            case DockSlot::Left:   m_leftWidth   = std::clamp(m_leftWidth + delta, kMinPanelSize, 600.f); break;
+            case DockSlot::Right:  m_rightWidth  = std::clamp(m_rightWidth - delta, kMinPanelSize, 600.f); break;
+            case DockSlot::Bottom: m_bottomHeight = std::clamp(m_bottomHeight - delta, kMinPanelSize, 500.f); break;
+            case DockSlot::Top:    m_topHeight   = std::clamp(m_topHeight + delta, kMinPanelSize, 500.f); break;
+            default: break;
+        }
+    }
+
+    void endResize() { m_resizing = false; }
+    [[nodiscard]] bool isResizing() const { return m_resizing; }
+    [[nodiscard]] DockSlot resizingSlot() const { return m_resizingSlot; }
+
+    // Reset to defaults
+    void resetSizes() {
+        m_leftWidth   = kDefaultLeftWidth;
+        m_rightWidth  = kDefaultRightWidth;
+        m_topHeight   = kDefaultTopHeight;
+        m_bottomHeight = kDefaultBottomHeight;
+    }
+
+    // ── Tab groups ───────────────────────────────────────────────
+    void addTab(const std::string& panelName, DockSlot slot) {
+        m_tabGroups[static_cast<int>(slot)].push_back(panelName);
+    }
+
+    [[nodiscard]] std::string activeTab(DockSlot slot) const {
+        int idx = static_cast<int>(slot);
+        auto it = m_activeTabIndex.find(idx);
+        int tabIdx = (it != m_activeTabIndex.end()) ? it->second : 0;
+        if (idx < kDockSlotCount && tabIdx < static_cast<int>(m_tabGroups[idx].size())) {
+            return m_tabGroups[idx][static_cast<size_t>(tabIdx)];
+        }
+        return {};
+    }
+
+    void selectTab(const std::string& panelName) {
+        for (int s = 0; s < kDockSlotCount; ++s) {
+            for (size_t i = 0; i < m_tabGroups[s].size(); ++i) {
+                if (m_tabGroups[s][i] == panelName) {
+                    m_activeTabIndex[s] = static_cast<int>(i);
+                    return;
+                }
+            }
+        }
+    }
+
+    [[nodiscard]] const std::vector<std::string>& tabGroup(DockSlot slot) const {
+        return m_tabGroups[static_cast<int>(slot)];
+    }
+
+    // Accessors for current sizes
+    [[nodiscard]] float leftWidth()    const { return m_leftWidth; }
+    [[nodiscard]] float rightWidth()   const { return m_rightWidth; }
+    [[nodiscard]] float topHeight()    const { return m_topHeight; }
+    [[nodiscard]] float bottomHeight() const { return m_bottomHeight; }
+
+    static constexpr float kMinPanelSize = 100.f;
     static constexpr float kDefaultLeftWidth   = 250.f;
     static constexpr float kDefaultRightWidth  = 300.f;
     static constexpr float kDefaultTopHeight   = 200.f;
@@ -567,6 +676,15 @@ public:
 
 private:
     std::vector<DockPanel> m_panels;
+    float m_leftWidth    = kDefaultLeftWidth;
+    float m_rightWidth   = kDefaultRightWidth;
+    float m_topHeight    = kDefaultTopHeight;
+    float m_bottomHeight = kDefaultBottomHeight;
+    bool  m_resizing     = false;
+    DockSlot m_resizingSlot = DockSlot::Center;
+    float m_resizeStart  = 0.f;
+    std::vector<std::string> m_tabGroups[kDockSlotCount];  // indexed by DockSlot
+    std::unordered_map<int, int> m_activeTabIndex;
 };
 
 // ── EditorPanel (abstract) ───────────────────────────────────────
@@ -578,7 +696,8 @@ public:
     [[nodiscard]] virtual const std::string& name() const = 0;
     [[nodiscard]] virtual DockSlot slot() const = 0;
     virtual void update(float dt) = 0;
-    virtual void render(const UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) = 0;
+    virtual void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) = 0;
+    virtual void renderUI(UIContext& ctx, const Rect& bounds) { (void)ctx; (void)bounds; }
 
     [[nodiscard]] bool isVisible() const { return m_visible; }
     void setVisible(bool v) { m_visible = v; }
@@ -659,7 +778,43 @@ public:
     [[nodiscard]] const std::string& name() const override { return m_name; }
     [[nodiscard]] DockSlot slot() const override { return DockSlot::Center; }
     void update(float /*dt*/) override {}
-    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, theme.viewportBackground);
+        // Grid overlay
+        if (m_gridEnabled) {
+            float step = 40.f;
+            for (float gx = bounds.x; gx < bounds.x + bounds.w; gx += step)
+                ui.drawRect({gx, bounds.y, 1.f, bounds.h}, theme.gridColor);
+            for (float gy = bounds.y; gy < bounds.y + bounds.h; gy += step)
+                ui.drawRect({bounds.x, gy, bounds.w, 1.f}, theme.gridColor);
+        }
+        // Camera info overlay
+        char camText[64];
+        std::snprintf(camText, sizeof(camText), "Cam: %.1f, %.1f, %.1f",
+                      m_cameraPos.x, m_cameraPos.y, m_cameraPos.z);
+        ui.drawText(bounds.x + 8.f, bounds.y + bounds.h - 20.f, camText, 0x888888FF);
+        // Tool mode indicator
+        const char* modes[] = {"Select", "Move", "Rotate", "Scale", "Paint", "Erase"};
+        ui.drawText(bounds.x + 8.f, bounds.y + 8.f,
+                    modes[static_cast<int>(m_toolMode)], 0xAAAAAAFF);
+        // Render mode indicator
+        const char* rmodes[] = {"Shaded", "Wireframe", "Unlit"};
+        ui.drawText(bounds.x + bounds.w - 80.f, bounds.y + 8.f,
+                    rmodes[static_cast<int>(m_renderMode)], 0x888888FF);
+        // Center label
+        const char* vpLabel = "[ 3D Viewport ]";
+        float labelW = 15.f * 8.f;
+        ui.drawText(bounds.x + (bounds.w - labelW) * 0.5f,
+                    bounds.y + (bounds.h - 14.f) * 0.5f, vpLabel, 0x444444FF);
+    }
+
+    void renderUI(UIContext& ctx, const Rect& bounds) override {
+        (void)bounds;
+        // Viewport-specific UI overlays rendered through widget system
+        ctx.beginHorizontal();
+        if (ctx.button("Grid", 50.f)) { m_gridEnabled = !m_gridEnabled; }
+        ctx.endHorizontal();
+    }
 
     // Called by EditorApp::update(dt, input) each frame.
     // Activates fly-camera only while right mouse button is held.
@@ -715,7 +870,54 @@ public:
     [[nodiscard]] const std::string& name() const override { return m_name; }
     [[nodiscard]] DockSlot slot() const override { return DockSlot::Right; }
     void update(float /*dt*/) override {}
-    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, theme.panelBackground);
+        Rect hdr{bounds.x, bounds.y, bounds.w, 22.f};
+        ui.drawRect(hdr, theme.panelHeader);
+        ui.drawText(bounds.x + 8.f, bounds.y + 4.f, "Inspector", theme.panelText);
+        ui.drawRectOutline(bounds, theme.panelBorder, 1.f);
+
+        float y = bounds.y + 26.f;
+        if (m_selection && m_selection->hasSelection()) {
+            EntityID id = m_selection->primarySelection();
+            char idBuf[32];
+            std::snprintf(idBuf, sizeof(idBuf), "Entity #%u", id);
+            ui.drawText(bounds.x + 8.f, y, idBuf, theme.panelText);
+            y += 20.f;
+            ui.drawRect({bounds.x + 8.f, y, bounds.w - 16.f, 1.f}, theme.propertySeparator);
+            y += 8.f;
+            ui.drawText(bounds.x + 8.f, y, "Transform", theme.propertyLabel);
+            y += 18.f;
+            const char* axes[] = {"X: 0.00", "Y: 0.00", "Z: 0.00"};
+            for (auto* a : axes) {
+                ui.drawText(bounds.x + 16.f, y, a, theme.propertyValue);
+                y += 16.f;
+            }
+        } else {
+            ui.drawText(bounds.x + 8.f, y, "No entity selected", theme.propertyLabel);
+        }
+    }
+
+    void renderUI(UIContext& ctx, const Rect& bounds) override {
+        ctx.beginPanel("Inspector", bounds);
+        if (m_selection && m_selection->hasSelection()) {
+            char idBuf[32];
+            std::snprintf(idBuf, sizeof(idBuf), "Entity #%u", m_selection->primarySelection());
+            ctx.headerLabel(idBuf);
+            ctx.separator();
+            bool tExpanded = true;
+            if (ctx.treeNode("Transform", tExpanded)) {
+                ctx.indent(12.f);
+                ctx.label("X: 0.00");
+                ctx.label("Y: 0.00");
+                ctx.label("Z: 0.00");
+                ctx.unindent(12.f);
+            }
+        } else {
+            ctx.label("No entity selected");
+        }
+        ctx.endPanel();
+    }
 
     [[nodiscard]] SelectionService* selectionService() const { return m_selection; }
     void setSelectionService(SelectionService* s) { m_selection = s; }
@@ -739,7 +941,50 @@ public:
     [[nodiscard]] const std::string& name() const override { return m_name; }
     [[nodiscard]] DockSlot slot() const override { return DockSlot::Left; }
     void update(float /*dt*/) override {}
-    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, theme.panelBackground);
+        Rect hdr{bounds.x, bounds.y, bounds.w, 22.f};
+        ui.drawRect(hdr, theme.panelHeader);
+        ui.drawText(bounds.x + 8.f, bounds.y + 4.f, "Hierarchy", theme.panelText);
+        ui.drawRectOutline(bounds, theme.panelBorder, 1.f);
+
+        float y = bounds.y + 26.f;
+        // Search filter display
+        if (!m_searchFilter.empty()) {
+            ui.drawText(bounds.x + 8.f, y, "Filter: " + m_searchFilter, theme.propertyLabel);
+            y += 18.f;
+        }
+        // Entity list
+        for (auto id : m_entityList) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "Entity #%u", id);
+            bool selected = m_selection && m_selection->isSelected(id);
+            if (selected) {
+                ui.drawRect({bounds.x, y, bounds.w, 18.f}, theme.selectionHighlight);
+            }
+            ui.drawText(bounds.x + 16.f, y + 2.f, buf,
+                         selected ? theme.selectionBorder : theme.panelText);
+            y += 18.f;
+            if (y > bounds.y + bounds.h - 4.f) break;
+        }
+    }
+
+    void renderUI(UIContext& ctx, const Rect& bounds) override {
+        ctx.beginPanel("Hierarchy", bounds);
+        ctx.textInput("Search", m_searchFilter);
+        ctx.separator();
+        float contentH = static_cast<float>(m_entityList.size()) * 20.f;
+        Rect scrollR{bounds.x, bounds.y + 60.f, bounds.w, bounds.h - 64.f};
+        ctx.beginScrollArea("hierarchy_scroll", scrollR, contentH);
+        for (auto id : m_entityList) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "Entity #%u", id);
+            bool expanded = true;
+            ctx.treeNode(buf, expanded);
+        }
+        ctx.endScrollArea();
+        ctx.endPanel();
+    }
 
     [[nodiscard]] SelectionService* selectionService() const { return m_selection; }
     void setSelectionService(SelectionService* s) { m_selection = s; }
@@ -772,7 +1017,42 @@ public:
     [[nodiscard]] const std::string& name() const override { return m_name; }
     [[nodiscard]] DockSlot slot() const override { return DockSlot::Bottom; }
     void update(float /*dt*/) override {}
-    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, 0x1A1A1AFF);
+        Rect hdr{bounds.x, bounds.y, bounds.w, 22.f};
+        ui.drawRect(hdr, theme.panelHeader);
+        ui.drawText(bounds.x + 8.f, bounds.y + 4.f, "Console", theme.panelText);
+        ui.drawRectOutline(bounds, theme.panelBorder, 1.f);
+
+        float y = bounds.y + 26.f;
+        for (auto& msg : m_messages) {
+            if (y > bounds.y + bounds.h - 4.f) break;
+            uint32_t color = theme.panelText;
+            if (msg.level == ConsoleMessageLevel::Warning) color = 0xE8A435FF;
+            if (msg.level == ConsoleMessageLevel::Error)   color = 0xF44747FF;
+            ui.drawText(bounds.x + 8.f, y, msg.text, color);
+            y += 16.f;
+        }
+    }
+
+    void renderUI(UIContext& ctx, const Rect& bounds) override {
+        ctx.beginPanel("Console", bounds);
+        ctx.beginHorizontal();
+        if (ctx.button("Clear")) clearMessages();
+        ctx.endHorizontal();
+        ctx.separator();
+        float contentH = static_cast<float>(m_messages.size()) * 18.f;
+        Rect scrollR{bounds.x, bounds.y + 60.f, bounds.w, bounds.h - 64.f};
+        ctx.beginScrollArea("console_scroll", scrollR, contentH);
+        for (auto& msg : m_messages) {
+            uint32_t color = 0;
+            if (msg.level == ConsoleMessageLevel::Warning) color = 0xE8A435FF;
+            else if (msg.level == ConsoleMessageLevel::Error) color = 0xF44747FF;
+            ctx.label(msg.text, color);
+        }
+        ctx.endScrollArea();
+        ctx.endPanel();
+    }
 
     void addMessage(const std::string& text, ConsoleMessageLevel level, float timestamp) {
         ConsoleMessage msg;
@@ -808,7 +1088,44 @@ public:
     [[nodiscard]] const std::string& name() const override { return m_name; }
     [[nodiscard]] DockSlot slot() const override { return DockSlot::Left; }
     void update(float /*dt*/) override {}
-    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, theme.panelBackground);
+        Rect hdr{bounds.x, bounds.y, bounds.w, 22.f};
+        ui.drawRect(hdr, theme.panelHeader);
+        ui.drawText(bounds.x + 8.f, bounds.y + 4.f, "Content Browser", theme.panelText);
+        ui.drawRectOutline(bounds, theme.panelBorder, 1.f);
+
+        float y = bounds.y + 26.f;
+        if (m_browser) {
+            ui.drawText(bounds.x + 8.f, y, m_browser->currentPath(), theme.propertyLabel);
+            y += 18.f;
+            for (auto& entry : m_browser->entries()) {
+                if (y > bounds.y + bounds.h - 4.f) break;
+                std::string icon = entry.isDirectory ? "[D] " : "[F] ";
+                ui.drawText(bounds.x + 16.f, y, icon + entry.name, theme.panelText);
+                y += 18.f;
+            }
+        }
+    }
+
+    void renderUI(UIContext& ctx, const Rect& bounds) override {
+        ctx.beginPanel("Content Browser", bounds);
+        if (m_browser) {
+            ctx.label(m_browser->currentPath());
+            ctx.beginHorizontal();
+            if (ctx.button("Up")) m_browser->navigateUp();
+            ctx.endHorizontal();
+            ctx.separator();
+            for (auto& entry : m_browser->entries()) {
+                std::string icon = entry.isDirectory ? "[D] " : "[F] ";
+                if (ctx.button(icon + entry.name)) {
+                    if (entry.isDirectory)
+                        m_browser->navigateTo(entry.name);
+                }
+            }
+        }
+        ctx.endPanel();
+    }
 
     [[nodiscard]] ContentBrowser* contentBrowser() const { return m_browser; }
     void setContentBrowser(ContentBrowser* b) { m_browser = b; }
@@ -1123,7 +1440,24 @@ public:
     [[nodiscard]] const std::string& name() const override { return m_name; }
     [[nodiscard]] DockSlot slot() const override { return DockSlot::Center; }
     void update(float /*dt*/) override {}
-    void render(const UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, theme.panelBackground);
+        Rect hdr{bounds.x, bounds.y, bounds.w, 22.f};
+        ui.drawRect(hdr, theme.panelHeader);
+        ui.drawText(bounds.x + 8.f, bounds.y + 4.f, "IDE", theme.panelText);
+        ui.drawRectOutline(bounds, theme.panelBorder, 1.f);
+
+        float y = bounds.y + 30.f;
+        if (!searchQuery.empty()) {
+            ui.drawText(bounds.x + 8.f, y, "Search: " + searchQuery, theme.propertyLabel);
+            y += 18.f;
+        }
+        for (auto& r : searchResults) {
+            if (y > bounds.y + bounds.h - 4.f) break;
+            ui.drawText(bounds.x + 8.f, y, r.symbolName + " @ " + r.filePath, theme.panelText);
+            y += 16.f;
+        }
+    }
 
     [[nodiscard]] ProjectIndexer* indexer() const { return m_indexer; }
     [[nodiscard]] CodeNavigator* navigator() const { return m_navigator; }
@@ -1514,16 +1848,13 @@ public:
     DockSlot slot() const override { return DockSlot::Center; }
     void update(float /*dt*/) override {}
 
-    void render(const UIRenderer& ui, const Rect& bounds,
+    void render(UIRenderer& ui, const Rect& bounds,
                 const EditorTheme& theme) override {
-        // UIRenderer has mutable internal batching state; cast is safe here.
-        UIRenderer& mutableUi = const_cast<UIRenderer&>(ui);
-
         // Background
-        mutableUi.drawRect(bounds, theme.panelBackground);
+        ui.drawRect(bounds, theme.panelBackground);
 
         if (!m_currentGraph) {
-            mutableUi.drawText(bounds.x + 8.f, bounds.y + 8.f, "No graph open", theme.panelText);
+            ui.drawText(bounds.x + 8.f, bounds.y + 8.f, "No graph open", theme.panelText);
             return;
         }
 
@@ -1532,14 +1863,14 @@ public:
             Rect nr{node.position.x + bounds.x, node.position.y + bounds.y, 120.f, 60.f};
             uint32_t nodeColor = (m_selectedNodeId >= 0 && node.id == static_cast<uint32_t>(m_selectedNodeId))
                                  ? theme.selectionHighlight : theme.toolbarBackground;
-            mutableUi.drawRect(nr, nodeColor);
-            mutableUi.drawRectOutline(nr, theme.panelText, 1.f);
-            mutableUi.drawText(nr.x + 4.f, nr.y + 4.f, node.name, theme.panelText);
+            ui.drawRect(nr, nodeColor);
+            ui.drawRectOutline(nr, theme.panelText, 1.f);
+            ui.drawText(nr.x + 4.f, nr.y + 4.f, node.name, theme.panelText);
         }
 
         // Draw link count annotation
         float ly = bounds.y + bounds.h - 20.f;
-        mutableUi.drawText(bounds.x + 4.f, ly,
+        ui.drawText(bounds.x + 4.f, ly,
                            std::to_string(m_currentGraph->links().size()) + " link(s)",
                            theme.propertyLabel);
     }
@@ -1632,6 +1963,129 @@ private:
     GraphType m_currentGraphType = GraphType::World;
     int m_selectedNodeId = -1;
     int m_nextNodeId = 1;
+};
+
+// ── Tool Window Manager ──────────────────────────────────────────
+
+enum class ToolLaunchMode : uint8_t { Embedded, External, Docked };
+
+struct ToolDescriptor {
+    std::string name;
+    std::string executable;
+    std::string icon;
+    ToolLaunchMode mode = ToolLaunchMode::External;
+    bool isRunning = false;
+};
+
+class ToolWindowManager {
+public:
+    void registerTool(ToolDescriptor desc) {
+        m_tools.push_back(std::move(desc));
+        NF_LOG_INFO("Editor", "ToolWindowManager: registered tool '" + m_tools.back().name + "'");
+    }
+
+    bool launchTool(const std::string& name) {
+        for (auto& t : m_tools) {
+            if (t.name == name) {
+                t.isRunning = true;
+                NF_LOG_INFO("Editor", "ToolWindowManager: launched '" + name + "'");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void stopTool(const std::string& name) {
+        for (auto& t : m_tools) {
+            if (t.name == name) { t.isRunning = false; return; }
+        }
+    }
+
+    [[nodiscard]] const ToolDescriptor* findTool(const std::string& name) const {
+        for (auto& t : m_tools) if (t.name == name) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] const std::vector<ToolDescriptor>& tools() const { return m_tools; }
+    [[nodiscard]] size_t toolCount() const { return m_tools.size(); }
+
+    [[nodiscard]] size_t runningCount() const {
+        size_t c = 0;
+        for (auto& t : m_tools) if (t.isRunning) ++c;
+        return c;
+    }
+
+private:
+    std::vector<ToolDescriptor> m_tools;
+};
+
+// ── Pipeline Monitor Panel ───────────────────────────────────────
+
+struct PipelineEventEntry {
+    std::string type;
+    std::string source;
+    std::string details;
+    float timestamp = 0.f;
+};
+
+class PipelineMonitorPanel : public EditorPanel {
+public:
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Bottom; }
+    void update(float /*dt*/) override {}
+
+    void render(UIRenderer& ui, const Rect& bounds, const EditorTheme& theme) override {
+        ui.drawRect(bounds, theme.panelBackground);
+        Rect hdr{bounds.x, bounds.y, bounds.w, 22.f};
+        ui.drawRect(hdr, theme.panelHeader);
+        ui.drawText(bounds.x + 8.f, bounds.y + 4.f, "Pipeline Monitor", theme.panelText);
+        ui.drawRectOutline(bounds, theme.panelBorder, 1.f);
+
+        float y = bounds.y + 26.f;
+        for (auto& ev : m_events) {
+            if (y > bounds.y + bounds.h - 4.f) break;
+            std::string line = "[" + ev.type + "] " + ev.source + ": " + ev.details;
+            ui.drawText(bounds.x + 8.f, y, line, theme.panelText);
+            y += 16.f;
+        }
+    }
+
+    void renderUI(UIContext& ctx, const Rect& bounds) override {
+        ctx.beginPanel("Pipeline Monitor", bounds);
+        ctx.beginHorizontal();
+        if (ctx.button("Clear")) m_events.clear();
+        if (ctx.button("Refresh")) { /* poll pipeline */ }
+        ctx.endHorizontal();
+        ctx.separator();
+        float contentH = static_cast<float>(m_events.size()) * 18.f;
+        Rect scrollR{bounds.x, bounds.y + 60.f, bounds.w, bounds.h - 64.f};
+        ctx.beginScrollArea("pipeline_scroll", scrollR, contentH);
+        for (auto& ev : m_events) {
+            std::string line = "[" + ev.type + "] " + ev.source + ": " + ev.details;
+            ctx.label(line);
+        }
+        ctx.endScrollArea();
+        ctx.endPanel();
+    }
+
+    void addEvent(const std::string& type, const std::string& source,
+                  const std::string& details, float timestamp) {
+        PipelineEventEntry e;
+        e.type = type;
+        e.source = source;
+        e.details = details;
+        e.timestamp = timestamp;
+        m_events.push_back(std::move(e));
+        if (m_events.size() > 500) m_events.erase(m_events.begin());
+    }
+
+    void clearEvents() { m_events.clear(); }
+    [[nodiscard]] size_t eventCount() const { return m_events.size(); }
+    [[nodiscard]] const std::vector<PipelineEventEntry>& events() const { return m_events; }
+
+private:
+    std::string m_name = "PipelineMonitor";
+    std::vector<PipelineEventEntry> m_events;
 };
 
 // ── Frame Stats ──────────────────────────────────────────────────
@@ -1966,6 +2420,70 @@ public:
     void update() {}
     void render() {}
 
+    // Render the full editor UI through the UIRenderer pipeline.
+    // Replaces the old paintEditorGDI() function.
+    void renderAll(float width, float height) {
+        m_dockLayout.computeLayout(width, height, 56.f, 24.f);
+        m_ui.beginFrame(width, height);
+
+        // Menu bar
+        m_ui.drawRect({0.f, 0.f, width, 28.f}, m_theme.toolbarBackground);
+        float mx = 8.f;
+        for (auto& cat : m_menuBar.categories()) {
+            m_ui.drawText(mx, 7.f, cat.name, m_theme.panelText);
+            mx += static_cast<float>(cat.name.size()) * 8.f + 16.f;
+        }
+
+        // Toolbar
+        m_ui.drawRect({0.f, 28.f, width, 28.f}, m_theme.toolbarBackground);
+        float tx = 8.f;
+        for (auto& item : m_toolbar.items()) {
+            if (item.isSeparator) {
+                m_ui.drawRect({tx, 32.f, 1.f, 20.f}, m_theme.toolbarSeparator);
+                tx += 12.f;
+            } else {
+                m_ui.drawText(tx, 35.f, item.name, item.enabled ? m_theme.buttonText : m_theme.buttonDisabledText);
+                tx += static_cast<float>(item.name.size()) * 8.f + 12.f;
+            }
+        }
+
+        // Panels
+        for (auto& panel : m_editorPanels) {
+            if (!panel->isVisible()) continue;
+            auto* dp = m_dockLayout.findPanel(panel->name());
+            if (!dp || !dp->visible) continue;
+            panel->render(m_ui, dp->bounds, m_theme);
+        }
+
+        // Splitter dividers
+        for (auto& dp : m_dockLayout.panels()) {
+            if (!dp.visible) continue;
+            m_ui.drawRectOutline(dp.bounds, m_theme.panelBorder, 1.f);
+        }
+
+        // Status bar
+        m_ui.drawRect({0.f, height - 24.f, width, 24.f}, m_theme.statusBarBackground);
+        m_ui.drawText(8.f, height - 19.f, m_statusBar.buildText(), m_theme.statusBarText);
+
+        // Notifications overlay
+        if (m_notifications.hasActive()) {
+            auto* n = m_notifications.current();
+            if (n) {
+                uint32_t bg = 0x333333FF;
+                if (n->type == NotificationType::Error)   bg = 0x8B0000FF;
+                if (n->type == NotificationType::Success) bg = 0x006400FF;
+                if (n->type == NotificationType::Warning) bg = 0x8B8000FF;
+                float nw = static_cast<float>(n->message.size()) * 8.f + 24.f;
+                Rect nr{width - nw - 12.f, 60.f, nw, 28.f};
+                m_ui.drawRect(nr, bg);
+                m_ui.drawRectOutline(nr, m_theme.panelBorder, 1.f);
+                m_ui.drawText(nr.x + 8.f, nr.y + 7.f, n->message, 0xFFFFFFFF);
+            }
+        }
+
+        m_ui.endFrame();
+    }
+
     // Per-frame update with input: routes right-click WASD fly-cam to the viewport,
     // dispatches hotkeys, ticks notifications, updates status bar and frame stats.
     void update(float dt, InputSystem& input) {
@@ -2030,6 +2548,9 @@ public:
     HotkeyDispatcher& hotkeyDispatcher() { return m_hotkeyDispatcher; }
     FrameStatsTracker& frameStatsTracker() { return m_frameStats; }
     EditorTheme& theme() { return m_theme; }
+    UIContext& uiContext() { return m_uiContext; }
+    ToolWindowManager& toolManager() { return m_toolManager; }
+    UIRenderer& uiRenderer() { return m_ui; }
 
     [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
     void setCurrentWorldPath(const std::string& path) {
@@ -2114,6 +2635,15 @@ private:
         code.addItem("Find References",  "ide.find_references",  "Shift+F12");
         code.addItem("Go Back",          "ide.go_back",          "Alt+Left");
         code.addItem("Index Project",    "ide.index_project",    "");
+
+        // Tools menu
+        auto& tools = m_menuBar.addCategory("Tools");
+        tools.addItem("Blender Bridge",     "tools.launch_blender_bridge");
+        tools.addItem("Contract Scanner",   "tools.launch_contract_scanner");
+        tools.addItem("Replay Minimizer",   "tools.launch_replay_minimizer");
+        tools.addItem("Atlas AI",           "tools.launch_atlas_ai");
+        tools.addSeparator();
+        tools.addItem("Pipeline Monitor",   "tools.pipeline_monitor");
     }
 
     Renderer m_renderer;
@@ -2142,6 +2672,8 @@ private:
     HotkeyDispatcher m_hotkeyDispatcher;
     FrameStatsTracker m_frameStats;
     EditorTheme m_theme;
+    UIContext m_uiContext;
+    ToolWindowManager m_toolManager;
 };
 
 // ── Property Editor ──────────────────────────────────────────────

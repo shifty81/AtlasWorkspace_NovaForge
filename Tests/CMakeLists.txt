@@ -118,3 +118,11 @@ add_executable(NF_PipelineTests
 )
 target_link_libraries(NF_PipelineTests PRIVATE NF::Pipeline NF::Core Catch2::Catch2)
 catch_discover_tests(NF_PipelineTests)
+
+# UI tests
+add_executable(NF_UITests
+    UI/test_ui.cpp
+    catch_main.cpp
+)
+target_link_libraries(NF_UITests PRIVATE NF::UI NF::Core NF::Input Catch2::Catch2)
+catch_discover_tests(NF_UITests)

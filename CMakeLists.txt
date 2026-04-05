@@ -38,7 +38,15 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # ── Third-party packages ──────────────────────────────────────────
-find_package(imgui CONFIG REQUIRED)
+find_package(imgui CONFIG QUIET)
+if(NOT imgui_FOUND)
+    # Provide a stub target so downstream targets can link without error.
+    if(NOT TARGET imgui::imgui)
+        add_library(imgui_stub INTERFACE)
+        add_library(imgui::imgui ALIAS imgui_stub)
+    endif()
+    message(STATUS "imgui not found — using stub (ImGui features disabled)")
+endif()
 
 # ── Build mode ────────────────────────────────────────────────────
 option(NF_STANDALONE "Standalone build (all targets enabled by default)" ON)
