@@ -72,6 +72,14 @@ venv/
 # ── Runtime state (editor session persistence) ────────────────────
 Saved/
 
+# ── Atlas Workspace runtime ───────────────────────────────────────
+Atlas/Workspace/Sessions/*
+!Atlas/Workspace/Sessions/.gitkeep
+
+# ── Pipeline IPC runtime ─────────────────────────────────────────
+.novaforge/pipeline/
+!.novaforge/.gitkeep
+
 # ── Package output ────────────────────────────────────────────────
 *.tar.gz
 *.tar.bz2

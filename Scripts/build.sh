@@ -271,6 +271,18 @@ else
     log INFO "Skipping tests (use --test to run)"
 fi
 
+# ── Atlas Workspace scaffolding ───────────────────────────────────
+log INFO "${ARROW} Scaffolding Atlas Workspace..."
+mkdir -p "$ROOT_DIR/Atlas/Workspace/Sessions"
+mkdir -p "$ROOT_DIR/.novaforge/pipeline/changes"
+mkdir -p "$ROOT_DIR/.novaforge/pipeline/assets"
+mkdir -p "$ROOT_DIR/.novaforge/pipeline/worlds"
+mkdir -p "$ROOT_DIR/.novaforge/pipeline/scripts"
+mkdir -p "$ROOT_DIR/.novaforge/pipeline/animations"
+mkdir -p "$ROOT_DIR/.novaforge/pipeline/sessions"
+log INFO "${CHECK} Atlas Workspace ready"
+echo ""
+
 # ── Summary ───────────────────────────────────────────────────────
 separator
 TOTAL_END=$(date +%s)

@@ -156,6 +156,18 @@ if "%RUN_TESTS%"=="1" (
 
 echo.
 
+:: ── Atlas Workspace scaffolding ──────────────────────────────────
+echo  [*] Scaffolding Atlas Workspace...
+if not exist "%ROOT_DIR%\Atlas\Workspace\Sessions" mkdir "%ROOT_DIR%\Atlas\Workspace\Sessions"
+if not exist "%ROOT_DIR%\.novaforge\pipeline\changes" mkdir "%ROOT_DIR%\.novaforge\pipeline\changes"
+if not exist "%ROOT_DIR%\.novaforge\pipeline\assets" mkdir "%ROOT_DIR%\.novaforge\pipeline\assets"
+if not exist "%ROOT_DIR%\.novaforge\pipeline\worlds" mkdir "%ROOT_DIR%\.novaforge\pipeline\worlds"
+if not exist "%ROOT_DIR%\.novaforge\pipeline\scripts" mkdir "%ROOT_DIR%\.novaforge\pipeline\scripts"
+if not exist "%ROOT_DIR%\.novaforge\pipeline\animations" mkdir "%ROOT_DIR%\.novaforge\pipeline\animations"
+if not exist "%ROOT_DIR%\.novaforge\pipeline\sessions" mkdir "%ROOT_DIR%\.novaforge\pipeline\sessions"
+echo  [OK] Atlas Workspace ready
+echo.
+
 :: ── Summary ──────────────────────────────────────────────────────
 echo  ╔══════════════════════════════════════════════════════════╗
 echo  ║  Build Complete!                                        ║

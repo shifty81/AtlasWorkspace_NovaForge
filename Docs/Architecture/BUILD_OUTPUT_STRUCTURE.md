@@ -86,6 +86,52 @@ All build output is simultaneously:
 
 The editor also writes session logs to `Logs/editor.log`.
 
+## Atlas Workspace — AI Tool Packages
+
+Atlas AI tools live in a separate directory structure from C++ build output.
+Python/Docker tools don't have Debug/Release configs, so they stay out of `bin/`.
+
+```
+Atlas/
+└── Workspace/
+    ├── Arbiter/              ← Atlas_Arbiter deployable package
+    │   ├── arbiter_cli.py
+    │   ├── rules/            ← .arbiter.json rule files
+    │   ├── Dockerfile
+    │   └── config.toml
+    ├── SwissAgent/           ← Atlas_SwissAgent deployable package
+    │   ├── cli.py
+    │   ├── core/
+    │   ├── llm/
+    │   ├── tools/
+    │   ├── Dockerfile
+    │   └── config.toml
+    └── Sessions/             ← Runtime session data (gitignored)
+```
+
+| Directory | Purpose | Source Code |
+|-----------|---------|-------------|
+| `AtlasAI/` | AI tool source code and reference snippets | Committed |
+| `Atlas/Workspace/` | Deployable tool packages (staged for execution) | Committed (except Sessions/) |
+| `.novaforge/pipeline/` | Runtime IPC — ChangeEvent JSON between tools | Gitignored |
+
+## Pipeline IPC Directory
+
+All tools (C++ engine, Atlas AI, Blender bridge) communicate through the pipeline:
+
+```
+.novaforge/
+├── pipeline/
+│   ├── changes/       ← .change.json events dropped here by any tool
+│   ├── assets/        ← imported/generated assets
+│   ├── worlds/        ← live world-state snapshots
+│   ├── scripts/       ← GraphVM bytecode / logic graph JSON
+│   ├── animations/    ← exported rigs, clips, IK configs
+│   └── sessions/      ← AtlasAI session logs
+├── manifest.json      ← GUID → asset path registry
+└── watch.log          ← append-only event log
+```
+
 ## Runtime Directories
 
 | Directory | Purpose | Gitignored |
@@ -95,3 +141,5 @@ The editor also writes session logs to `Logs/editor.log`.
 | `Content/` | Engine-level content (fonts, definitions) | No |
 | `Data/` | Game configuration data (ships, modules, etc.) | No |
 | `Config/` | Project configuration | No |
+| `Atlas/Workspace/Sessions/` | AI tool session data | Yes |
+| `.novaforge/pipeline/` | Pipeline IPC (ChangeEvent files) | Yes |
