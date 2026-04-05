@@ -741,3 +741,25 @@ G21 (Faction System) fully delivered:
 - FactionType×8, FactionStanding×5, FactionTerritory, Faction, GameFactionRelation, GameFactionManager
 - 10 new tests, all passing
 Total: 860 tests, 0 failures.
+
+## SP — Spec Pack (System Contracts) ✅
+
+- [x] SP1: VoxelMaterialDef + VoxelMaterialTable — material properties with mining yields
+- [x] SP2: CentrifugeState + CentrifugeJob + CentrifugeSystem — resource processing with tiers and power
+- [x] SP3: LinkState + InterfacePort — physical interaction state machine
+- [x] SP4: CollapseEvent + SandPhysicsSystem — voxel collapse simulation
+- [x] SP5: BreachState + BreachGrid + BreachMinigame — hacking minigame
+- [x] SP6: RigAIEvent + RigAIFeatures + RigAICore — R.I.G. AI event bus
+- [x] 6 new JSON schemas: rig, material, interaction, power, recipe, centrifuge
+- [x] 25 documentation files across core, systems, rig, gameplay, workspace, roadmap, audit
+- [x] 24 new Catch2 tests (SP1-SP6)
+- [x] Build verification: 884/884 tests pass (860 existing + 24 new)
+
+## SP Complete ✅
+
+Spec Pack delivered:
+- 6 C++ contract stubs (VoxelMaterialTable, CentrifugeSystem, InterfacePort, SandPhysicsSystem, BreachMinigame, RigAICore)
+- 6 JSON schemas (rig, material, interaction, power, recipe, centrifuge)
+- 25 documentation files (game design, system specs, audit reports, roadmap)
+- 24 new tests, all passing
+Total: 884 tests, 0 failures.

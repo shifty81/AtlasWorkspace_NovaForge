@@ -81,6 +81,7 @@
 | **C3** — Nova-Forge-Expeditions | Richest game codebase | ⬜ Queued |
 | **C4–C11** — Remaining repos | See `Docs/CONSOLIDATION_PLAN.md` | ⬜ Queued |
 | **M1** — Usable Editor | Real GLFW/ImGui window, viewport clear, basic panels | ✅ Done |
+| **SP** — Spec Pack | 6 system contracts, 6 schemas, 25 docs, audit + roadmap | ✅ Done |
 | **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | 🔜 Next |
 | **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | 📋 Planned |
 | **M4 / S3** — Asset Pipeline | AssetDatabase (GUID), mesh/texture importers, content browser hot-reload | 📋 Planned |
