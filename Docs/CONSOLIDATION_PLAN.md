@@ -16,7 +16,7 @@ When a repo is fully merged, its contents are archived under `Archive/_RepoName/
 | 2 | AtlasToolingSuite | Tool suite | ✅ Done |
 | 3 | Nova-Forge-Expeditions | Richest game codebase | ✅ Extracted |
 | 4 | Atlas-NovaForge | Engine+game merge attempt | ✅ Extracted |
-| 5 | AtlasForge | Original engine | ⬜ Queued |
+| 5 | AtlasForge | Original engine | ✅ Extracted |
 | 6 | NovaForge-Project | Game project structure + rules | ⬜ Queued |
 | 7 | SwissAgent | AI → Atlas_SwissAgent | ⬜ Queued |
 | 8 | ArbiterAI | AI → Atlas_Arbiter | ⬜ Queued |
@@ -66,6 +66,52 @@ They are not yet compiled into the tempnovaforge build. Future refactoring work 
 - CMakeLists.txt wiring for active compilation
 - Game system template migration (`SingleComponentSystem<C>` per ROADMAP Phase A1)
 
+## Phase 4 Extraction (Atlas-NovaForge)
+
+Phase 4 performed a file-level extraction of unique content from `shifty81/Atlas-NovaForge`
+(~2,000 files, engine+game merge attempt with C++ server/client, full engine module set,
+editor panels, game data, Python tools, TLA+ specs, sample projects, and BlenderSpaceshipGenerator).
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 4B | `engine/` (40 module dirs) | `Source/Engine/src/` | 241 | ✅ Extracted |
+| 4C | `editor/` (panels/tools/ai/assistant/ui) | `Source/Editor/src/` | 89 | ✅ Extracted |
+| 4D | `cpp_client/src+include` | `Source/Game/src/Client/` + `include/NF/Game/Client/` | 244 | ✅ Extracted |
+| 4E | `data/` (20 game data dirs) | `Data/` | 95 | ✅ Extracted |
+| 4F | `schemas/` (5 JSON schemas) | `Schemas/` | 5 | ✅ Extracted |
+| 4G | `specs/` (3 TLA+ specs) | `Docs/Atlas-NovaForge/specs/` | 3 | ✅ Extracted |
+| 4H | `tools/` (Python + BlenderSpaceshipGenerator) | `Tools/Atlas-NovaForge/` + `Tools/BlenderGenerator/` | 52 | ✅ Extracted |
+| 4I | `projects/` (4 sample projects) | `Project/samples/` | 130 | ✅ Extracted |
+| 4J | `docs/` (~102 docs) | `Docs/Atlas-NovaForge/` | 104 | ✅ Extracted |
+| 4K | `tests/` + `atlas_tests/` | `Tests/Atlas-NovaForge/` | 306 | ✅ Extracted |
+| 4L | superseded + usable snippets | `Archive/_Atlas-NovaForge/` | 18 | ✅ Archived |
+
+**Total extracted: 1,264 files** (after deduplication with Phase 3)
+
+**Note:** Extracted files use `atlas::` namespace conventions. Not yet compiled into tempnovaforge build.
+Build verification passed — 745 tests, no regressions.
+
+## Phase 5 Extraction (AtlasForge)
+
+Phase 5 performed a targeted extraction from `shifty81/AtlasForge` (~718 files, original engine repo).
+AtlasForge is the primary origin repo already consumed by Phases 3–4. Only unique
+files not present from prior phases were extracted to active paths.
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 5A | `engine/script/ScriptSandbox.*` | `Source/Engine/src/Script/` | 2 | ✅ Extracted |
+| 5B | `engine/script/ScriptSystem.*` | `Source/Engine/src/Script/` | 2 | ✅ Extracted |
+| 5C | `engine/abi/` | `Source/Engine/src/ABI/` | 4 | ✅ Extracted |
+| 5D | `tileeditor/` | `Source/Programs/TileEditor/` | 2 | ✅ Extracted |
+| 5E | `assets/fonts/builtin_fallback.json` | `Content/Assets/Fonts/` | 1 | ✅ Extracted |
+| 5F | Full repo reference | `Archive/_AtlasForge/usable_snippets/` | 10 | ✅ Archived |
+| 5G | `README.md`, `CONTRIBUTING.md` | `Archive/_AtlasForge/docs_archive/` | 2 | ✅ Archived |
+
+**Total extracted: 11 unique files + 12 archived references**
+
+Remaining ~685 files are superseded by prior phase extractions (engine, editor, server,
+tests, docs, schemas, specs all already present from Phases 3–4).
+
 ## Archive Protocol
 
 When a repo is fully merged:
@@ -104,7 +150,7 @@ as DEPRECATED with comments pointing to the new AtlasUI implementations.
 | `Archive/_AtlasToolingSuite/` | C2 | ✅ Archived |
 | `Archive/_Nova-Forge-Expeditions/` | 3 | ✅ Extracted |
 | `Archive/_Atlas-NovaForge/` | 4 | ✅ Extracted |
-| `Archive/_AtlasForge/` | 5 | ⬜ Scaffolded |
+| `Archive/_AtlasForge/` | 5 | ✅ Extracted |
 | `Archive/_NovaForge-Project/` | 6 | ⬜ Scaffolded |
 | `Archive/_SwissAgent/` | 7 | ⬜ Scaffolded |
 | `Archive/_ArbiterAI/` | 8 | ⬜ Scaffolded |
