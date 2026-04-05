@@ -326,6 +326,87 @@ public:
                      const PipelineDirectories& dirs) override;
 };
 
+// ── AssetImportStatus ────────────────────────────────────────────
+// Tracks the lifecycle of an asset imported through the pipeline.
+
+enum class AssetImportStatus : uint8_t {
+    Pending,       // Import requested, not yet processed
+    Validated,     // File exists and has valid format
+    Registered,    // Asset registered in Manifest with a GUID
+    Failed,        // Import failed (see errorMessage)
+};
+
+inline const char* assetImportStatusName(AssetImportStatus s) noexcept {
+    switch (s) {
+        case AssetImportStatus::Pending:    return "Pending";
+        case AssetImportStatus::Validated:  return "Validated";
+        case AssetImportStatus::Registered: return "Registered";
+        case AssetImportStatus::Failed:     return "Failed";
+        default:                             return "Unknown";
+    }
+}
+
+// ── AssetImportResult ────────────────────────────────────────────
+// Result of processing an asset through the BlenderBridge.
+
+struct AssetImportResult {
+    std::string       sourcePath;       // Original file path from ChangeEvent
+    std::string       guid;             // GUID assigned by Manifest (empty on failure)
+    std::string       assetType;        // "mesh", "rig", "clip", or "unknown"
+    AssetImportStatus status = AssetImportStatus::Pending;
+    std::string       errorMessage;     // Non-empty only on failure
+    int64_t           importTimestamp = 0;
+};
+
+// ── BlenderBridge ────────────────────────────────────────────────
+// S2: Full BlenderGen Bridge that processes exported assets from
+// Blender, validates them, registers them in the Manifest, and
+// tracks import history.  Designed to be driven by BlenderGenAdapter
+// or used standalone in tests.
+
+class BlenderBridge {
+public:
+    explicit BlenderBridge(Manifest& manifest);
+
+    // Process an asset from BlenderGenerator.  Validates the file,
+    // detects asset type from metadata, registers in Manifest.
+    // Returns a result struct with the outcome.
+    AssetImportResult importAsset(const ChangeEvent& event,
+                                  const PipelineDirectories& dirs);
+
+    // Query import history.
+    const std::vector<AssetImportResult>& importHistory() const { return m_history; }
+    size_t importCount() const noexcept { return m_importCount; }
+    size_t failedCount() const noexcept { return m_failedCount; }
+
+    // Check if an asset path has already been imported.
+    bool isImported(const std::string& path) const;
+
+    // Get the GUID for a previously imported asset.
+    std::string guidForPath(const std::string& path) const;
+
+    // Access the underlying Manifest.
+    Manifest&       manifest()       { return m_manifest; }
+    const Manifest& manifest() const { return m_manifest; }
+
+private:
+    Manifest&                                 m_manifest;
+    std::vector<AssetImportResult>            m_history;
+    std::unordered_map<std::string, size_t>   m_pathIndex;  // path → history index
+    size_t                                    m_importCount = 0;
+    size_t                                    m_failedCount = 0;
+
+    // Detect asset type from event metadata (type=mesh, type=rig, type=clip).
+    static std::string detectAssetType(const ChangeEvent& event);
+
+    // Validate that the asset file exists on disk.
+    static bool validateAssetFile(const std::filesystem::path& fullPath);
+
+    // Resolve the full filesystem path for an asset from its event path.
+    static std::filesystem::path resolveAssetPath(
+        const ChangeEvent& event, const PipelineDirectories& dirs);
+};
+
 // ── ToolRegistry ─────────────────────────────────────────────────
 // Central registry that connects a PipelineWatcher to ToolAdapters.
 // When an event arrives, the registry dispatches it to every adapter

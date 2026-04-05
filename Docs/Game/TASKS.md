@@ -628,3 +628,22 @@
 - [x] Build verification: 762/762 tests pass (745 existing + 17 new)
 - [x] Update Docs/Game/ROADMAP.md — S1 marked Done, Phase 11 marked Active
 - [x] Update Docs/Game/TASKS.md — S1 checklist added
+
+## Phase 11 — Suite Integration (S2: BlenderGen Bridge) ✅
+
+- [x] Add AssetImportStatus enum with name helper to Pipeline.h
+- [x] Add AssetImportResult struct (sourcePath, guid, assetType, status, error)
+- [x] Implement BlenderBridge class — importAsset, isImported, guidForPath, history
+- [x] BlenderBridge validates asset files exist and are non-empty
+- [x] BlenderBridge detects asset type from metadata (type=mesh/rig/clip)
+- [x] BlenderBridge falls back to extension / event type for type detection
+- [x] BlenderBridge registers imported assets in Manifest with GUID
+- [x] BlenderBridge handles re-imports by updating existing Manifest records
+- [x] BlenderBridge tracks import/failure counts and full history
+- [x] Add BlenderBridge.cpp source file, update Pipeline CMakeLists
+- [x] Add test_blender_bridge.cpp with 15 tests covering all bridge functionality
+- [x] End-to-end test: PipelineWatcher → ToolRegistry → BlenderBridge
+- [x] Build verification: 777/777 tests pass (762 existing + 15 new)
+- [x] Update Docs/Game/ROADMAP.md — S2 marked Done
+- [x] Update Docs/Game/TASKS.md — S2 checklist added
+- [x] Update Tools/BlenderGenerator/README.md — BG tasks marked Done

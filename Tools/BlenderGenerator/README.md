@@ -30,10 +30,10 @@ Tools/BlenderGenerator/
 | Task | Description | Status |
 |------|-------------|--------|
 | BG-1 | Blender add-on scaffold (register/unregister, panel UI) | ✅ Done |
-| BG-2 | Mesh export (vertices, normals, UVs, vertex colors → JSON) | ⬜ Queued |
-| BG-3 | Skeleton export (bone hierarchy → NF::Skeleton JSON) | ⬜ Queued |
-| BG-4 | Animation export (keyframes → NF::AnimationClip JSON) | ⬜ Queued |
-| BG-5 | Pipeline integration (auto-emit ChangeEvent on export) | ⬜ Queued |
+| BG-2 | Mesh export (vertices, normals, UVs, vertex colors → GLB) | ✅ Done |
+| BG-3 | Skeleton export (bone hierarchy → skinned GLB) | ✅ Done |
+| BG-4 | Animation export (NLA tracks → animation GLB) | ✅ Done |
+| BG-5 | Pipeline integration (auto-emit ChangeEvent, BlenderBridge import) | ✅ Done |
 
 ## Pipeline Contract
 
