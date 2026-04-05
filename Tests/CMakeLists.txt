@@ -122,6 +122,7 @@ catch_discover_tests(NF_PipelineTests)
 # UI tests
 add_executable(NF_UITests
     UI/test_ui.cpp
+    UI/test_atlasui.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_UITests PRIVATE NF::UI NF::Core NF::Input Catch2::Catch2)

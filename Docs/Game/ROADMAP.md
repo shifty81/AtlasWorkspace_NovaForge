@@ -76,7 +76,7 @@
 |-----------|-------------|--------|
 | **C0** — MasterRepo seed | MasterRepo (v001) | ✅ Done |
 | **C1** — MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
-| **C2** — AtlasToolingSuite | Full tool suite | ⬜ Queued |
+| **C2** — AtlasToolingSuite | Full tool suite | ✅ Done |
 | **C3** — Nova-Forge-Expeditions | Richest game codebase | ⬜ Queued |
 | **C4–C11** — Remaining repos | See `Docs/CONSOLIDATION_PLAN.md` | ⬜ Queued |
 | **M1** — Usable Editor | Real GLFW/ImGui window, viewport clear, basic panels | 🔜 Next |
