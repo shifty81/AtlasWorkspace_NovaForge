@@ -80,7 +80,8 @@ static void paintEditorGDI(HDC hdc, int w, int h) {
     RECT sbR{0,h-botBarH,w,h};
     HBRUSH sbbr = CreateSolidBrush(RGB(0,120,215)); FillRect(hdc,&sbR,sbbr); DeleteObject(sbbr);
     SetTextColor(hdc,RGB(255,255,255));
-    TextOutA(hdc,8,h-botBarH+5,"NovaForge Editor  v0.1.0  |  Ready",35);
+    std::string statusText = std::string("NovaForge Editor  v") + NF::NF_VERSION_STRING + "  |  Ready";
+    TextOutA(hdc,8,h-botBarH+5,statusText.c_str(),static_cast<int>(statusText.size()));
 
     // ── Dividers ──────────────────────────────────────────────
     HPEN pen = CreatePen(PS_SOLID,1,RGB(60,60,60));
@@ -162,8 +163,9 @@ int main(int argc, char* argv[]) {
 
     RECT wr{0,0,1280,800};
     AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+    std::wstring winTitle = std::wstring(L"NovaForge Editor  v") + std::wstring(NF::NF_VERSION_STRING, NF::NF_VERSION_STRING + strlen(NF::NF_VERSION_STRING));
     HWND hwnd = CreateWindowExW(0, L"NovaForgeEditorWnd",
-        L"NovaForge Editor  v0.1.0",
+        winTitle.c_str(),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
         wr.right-wr.left, wr.bottom-wr.top,

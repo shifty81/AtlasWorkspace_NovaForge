@@ -44,7 +44,8 @@ static void paintGame(HDC hdc, int w, int h) {
     TextOutA(hdc,22,h-36,"EN",2);
     // Version watermark
     SetTextColor(hdc,RGB(50,50,50));
-    TextOutA(hdc,w-180,h-20,"NovaForge v0.1.0",16);
+    std::string verText = std::string("NovaForge v") + NF::NF_VERSION_STRING;
+    TextOutA(hdc,w-180,h-20,verText.c_str(),static_cast<int>(verText.size()));
     SelectObject(hdc,old); DeleteObject(font);
 }
 
@@ -96,7 +97,8 @@ int main(int argc, char* argv[]) {
     wc.lpszClassName=L"NovaForgeGameWnd";
     RegisterClassExW(&wc);
     RECT wr{0,0,1280,720}; AdjustWindowRect(&wr,WS_OVERLAPPEDWINDOW,FALSE);
-    HWND hwnd=CreateWindowExW(0,L"NovaForgeGameWnd",L"NovaForge  v0.1.0",
+    std::wstring gameTitle = std::wstring(L"NovaForge  v") + std::wstring(NF::NF_VERSION_STRING, NF::NF_VERSION_STRING + strlen(NF::NF_VERSION_STRING));
+    HWND hwnd=CreateWindowExW(0,L"NovaForgeGameWnd",gameTitle.c_str(),
         WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,
         wr.right-wr.left,wr.bottom-wr.top,nullptr,nullptr,wc.hInstance,nullptr);
     ShowWindow(hwnd,SW_SHOW); UpdateWindow(hwnd);
