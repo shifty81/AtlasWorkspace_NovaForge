@@ -160,6 +160,8 @@ int main(int argc, char* argv[]) {
     while (running) {
 #ifdef NF_USE_GLFW
         window.pollEvents();
+        // Note: stub GLFWWindowProvider exits after first poll; real GLFW
+        // requires explicit user close or glfwSetWindowShouldClose().
         if (window.shouldClose()) { running = false; break; }
 #elif defined(_WIN32)
         MSG msg{};
