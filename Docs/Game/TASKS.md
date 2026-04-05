@@ -538,3 +538,77 @@
   - [x] AUDIT.md + ROADMAP.md → Archive/_Nova-Forge-Expeditions/docs_archive/
 - [x] Build verification: 745 tests passing, no breakage
 - [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 3 marked as extracted
+
+## Repo Consolidation — Phase 4 (Atlas-NovaForge Extraction)
+
+- [x] Audit source repo contents via GitHub API (~2,000 files, 22 top-level dirs)
+- [x] Identify usable code, docs, and assets (engine modules, editor, client, game data, tools)
+- [x] Map content to canonical tempnovaforge locations (overlap analysis with Phase 3)
+- [x] Create Archive/_Atlas-NovaForge/ARCHIVE_SUMMARY.md with full audit
+- [x] Full content extraction (1,264 files extracted from source repo):
+  - [x] 4B: 241 engine modules (40 dirs) → Source/Engine/src/
+  - [x] 4C: 89 editor files → Source/Editor/src/
+  - [x] 4D: 244 client files → Source/Game/src/Client/ + include/NF/Game/Client/
+  - [x] 4E: 95 game data files → Data/
+  - [x] 4F: 5 JSON schemas → Schemas/
+  - [x] 4G: 3 TLA+ specs → Docs/Atlas-NovaForge/specs/
+  - [x] 4H: 52 tools → Tools/Atlas-NovaForge/ + Tools/BlenderGenerator/
+  - [x] 4I: 130 sample project files → Project/samples/
+  - [x] 4J: 104 docs → Docs/Atlas-NovaForge/
+  - [x] 4K: 306 tests → Tests/Atlas-NovaForge/
+  - [x] 4L: 18 archive files → Archive/_Atlas-NovaForge/
+- [x] Build verification: 745 tests passing, no breakage
+- [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 4 marked as extracted
+- [x] Update Archive/_Atlas-NovaForge/ARCHIVE_SUMMARY.md — all checklist items complete
+
+## Repo Consolidation — Phase 5 (AtlasForge Extraction)
+
+- [x] Audit source repo contents via GitHub API (~718 files, 14 directories)
+- [x] Full audit report: Docs/ATLASFORGE_AUDIT_REPORT.md
+- [x] Overlap analysis: AtlasForge is the origin repo — nearly all content already present from Phases 3–4
+- [x] Identify unique content: ScriptSandbox, ScriptSystem, ABICapsule, ABIRegistry, TileEditor, font metadata
+- [x] Extract 11 unique files to canonical locations:
+  - [x] 5A: ScriptSandbox.h/.cpp → Source/Engine/src/Script/
+  - [x] 5B: ScriptSystem.h/.cpp → Source/Engine/src/Script/
+  - [x] 5C: ABICapsule + ABIRegistry (4 files) → Source/Engine/src/ABI/
+  - [x] 5D: TileEditor main.cpp + CMakeLists.txt → Source/Programs/TileEditor/
+  - [x] 5E: builtin_fallback.json → Content/Assets/Fonts/
+- [x] Archive usable snippets (10 files) → Archive/_AtlasForge/usable_snippets/
+- [x] Archive docs (2 files) → Archive/_AtlasForge/docs_archive/
+- [x] Build verification: 745 tests passing, no breakage
+- [x] Update Docs/CONSOLIDATION_PLAN.md — Phase 5 marked as extracted
+- [x] Update Archive/_AtlasForge/ARCHIVE_SUMMARY.md — all checklist items complete
+
+## Repo Consolidation — Phase 6 (NovaForge-Project Extraction)
+
+- [x] Audit source repo via GitHub API
+- [x] Extract 21 docs → Docs/NovaForge-Project/ (architecture, rules, specs, migration, runtime)
+- [x] Archive 19 reference files → Archive/_NovaForge-Project/ (scripts, tests, configs, CI)
+- [x] Update Archive/_NovaForge-Project/ARCHIVE_SUMMARY.md — all checklist items complete
+
+## Repo Consolidation — Phases 7-9 (AI Repos Extraction)
+
+- [x] Phase 7: Audit SwissAgent → 30 usable snippets + 6 docs archived
+- [x] Phase 8: Audit ArbiterAI → 3 usable snippets + 1 doc archived
+- [x] Phase 9: Audit Arbiter → 10 usable snippets + 4 docs archived
+- [x] Update all three ARCHIVE_SUMMARY.md files — complete
+
+## Repo Consolidation — Phase 10 (AtlasForge-EveOffline Extraction)
+
+- [x] Audit source repo via GitHub API
+- [x] Extract 56 docs → Docs/AtlasForge-EveOffline/
+- [x] Archive 11 reference files → Archive/_AtlasForge-EveOffline/
+- [x] Update Archive/_AtlasForge-EveOffline/ARCHIVE_SUMMARY.md — complete
+
+## Repo Consolidation — Phase 11 (Blender-Generator-for-AtlasForge Extraction)
+
+- [x] Audit source repo via GitHub API
+- [x] Archive 31 files → Archive/_Blender-Generator-for-AtlasForge/ (Python addon + docs)
+- [x] Update Archive/_Blender-Generator-for-AtlasForge/ARCHIVE_SUMMARY.md — complete
+
+## All 12 Repos Consolidated ✅
+
+- [x] Phases 0-11 complete — all source repos audited, extracted, and archived
+- [x] Build verification: 745/745 tests pass, no regressions
+- [x] Spaghetti audit: 7/8 items resolved (1 deferred to workspace phase)
+- [ ] Post-consolidation: namespace migration (atlas:: → NF::), CMakeLists wiring, include path normalization

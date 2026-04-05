@@ -15,14 +15,14 @@ When a repo is fully merged, its contents are archived under `Archive/_RepoName/
 | 1 | MasterRepoRefactor | Structure + Atlas dirs | ✅ Done |
 | 2 | AtlasToolingSuite | Tool suite | ✅ Done |
 | 3 | Nova-Forge-Expeditions | Richest game codebase | ✅ Extracted |
-| 4 | Atlas-NovaForge | Engine+game merge attempt | ⬜ Queued |
-| 5 | AtlasForge | Original engine | ⬜ Queued |
-| 6 | NovaForge-Project | Game project structure + rules | ⬜ Queued |
-| 7 | SwissAgent | AI → Atlas_SwissAgent | ⬜ Queued |
-| 8 | ArbiterAI | AI → Atlas_Arbiter | ⬜ Queued |
-| 9 | Arbiter | AI → Atlas_Arbiter | ⬜ Queued |
-| 10 | AtlasForge-EveOffline | Networking prototype | ⬜ Queued |
-| 11 | Blender-Generator-for-AtlasForge | Tools/Atlas_BlenderGen | ⬜ Queued |
+| 4 | Atlas-NovaForge | Engine+game merge attempt | ✅ Extracted |
+| 5 | AtlasForge | Original engine | ✅ Extracted |
+| 6 | NovaForge-Project | Game project structure + rules | ✅ Extracted |
+| 7 | SwissAgent | AI → Atlas_SwissAgent | ✅ Extracted |
+| 8 | ArbiterAI | AI → Atlas_Arbiter | ✅ Extracted |
+| 9 | Arbiter | AI → Atlas_Arbiter | ✅ Extracted |
+| 10 | AtlasForge-EveOffline | Networking prototype | ✅ Extracted |
+| 11 | Blender-Generator-for-AtlasForge | Tools/Atlas_BlenderGen | ✅ Extracted |
 
 ## Internal Consolidation (C3)
 
@@ -66,6 +66,93 @@ They are not yet compiled into the tempnovaforge build. Future refactoring work 
 - CMakeLists.txt wiring for active compilation
 - Game system template migration (`SingleComponentSystem<C>` per ROADMAP Phase A1)
 
+## Phase 4 Extraction (Atlas-NovaForge)
+
+Phase 4 performed a file-level extraction of unique content from `shifty81/Atlas-NovaForge`
+(~2,000 files, engine+game merge attempt with C++ server/client, full engine module set,
+editor panels, game data, Python tools, TLA+ specs, sample projects, and BlenderSpaceshipGenerator).
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 4B | `engine/` (40 module dirs) | `Source/Engine/src/` | 241 | ✅ Extracted |
+| 4C | `editor/` (panels/tools/ai/assistant/ui) | `Source/Editor/src/` | 89 | ✅ Extracted |
+| 4D | `cpp_client/src+include` | `Source/Game/src/Client/` + `include/NF/Game/Client/` | 244 | ✅ Extracted |
+| 4E | `data/` (20 game data dirs) | `Data/` | 95 | ✅ Extracted |
+| 4F | `schemas/` (5 JSON schemas) | `Schemas/` | 5 | ✅ Extracted |
+| 4G | `specs/` (3 TLA+ specs) | `Docs/Atlas-NovaForge/specs/` | 3 | ✅ Extracted |
+| 4H | `tools/` (Python + BlenderSpaceshipGenerator) | `Tools/Atlas-NovaForge/` + `Tools/BlenderGenerator/` | 52 | ✅ Extracted |
+| 4I | `projects/` (4 sample projects) | `Project/samples/` | 130 | ✅ Extracted |
+| 4J | `docs/` (~102 docs) | `Docs/Atlas-NovaForge/` | 104 | ✅ Extracted |
+| 4K | `tests/` + `atlas_tests/` | `Tests/Atlas-NovaForge/` | 306 | ✅ Extracted |
+| 4L | superseded + usable snippets | `Archive/_Atlas-NovaForge/` | 18 | ✅ Archived |
+
+**Total extracted: 1,264 files** (after deduplication with Phase 3)
+
+**Note:** Extracted files use `atlas::` namespace conventions. Not yet compiled into tempnovaforge build.
+Build verification passed — 745 tests, no regressions.
+
+## Phase 5 Extraction (AtlasForge)
+
+Phase 5 performed a targeted extraction from `shifty81/AtlasForge` (~718 files, original engine repo).
+AtlasForge is the primary origin repo already consumed by Phases 3–4. Only unique
+files not present from prior phases were extracted to active paths.
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 5A | `engine/script/ScriptSandbox.*` | `Source/Engine/src/Script/` | 2 | ✅ Extracted |
+| 5B | `engine/script/ScriptSystem.*` | `Source/Engine/src/Script/` | 2 | ✅ Extracted |
+| 5C | `engine/abi/` | `Source/Engine/src/ABI/` | 4 | ✅ Extracted |
+| 5D | `tileeditor/` | `Source/Programs/TileEditor/` | 2 | ✅ Extracted |
+| 5E | `assets/fonts/builtin_fallback.json` | `Content/Assets/Fonts/` | 1 | ✅ Extracted |
+| 5F | Full repo reference | `Archive/_AtlasForge/usable_snippets/` | 10 | ✅ Archived |
+| 5G | `README.md`, `CONTRIBUTING.md` | `Archive/_AtlasForge/docs_archive/` | 2 | ✅ Archived |
+
+**Total extracted: 11 unique files + 12 archived references**
+
+Remaining ~685 files are superseded by prior phase extractions (engine, editor, server,
+tests, docs, schemas, specs all already present from Phases 3–4).
+
+## Phase 6 Extraction (NovaForge-Project)
+
+Phase 6 extracted game project structure, governance docs, specs, scripts, and configs
+from `shifty81/NovaForge-Project`.
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 6A | Root docs + specs | `Docs/NovaForge-Project/` | 21 | ✅ Extracted |
+| 6B | Scripts | `Archive/_NovaForge-Project/scripts/` | 9 | ✅ Archived |
+| 6C | Tests | `Archive/_NovaForge-Project/tests/` | 3 | ✅ Archived |
+| 6D | Configs (manifest, CI, packaging) | `Archive/_NovaForge-Project/` | 7 | ✅ Archived |
+
+**Total extracted: 21 docs + 19 archived references**
+
+## Phases 7–9 Extraction (AI Repos)
+
+Phases 7–9 extracted three AI repositories into canonical AtlasAI locations.
+
+| Phase | Repo | Usable Snippets | Docs Archived | Status |
+|-------|------|----------------|---------------|--------|
+| 7 | SwissAgent | 30 → `AtlasAI/Atlas_SwissAgent/usable_snippets/` | 6 → `Archive/_SwissAgent/docs_archive/` | ✅ Extracted |
+| 8 | ArbiterAI | 3 → `Archive/_ArbiterAI/usable_snippets/` | 1 → `Archive/_ArbiterAI/docs_archive/` | ✅ Extracted |
+| 9 | Arbiter | 10 → `AtlasAI/Atlas_Arbiter/usable_snippets/` | 4 → `Archive/_Arbiter/docs_archive/` | ✅ Extracted |
+
+## Phase 10 Extraction (AtlasForge-EveOffline)
+
+Phase 10 extracted the networking prototype documentation and reference code.
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 10A | Docs (full tree) | `Docs/AtlasForge-EveOffline/` | 56 | ✅ Extracted |
+| 10B | Code/config references | `Archive/_AtlasForge-EveOffline/` | 11 | ✅ Archived |
+
+## Phase 11 Extraction (Blender-Generator-for-AtlasForge)
+
+Phase 11 archived the original Blender addon source separately from Phase 4 content.
+
+| Task | Source Path | Target Path | Files | Status |
+|------|------------|-------------|-------|--------|
+| 11A | Python addon + docs | `Archive/_Blender-Generator-for-AtlasForge/` | 31 | ✅ Archived |
+
 ## Archive Protocol
 
 When a repo is fully merged:
@@ -103,14 +190,14 @@ as DEPRECATED with comments pointing to the new AtlasUI implementations.
 | `Archive/_MasterRepoRefactor/` | C1 | ✅ Archived |
 | `Archive/_AtlasToolingSuite/` | C2 | ✅ Archived |
 | `Archive/_Nova-Forge-Expeditions/` | 3 | ✅ Extracted |
-| `Archive/_Atlas-NovaForge/` | 4 | ⬜ Scaffolded |
-| `Archive/_AtlasForge/` | 5 | ⬜ Scaffolded |
-| `Archive/_NovaForge-Project/` | 6 | ⬜ Scaffolded |
-| `Archive/_SwissAgent/` | 7 | ⬜ Scaffolded |
-| `Archive/_ArbiterAI/` | 8 | ⬜ Scaffolded |
-| `Archive/_Arbiter/` | 9 | ⬜ Scaffolded |
-| `Archive/_AtlasForge-EveOffline/` | 10 | ⬜ Scaffolded |
-| `Archive/_Blender-Generator-for-AtlasForge/` | 11 | ⬜ Scaffolded |
+| `Archive/_Atlas-NovaForge/` | 4 | ✅ Extracted |
+| `Archive/_AtlasForge/` | 5 | ✅ Extracted |
+| `Archive/_NovaForge-Project/` | 6 | ✅ Extracted |
+| `Archive/_SwissAgent/` | 7 | ✅ Extracted |
+| `Archive/_ArbiterAI/` | 8 | ✅ Extracted |
+| `Archive/_Arbiter/` | 9 | ✅ Extracted |
+| `Archive/_AtlasForge-EveOffline/` | 10 | ✅ Extracted |
+| `Archive/_Blender-Generator-for-AtlasForge/` | 11 | ✅ Extracted |
 
 ## Naming Convention
 
@@ -142,6 +229,6 @@ All AI systems are renamed to `Atlas_` prefix and live under `AtlasAI/`:
 - [x] Duplicate AtlasAI directories (`Tools/AtlasAI/` vs `AtlasAI/`) → consolidated to root `AtlasAI/`
 - [x] Legacy tool READMEs → updated with deprecation markers
 - [ ] Intake/DropBox at root → move to `Tools/Atlas_DevTools/` (deferred to workspace phase)
-- [ ] Loose oversized .md files at root (SwissAgent) → move to `Docs/` (pending Phase 7 merge)
+- [x] Loose oversized .md files at root (SwissAgent) → moved to `AtlasAI/Atlas_SwissAgent/` (Phase 7)
 - [ ] Loose .zip at root (tempnovaforge) → move to `Archive/` (none found — resolved)
 - [ ] `From old repo/` + `legacy/` + `archive/` in active dirs → move to `Archive/` (none found — resolved)
