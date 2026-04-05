@@ -2440,11 +2440,14 @@ public:
                         break;
                     }
                 }
-                // Write to log file
-                if (m_logFile.is_open()) {
-                    m_logFile << "[" << Logger::levelTag(level) << "] ["
-                              << category << "] " << message << "\n";
-                    m_logFile.flush();
+                // Write to log file (thread-safe)
+                {
+                    std::lock_guard<std::mutex> lock(m_logFileMutex);
+                    if (m_logFile.is_open()) {
+                        m_logFile << "[" << Logger::levelTag(level) << "] ["
+                                  << category << "] " << message << "\n";
+                        m_logFile.flush();
+                    }
                 }
             });
 
@@ -2751,8 +2754,24 @@ private:
     ToolWindowManager m_toolManager;
     size_t m_logSinkId = 0;
     std::ofstream m_logFile;
+    std::mutex m_logFileMutex;
 
     // ── State persistence ───────────────────────────────────────
+
+    /// Escape a string for safe JSON embedding (handles quotes and backslashes).
+    static std::string escapeJson(const std::string& s) {
+        std::string out;
+        out.reserve(s.size());
+        for (char c : s) {
+            if (c == '"') out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else if (c == '\r') out += "\\r";
+            else if (c == '\t') out += "\\t";
+            else out += c;
+        }
+        return out;
+    }
 
     /// Resolve the Saved/ directory path relative to project root.
     std::string savedDir() const {
@@ -2779,19 +2798,19 @@ private:
         out << "  \"panels\": [\n";
         auto& panels = m_dockLayout.panels();
         for (size_t i = 0; i < panels.size(); ++i) {
-            out << "    {\"name\": \"" << panels[i].name
+            out << "    {\"name\": \"" << escapeJson(panels[i].name)
                 << "\", \"visible\": " << (panels[i].visible ? "true" : "false") << "}";
             if (i + 1 < panels.size()) out << ",";
             out << "\n";
         }
         out << "  ],\n";
-        out << "  \"lastWorldPath\": \"" << m_currentWorldPath << "\",\n";
+        out << "  \"lastWorldPath\": \"" << escapeJson(m_currentWorldPath) << "\",\n";
 
         // Save recent files
         out << "  \"recentFiles\": [\n";
         auto& recent = m_recentFiles.files();
         for (size_t i = 0; i < recent.size(); ++i) {
-            out << "    \"" << recent[i] << "\"";
+            out << "    \"" << escapeJson(recent[i]) << "\"";
             if (i + 1 < recent.size()) out << ",";
             out << "\n";
         }
@@ -2820,7 +2839,8 @@ private:
             if (pos == std::string::npos) return -1.f;
             pos = json.find(':', pos);
             if (pos == std::string::npos) return -1.f;
-            return std::stof(json.substr(pos + 1));
+            try { return std::stof(json.substr(pos + 1)); }
+            catch (...) { return -1.f; }
         };
 
         auto extractBool = [&](const std::string& key) -> int {

@@ -16,6 +16,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cassert>
+#include <mutex>
 
 namespace NF {
 
@@ -53,8 +54,13 @@ public:
             tm.tm_hour, tm.tm_min, tm.tm_sec,
             levelString(level), category, message);
 
-        // Notify registered sinks
-        for (auto& sink : m_sinks) {
+        // Notify registered sinks (thread-safe copy)
+        std::vector<SinkCallback> sinks;
+        {
+            std::lock_guard<std::mutex> lock(m_sinkMutex);
+            sinks = m_sinks;
+        }
+        for (auto& sink : sinks) {
             if (sink) sink(level, category, message);
         }
     }
@@ -62,6 +68,7 @@ public:
     /// Register a callback that receives every log message.
     /// Returns an ID that can be passed to removeSink().
     size_t addSink(SinkCallback cb) {
+        std::lock_guard<std::mutex> lock(m_sinkMutex);
         size_t id = m_nextSinkId++;
         m_sinks.push_back(std::move(cb));
         m_sinkIds.push_back(id);
@@ -70,6 +77,7 @@ public:
 
     /// Remove a previously registered sink by ID.
     void removeSink(size_t id) {
+        std::lock_guard<std::mutex> lock(m_sinkMutex);
         for (size_t i = 0; i < m_sinkIds.size(); ++i) {
             if (m_sinkIds[i] == id) {
                 m_sinks.erase(m_sinks.begin() + static_cast<ptrdiff_t>(i));
@@ -91,6 +99,7 @@ private:
     std::vector<SinkCallback> m_sinks;
     std::vector<size_t> m_sinkIds;
     size_t m_nextSinkId = 1;
+    mutable std::mutex m_sinkMutex;
 
     static constexpr const char* levelString(LogLevel level) {
         switch (level) {

@@ -145,7 +145,8 @@ echo.
 if "%RUN_TESTS%"=="1" (
     echo  [*] Step 3/3: Running tests...
     echo [STEP] Running tests >> "%LOG_FILE%"
-    ctest --test-dir "%BUILD_DIR%" -C %BUILD_TYPE% --output-on-failure 2>&1 | tee "%TEST_LOG_FILE%"
+    ctest --test-dir "%BUILD_DIR%" -C %BUILD_TYPE% --output-on-failure > "%TEST_LOG_FILE%" 2>&1
+    type "%TEST_LOG_FILE%"
     echo. >> "%LOG_FILE%"
     type "%TEST_LOG_FILE%" >> "%LOG_FILE%"
     echo  [OK] Tests complete — see %TEST_LOG_FILE%
