@@ -6626,3 +6626,143 @@ TEST_CASE("PlagueSystem tick propagates to regions", "[Game][G35][Plague]") {
     REQUIRE(sys.tickCount() == 2);
     REQUIRE(sys.regionByName("East")->tickCount() == 2);
 }
+
+// ============================================================
+// G36 — Famine System tests
+// ============================================================
+
+TEST_CASE("FamineType names", "[Game][G36][Famine]") {
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Drought))  == "Drought");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Blight))   == "Blight");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Flood))    == "Flood");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Pest))     == "Pest");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::War))      == "War");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Blockade)) == "Blockade");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Economic)) == "Economic");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Climate))  == "Climate");
+}
+
+TEST_CASE("FamineEvent lifecycle", "[Game][G36][Famine]") {
+    NF::FamineEvent ev;
+    ev.id       = "fev1";
+    ev.region   = "North";
+    ev.type     = NF::FamineType::Drought;
+    ev.severity = NF::FamineSeverity::Severe;
+
+    REQUIRE(ev.isActive());
+    REQUIRE(ev.isCritical());
+    REQUIRE(ev.duration == 0.f);
+
+    ev.advanceDuration(5.f);
+    REQUIRE(ev.duration == 5.f);
+
+    ev.resolve();
+    REQUIRE_FALSE(ev.isActive());
+
+    ev.advanceDuration(5.f); // no advance after resolved
+    REQUIRE(ev.duration == 5.f);
+}
+
+TEST_CASE("FamineEvent isCritical threshold", "[Game][G36][Famine]") {
+    NF::FamineEvent ev;
+    ev.severity = NF::FamineSeverity::Moderate;
+    REQUIRE_FALSE(ev.isCritical());
+    ev.severity = NF::FamineSeverity::Catastrophic;
+    REQUIRE(ev.isCritical());
+}
+
+TEST_CASE("FamineRegion severity levels", "[Game][G36][Famine]") {
+    // food/pop ratio drives severity
+    NF::FamineRegion abundant("Fertile", 100.f, 100.f, 0.f);  // ratio=1.0 → None
+    REQUIRE(abundant.severity() == NF::FamineSeverity::None);
+
+    NF::FamineRegion mild("MildZone", 100.f, 40.f, 0.f);       // ratio=0.4 → Mild
+    REQUIRE(mild.severity() == NF::FamineSeverity::Mild);
+
+    NF::FamineRegion moderate("ModZone", 100.f, 25.f, 0.f);    // ratio=0.25 → Moderate
+    REQUIRE(moderate.severity() == NF::FamineSeverity::Moderate);
+
+    NF::FamineRegion severe("SevZone", 100.f, 8.f, 0.f);       // ratio=0.08 → Severe
+    REQUIRE(severe.severity() == NF::FamineSeverity::Severe);
+
+    NF::FamineRegion catastrophic("CatZone", 100.f, 1.f, 0.f); // ratio=0.01 → Catastrophic
+    REQUIRE(catastrophic.severity() == NF::FamineSeverity::Catastrophic);
+}
+
+TEST_CASE("FamineRegion addAid increases food supply", "[Game][G36][Famine]") {
+    NF::FamineRegion r("AidZone", 100.f, 10.f, 0.f);
+    REQUIRE(r.foodSupply() == 10.f);
+    r.addAid(50.f);
+    REQUIRE(r.foodSupply() == 60.f);
+    r.addAid(-5.f); // negative aid ignored
+    REQUIRE(r.foodSupply() == 60.f);
+}
+
+TEST_CASE("FamineRegion tick depletes food", "[Game][G36][Famine]") {
+    NF::FamineRegion r("DepletingZone", 100.f, 500.f, 1.f); // consumes 100 per tick (dt=1)
+    r.tick(1.f);
+    REQUIRE(r.foodSupply() == 400.f);
+    REQUIRE(r.tickCount() == 1);
+}
+
+TEST_CASE("FamineRegion food floor at zero", "[Game][G36][Famine]") {
+    NF::FamineRegion r("EmptyZone", 100.f, 5.f, 1.f);
+    r.tick(1.f); // consumes 100, floor at 0
+    REQUIRE(r.foodSupply() == 0.f);
+}
+
+TEST_CASE("FamineSystem createRegion + duplicate rejection", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    REQUIRE(sys.createRegion("North") != nullptr);
+    REQUIRE(sys.createRegion("South") != nullptr);
+    REQUIRE(sys.createRegion("North") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("FamineSystem addEvent + activeEventCount + resolvedEventCount", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    NF::FamineEvent e1; e1.id = "ev1"; e1.resolved = false;
+    NF::FamineEvent e2; e2.id = "ev2"; e2.resolved = true;
+    NF::FamineEvent e3; e3.id = "ev1"; // duplicate
+
+    REQUIRE(sys.addEvent(e1));
+    REQUIRE(sys.addEvent(e2));
+    REQUIRE_FALSE(sys.addEvent(e3));
+    REQUIRE(sys.eventCount() == 2);
+    REQUIRE(sys.activeEventCount() == 1);
+    REQUIRE(sys.resolvedEventCount() == 1);
+}
+
+TEST_CASE("FamineSystem findEvent + resolve", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    NF::FamineEvent ev; ev.id = "drought1"; ev.type = NF::FamineType::Drought;
+    sys.addEvent(ev);
+
+    auto* found = sys.findEvent("drought1");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->type == NF::FamineType::Drought);
+
+    found->resolve();
+    REQUIRE(sys.activeEventCount() == 0);
+    REQUIRE(sys.resolvedEventCount() == 1);
+}
+
+TEST_CASE("FamineSystem tick propagates to regions and events", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    sys.createRegion("West", 100.f, 500.f, 1.f);
+    NF::FamineEvent ev; ev.id = "ev1";
+    sys.addEvent(ev);
+
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.regionByName("West")->tickCount() == 2);
+    REQUIRE(sys.findEvent("ev1")->duration == 2.f);
+}
+
+TEST_CASE("FamineSystem criticalRegionCount", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    sys.createRegion("ZoneA", 100.f, 500.f, 0.f); // ratio=5 → None
+    sys.createRegion("ZoneB", 100.f, 3.f,   0.f); // ratio=0.03 → Catastrophic
+    REQUIRE(sys.criticalRegionCount() == 1);
+}

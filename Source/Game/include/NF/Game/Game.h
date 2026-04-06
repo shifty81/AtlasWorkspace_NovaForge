@@ -8441,4 +8441,161 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// ============================================================
+// G36 — Famine System
+// ============================================================
+
+enum class FamineType : uint8_t {
+    Drought   = 0,
+    Blight    = 1,
+    Flood     = 2,
+    Pest      = 3,
+    War       = 4,
+    Blockade  = 5,
+    Economic  = 6,
+    Climate   = 7,
+};
+
+inline const char* famineTypeName(FamineType t) {
+    switch (t) {
+        case FamineType::Drought:  return "Drought";
+        case FamineType::Blight:   return "Blight";
+        case FamineType::Flood:    return "Flood";
+        case FamineType::Pest:     return "Pest";
+        case FamineType::War:      return "War";
+        case FamineType::Blockade: return "Blockade";
+        case FamineType::Economic: return "Economic";
+        case FamineType::Climate:  return "Climate";
+        default:                   return "Unknown";
+    }
+}
+
+enum class FamineSeverity : uint8_t {
+    None         = 0,
+    Mild         = 1,
+    Moderate     = 2,
+    Severe       = 3,
+    Catastrophic = 4,
+};
+
+struct FamineEvent {
+    std::string    id;
+    std::string    region;
+    FamineType     type     = FamineType::Drought;
+    FamineSeverity severity = FamineSeverity::None;
+    float          duration = 0.f;
+    bool           resolved = false;
+
+    [[nodiscard]] bool isActive()   const { return !resolved; }
+    [[nodiscard]] bool isCritical() const { return severity >= FamineSeverity::Severe; }
+
+    void resolve() { resolved = true; }
+    void advanceDuration(float dt) { if (!resolved) duration += dt; }
+};
+
+class FamineRegion {
+public:
+    explicit FamineRegion(std::string name, float pop = 1000.f, float food = 500.f, float rate = 1.f)
+        : m_name(std::move(name)), m_population(pop), m_foodSupply(food), m_consumptionRate(rate) {}
+
+    [[nodiscard]] const std::string& name()            const { return m_name; }
+    [[nodiscard]] float              population()      const { return m_population; }
+    [[nodiscard]] float              foodSupply()      const { return m_foodSupply; }
+    [[nodiscard]] float              consumptionRate() const { return m_consumptionRate; }
+    [[nodiscard]] size_t             tickCount()       const { return m_tickCount; }
+
+    [[nodiscard]] FamineSeverity severity() const {
+        if (m_population <= 0.f) return FamineSeverity::None;
+        float ratio = m_foodSupply / m_population;
+        if (ratio >= 0.5f)  return FamineSeverity::None;
+        if (ratio >= 0.35f) return FamineSeverity::Mild;
+        if (ratio >= 0.2f)  return FamineSeverity::Moderate;
+        if (ratio >= 0.05f) return FamineSeverity::Severe;
+        return FamineSeverity::Catastrophic;
+    }
+
+    void addAid(float amount) {
+        if (amount > 0.f) m_foodSupply += amount;
+    }
+
+    void tick(float dt) {
+        float consumed = m_consumptionRate * m_population * dt;
+        m_foodSupply -= consumed;
+        if (m_foodSupply < 0.f) m_foodSupply = 0.f;
+        m_tickCount++;
+    }
+
+private:
+    std::string m_name;
+    float       m_population;
+    float       m_foodSupply;
+    float       m_consumptionRate;
+    size_t      m_tickCount = 0;
+};
+
+class FamineSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+    static constexpr size_t MAX_EVENTS  = 64;
+
+    FamineRegion* createRegion(const std::string& name, float pop = 1000.f,
+                                float food = 500.f, float rate = 1.f) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name, pop, food, rate);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] FamineRegion* regionByName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    bool addEvent(const FamineEvent& ev) {
+        if (m_events.size() >= MAX_EVENTS) return false;
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] FamineEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& r : m_regions) r.tick(dt);
+        for (auto& e : m_events)  e.advanceDuration(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount()       const { return m_regions.size(); }
+    [[nodiscard]] size_t eventCount()        const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t resolvedEventCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (!e.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t criticalRegionCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions)
+            if (r.severity() >= FamineSeverity::Severe) c++;
+        return c;
+    }
+
+private:
+    std::vector<FamineRegion> m_regions;
+    std::vector<FamineEvent>  m_events;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF

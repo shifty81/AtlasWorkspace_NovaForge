@@ -65,7 +65,8 @@
 | **G33** — Migration System | MigrationTrigger×8, Migrant, MigrationWave, MigrationRoute, MigrationSystem | ✅ Done |
 | **G34** — Insurgency System | InsurgencyType×8, InsurgentStatus×4, Insurgent, InsurgencyCell, InsurgencyMovement, InsurgencySystem | ✅ Done |
 | **G35** — Plague System | PlagueType×8, InfectionStatus×5, PlagueCarrier, PlagueStat, PlagueRegion, PlagueSystem | ✅ Done |
-| **G36** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G36** — Famine System | FamineType×8, FamineSeverity×5, FamineEvent, FamineRegion, FamineSystem | ✅ Done |
+| **G37** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -112,7 +113,8 @@
 | **S14** — Plugin System | PluginState×8, PluginManifest, PluginInstance, PluginRegistry, PluginLoader, PluginSystem | ✅ Done |
 | **S15** — Scripting Console | ScriptLanguage×8, ScriptVariable, ScriptResult, ScriptContext, ScriptConsole | ✅ Done |
 | **S16** — Hot-Reload System | HotReloadAssetType×8, HotReloadStatus×5, HotReloadEntry, HotReloadWatcher, HotReloadDispatcher, HotReloadSystem | ✅ Done |
-| **S17** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S17** — Asset Dependency Tracker | AssetDepType×8, AssetDepStatus×4, AssetDepNode, AssetDepGraph, AssetDependencyTracker | ✅ Done |
+| **S18** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

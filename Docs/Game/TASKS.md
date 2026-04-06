@@ -1780,3 +1780,73 @@ G35 (Plague System) fully delivered:
 ## Build Verification ✅
 
 Total: 1374 tests, 0 failures (1349 existing + 14 S16 + 11 G35 = 1374).
+
+---
+
+## S17 — Asset Dependency Tracker ✅
+
+- [x] AssetDepType enum ×8 (Texture, Mesh, Shader, Script, Audio, Material, Animation, Level)
+  - assetDepTypeName() for all 8 types
+- [x] AssetDepStatus enum ×4 (Unknown, Resolved, Missing, Circular)
+- [x] AssetDepNode struct (assetId, assetPath, type, status, dependencies)
+  - isResolved/isMissing/isCircular predicates
+  - addDependency (no self-dep, no duplicates), hasDependency, dependencyCount
+- [x] AssetDepGraph class — directed acyclic graph of asset nodes
+  - addNode/removeNode (max 512, no duplicates), findNode
+  - addEdge (both ends must be registered), hasEdge
+  - resolveAll (marks Unknown → Resolved)
+  - detectCircular (DFS cycle detection, marks circular nodes)
+  - nodeCount, unresolvedCount, totalEdgeCount
+- [x] AssetDependencyTracker class — top-level coordinator
+  - registerAsset/unregisterAsset
+  - addDependency/hasDependency delegation
+  - resolveAll, detectCircular delegation
+  - assetCount, unresolvedCount, totalDependencies
+- [x] 14 new editor tests (test_s17_editor.cpp), all passing
+
+## S17 Complete ✅
+
+S17 (Asset Dependency Tracker) fully delivered:
+- AssetDepType×8 with name helpers
+- AssetDepStatus×4 for full node state tracking
+- AssetDepNode with dependency list and status predicates
+- AssetDepGraph with directed edge management, resolve, and cycle detection
+- AssetDependencyTracker as top-level coordinator
+- 14 new editor tests, all passing
+
+---
+
+## G36 — Famine System ✅
+
+- [x] FamineType enum ×8 (Drought, Blight, Flood, Pest, War, Blockade, Economic, Climate)
+  - famineTypeName() for all 8 types
+- [x] FamineSeverity enum ×5 (None, Mild, Moderate, Severe, Catastrophic)
+- [x] FamineEvent struct (id, region, type, severity, duration, resolved)
+  - isActive(), isCritical() (Severe or worse)
+  - resolve/advanceDuration lifecycle
+- [x] FamineRegion class — food supply and severity model per region
+  - population, foodSupply, consumptionRate
+  - severity() computed from food/population ratio
+  - addAid (positive amounts only), tick depletes food, floors at 0
+- [x] FamineSystem class — multi-region coordinator
+  - createRegion (max 32, unique names), regionByName
+  - addEvent (max 64, no duplicates), findEvent
+  - tick propagates to all regions and events
+  - regionCount, eventCount, activeEventCount, resolvedEventCount, criticalRegionCount
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G36 Complete ✅
+
+G36 (Famine System) fully delivered:
+- FamineType×8 with name helpers
+- FamineSeverity×5 for severity classification
+- FamineEvent with full active/resolved lifecycle and duration tracking
+- FamineRegion with food depletion model and data-driven severity
+- FamineSystem as multi-region coordinator with event management
+- 12 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1400 tests, 0 failures (1374 existing + 14 S17 + 12 G36 = 1400).
