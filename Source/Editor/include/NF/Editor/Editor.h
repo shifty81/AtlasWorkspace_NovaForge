@@ -4025,14 +4025,13 @@ public:
             m_frameStats.stats().fps);
 
         // Sync mouse state for UIContext interactive widgets.
-        const auto& ms      = input.state().mouse;
-        bool curLeftDown     = input.isKeyDown(KeyCode::Mouse1);
-        m_mouseState.x            = ms.x;
-        m_mouseState.y            = ms.y;
+        bool curLeftDown          = input.isKeyDown(KeyCode::Mouse1);
+        m_mouseState.x            = input.state().mouse.x;
+        m_mouseState.y            = input.state().mouse.y;
         m_mouseState.leftDown     = curLeftDown;
         m_mouseState.leftPressed  = curLeftDown && !m_prevLeftDown;
         m_mouseState.leftReleased = !curLeftDown && m_prevLeftDown;
-        m_mouseState.scrollDelta  = ms.scrollDelta;
+        m_mouseState.scrollDelta  = input.state().mouse.scrollDelta;
         m_prevLeftDown = curLeftDown;
         m_lastDt = dt;
     }

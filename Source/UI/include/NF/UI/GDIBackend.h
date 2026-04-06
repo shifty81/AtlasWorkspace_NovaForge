@@ -144,7 +144,10 @@ public:
                  text.data(), static_cast<int>(text.size()));
     }
 
-    // Convenience alias kept for backward compatibility.
+    // Convenience alias kept for backward compatibility with any call sites that
+    // used the old drawTextGDI() name.
+    // TODO: remove once all callers have been updated to use drawText().
+    [[deprecated("Use drawText() instead")]]
     void drawTextGDI(float x, float y, std::string_view text, uint32_t color) {
         drawText(x, y, text, color);
     }
