@@ -1780,3 +1780,353 @@ G35 (Plague System) fully delivered:
 ## Build Verification ✅
 
 Total: 1374 tests, 0 failures (1349 existing + 14 S16 + 11 G35 = 1374).
+
+---
+
+## S17 — Asset Dependency Tracker ✅
+
+- [x] AssetDepType enum ×8 (Texture, Mesh, Shader, Script, Audio, Material, Animation, Level)
+  - assetDepTypeName() for all 8 types
+- [x] AssetDepStatus enum ×4 (Unknown, Resolved, Missing, Circular)
+- [x] AssetDepNode struct (assetId, assetPath, type, status, dependencies)
+  - isResolved/isMissing/isCircular predicates
+  - addDependency (no self-dep, no duplicates), hasDependency, dependencyCount
+- [x] AssetDepGraph class — directed acyclic graph of asset nodes
+  - addNode/removeNode (max 512, no duplicates), findNode
+  - addEdge (both ends must be registered), hasEdge
+  - resolveAll (marks Unknown → Resolved)
+  - detectCircular (DFS cycle detection, marks circular nodes)
+  - nodeCount, unresolvedCount, totalEdgeCount
+- [x] AssetDependencyTracker class — top-level coordinator
+  - registerAsset/unregisterAsset
+  - addDependency/hasDependency delegation
+  - resolveAll, detectCircular delegation
+  - assetCount, unresolvedCount, totalDependencies
+- [x] 14 new editor tests (test_s17_editor.cpp), all passing
+
+## S17 Complete ✅
+
+S17 (Asset Dependency Tracker) fully delivered:
+- AssetDepType×8 with name helpers
+- AssetDepStatus×4 for full node state tracking
+- AssetDepNode with dependency list and status predicates
+- AssetDepGraph with directed edge management, resolve, and cycle detection
+- AssetDependencyTracker as top-level coordinator
+- 14 new editor tests, all passing
+
+---
+
+## G36 — Famine System ✅
+
+- [x] FamineType enum ×8 (Drought, Blight, Flood, Pest, War, Blockade, Economic, Climate)
+  - famineTypeName() for all 8 types
+- [x] FamineSeverity enum ×5 (None, Mild, Moderate, Severe, Catastrophic)
+- [x] FamineEvent struct (id, region, type, severity, duration, resolved)
+  - isActive(), isCritical() (Severe or worse)
+  - resolve/advanceDuration lifecycle
+- [x] FamineRegion class — food supply and severity model per region
+  - population, foodSupply, consumptionRate
+  - severity() computed from food/population ratio
+  - addAid (positive amounts only), tick depletes food, floors at 0
+- [x] FamineSystem class — multi-region coordinator
+  - createRegion (max 32, unique names), regionByName
+  - addEvent (max 64, no duplicates), findEvent
+  - tick propagates to all regions and events
+  - regionCount, eventCount, activeEventCount, resolvedEventCount, criticalRegionCount
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G36 Complete ✅
+
+G36 (Famine System) fully delivered:
+- FamineType×8 with name helpers
+- FamineSeverity×5 for severity classification
+- FamineEvent with full active/resolved lifecycle and duration tracking
+- FamineRegion with food depletion model and data-driven severity
+- FamineSystem as multi-region coordinator with event management
+- 12 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1400 tests, 0 failures (1374 existing + 14 S17 + 12 G36 = 1400).
+
+---
+
+## S18 — Build Configuration System ✅
+
+- [x] BuildTarget enum ×8 (Executable, SharedLib, StaticLib, HeaderOnly, TestSuite, Plugin, Shader, ContentPack)
+  - buildTargetName() for all 8 types
+- [x] BuildPlatform enum ×5 (Windows, Linux, MacOS, WebAsm, Console)
+  - buildPlatformName() for all 5 types
+- [x] BuildConfig struct (name, target, platform, debugSymbols, optimized, sanitizers, defines, includePaths)
+  - isDebug/isRelease predicates
+  - addDefine (no duplicates), addIncludePath (no duplicates)
+  - defineCount, includePathCount
+- [x] BuildProfile class — collection of named build configs
+  - addConfig/removeConfig (max 64, no duplicates), findConfig
+  - debugConfigCount, releaseConfigCount
+- [x] BuildConfigurationSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - createProfile/removeProfile (max 16, no duplicates), findProfile
+  - setActiveProfile/activeProfile/activeProfileName
+  - removeProfile clears active if matches
+  - totalConfigCount across all profiles
+- [x] 14 new editor tests (test_s18_editor.cpp), all passing
+
+## S18 Complete ✅
+
+S18 (Build Configuration System) fully delivered:
+- BuildTarget×8 with name helpers
+- BuildPlatform×5 with name helpers
+- BuildConfig with debug/release predicates and define/include management
+- BuildProfile as named config collection
+- BuildConfigurationSystem as top-level coordinator with active profile management
+- 14 new editor tests, all passing
+
+---
+
+## G37 — Refugee System ✅
+
+- [x] RefugeeOrigin enum ×8 (War, Famine, Plague, Disaster, Political, Economic, Religious, Climate)
+  - refugeeOriginName() for all 8 types
+- [x] RefugeeStatus enum ×5 (InTransit, Sheltered, Settled, Displaced, Returned)
+- [x] Refugee struct (id, name, origin, status, health)
+  - isInTransit/isSheltered/isSettled/isDisplaced/isReturned predicates
+  - shelter (from InTransit/Displaced), settle (from Sheltered), displace (from InTransit/Sheltered), sendHome (from Sheltered/Settled)
+  - guarded state transitions prevent invalid paths
+- [x] RefugeeCamp class — camp with capacity limit
+  - addRefugee/removeRefugee (max 512, capped at capacity, no duplicates), findRefugee
+  - shelteredCount, settledCount, isFull
+  - tick propagation
+- [x] RefugeeSystem class — multi-camp coordinator
+  - createCamp (max 32, unique names), campByName
+  - tick propagates to all camps
+  - totalRefugees, totalSheltered, totalSettled, fullCampCount
+- [x] 13 new game tests (in test_game.cpp), all passing
+
+## G37 Complete ✅
+
+G37 (Refugee System) fully delivered:
+- RefugeeOrigin×8 with name helpers
+- RefugeeStatus×5 for full lifecycle tracking
+- Refugee with guarded status transitions (InTransit→Sheltered→Settled→Returned paths)
+- RefugeeCamp with capacity-limited population management
+- RefugeeSystem as multi-camp coordinator with aggregate stats
+- 13 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1427 tests, 0 failures (1400 existing + 14 S18 + 13 G37 = 1427).
+
+---
+
+## S19 — Scene Snapshot System ✅
+
+- [x] SceneSnapshotType enum ×8 (Full, Delta, Lighting, Physics, AI, Audio, Visual, Meta)
+  - sceneSnapshotTypeName() for all 8 types
+- [x] SceneSnapshotState enum ×4 (Valid, Outdated, Corrupted, Partial)
+- [x] SceneSnapshotFrame struct (id, label, type, state, timestamp, dataSize)
+  - isValid/isOutdated/isCorrupted/isPartial predicates
+  - markOutdated (only from Valid), markCorrupted (always)
+- [x] SceneSnapshotHistory class — ring-style history of frames
+  - push (max 128, no duplicates), remove, find
+  - latest returns last pushed frame
+  - markAllOutdated propagates to all frames
+  - validCount, corruptedCount, totalDataSize aggregations
+- [x] SceneSnapshotSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - capture/discard/find delegation
+  - invalidateAll propagation
+  - frameCount, validCount, corruptedCount, totalDataSize
+- [x] 14 new editor tests (test_s19_editor.cpp), all passing
+
+## S19 Complete ✅
+
+S19 (Scene Snapshot System) fully delivered:
+- SceneSnapshotType×8 with name helpers
+- SceneSnapshotState×4 for full frame state tracking
+- SceneSnapshotFrame with guarded state transitions
+- SceneSnapshotHistory with duplicate protection and aggregate stats
+- SceneSnapshotSystem as top-level coordinator
+- 14 new editor tests, all passing
+
+---
+
+## G38 — Storm System ✅
+
+- [x] StormType enum ×8 (Thunderstorm, Hurricane, Blizzard, Sandstorm, Firestorm, Hailstorm, Tornado, ElectricStorm)
+  - stormTypeName() for all 8 types
+- [x] StormSeverity enum ×5 (None, Mild, Moderate, Severe, Catastrophic)
+- [x] Storm struct (id, region, type, severity, duration, active)
+  - isActive (active && duration > 0), isCritical (Severe or worse)
+  - dissipate clears active and duration
+  - advanceDuration counts down, auto-dissipates at 0
+- [x] StormRegion class — per-region storm tracker
+  - addStorm (no duplicates), findStorm
+  - activeStormCount, currentSeverity (worst active severity)
+  - tick propagates advanceDuration to all storms
+- [x] StormSystem class — multi-region coordinator
+  - createRegion (max 32, unique names), regionByName
+  - addStorm (max 128, routes to correct region)
+  - tick propagates to all regions
+  - totalStormCount, activeStormCount, criticalRegionCount
+- [x] 13 new game tests (in test_game.cpp), all passing
+
+## G38 Complete ✅
+
+G38 (Storm System) fully delivered:
+- StormType×8 with name helpers
+- StormSeverity×5 for severity classification
+- Storm with countdown lifecycle and severity criticality
+- StormRegion with active-storm tracking and worst-severity aggregation
+- StormSystem as multi-region coordinator
+- 13 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1454 tests, 0 failures (1427 existing + 14 S19 + 13 G38 = 1454).
+
+---
+
+## S20 — Resource Monitor System ✅
+
+- [x] ResourceMonitorMetric enum ×8 (CPU, GPU, Memory, DiskIO, NetworkIO, FrameTime, DrawCalls, ThreadLoad)
+  - resourceMonitorMetricName() for all 8 metrics
+- [x] ResourceMonitorLevel enum ×4 (Normal, Warning, Critical, Overflow)
+- [x] ResourceMonitorSample struct (metric, level, value, timestamp)
+  - isHealthy/isWarning/isCritical/isOverflow predicates
+  - computeLevel(warnThreshold, critThreshold) for dynamic classification
+- [x] ResourceMonitorChannel class — per-metric ring buffer (max 256)
+  - push (wrong-metric rejection), latest, average, peak, warningCount, clear
+- [x] ResourceMonitorSystem class — top-level coordinator
+  - init auto-creates 8 channels (one per metric), shutdown clears all
+  - record routes samples to correct channel
+  - totalSamples, totalWarnings, clearAll
+- [x] 14 new editor tests (test_s20_editor.cpp), all passing
+
+## S20 Complete ✅
+
+---
+
+## G39 — Earthquake System ✅
+
+- [x] EarthquakeScale enum ×8 (Micro, Minor, Light, Moderate, Strong, Major, Great, Catastrophic)
+  - earthquakeScaleName() for all 8 scales
+- [x] EarthquakeStatus enum ×4 (Pending, Active, Aftershock, Resolved)
+- [x] Earthquake struct (id, region, scale, status, magnitude, depth, duration)
+  - activate (Pending→Active), resolve (any→Resolved), toAftershock (Active→Aftershock)
+  - isMajor (scale ≥ Major), isActive/isPending/isResolved/isAftershock predicates
+- [x] FaultLine class — per-fault earthquake tracker
+  - addEarthquake (no duplicates), find, earthquakeCount
+  - activeCount (Active+Aftershock), majorCount (Major+), tick
+- [x] EarthquakeSystem class — multi-fault coordinator (max 32 faults / 256 earthquakes)
+  - createFaultLine, faultByName, addEarthquake (routes to fault by region)
+  - activeEarthquakeCount, majorEarthquakeCount, tick propagation
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G39 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1480 tests, 0 failures (1454 existing + 14 S20 + 12 G39 = 1480).
+
+---
+
+## S21 — Editor Event Bus System ✅
+
+- [x] EditorEventPriority enum ×8 (Lowest, Low, Normal, High, Highest, System, Critical, Realtime)
+  - editorEventPriorityName() for all 8 priorities
+- [x] EditorBusState enum ×4 (Idle, Posting, Flushing, Suspended)
+- [x] EditorBusEvent struct (topic, payload, priority, timestamp, consumed)
+  - consume/isConsumed, isHighPrio (≥High), isCritical (≥Critical)
+- [x] EditorEventSubscription — per-handler wrapper with priority filter
+  - deliver (rejected if cancelled or below minPriority), cancel, callCount
+- [x] EditorEventBus — topic-based message bus
+  - subscribe, post (blocked when suspended), flush routes to matching subscribers
+  - wildcard "*" subscription receives all topics
+  - suspend/resume, clearQueue, queueSize, subscriptionCount
+  - flush returns total dispatch count (events × matching subscribers)
+- [x] 14 new editor tests (test_s21_editor.cpp), all passing
+
+## S21 Complete ✅
+
+---
+
+## G40 — Volcano System ✅
+
+- [x] VolcanoActivity enum ×8 (Dormant, Restless, Elevated, Unrest, Minor, Moderate, Major, Catastrophic)
+  - volcanoActivityName() for all 8 activity levels
+- [x] VolcanoStatus enum ×4 (Inactive, Monitoring, Erupting, Subsiding)
+- [x] VolcanicEvent struct (id, activity, duration, ashfall, resolved)
+  - resolve, isResolved, isMajor (≥Major), isCatastrophic
+- [x] Volcano class — per-volcano state machine + event list
+  - monitor, startEruption, beginSubsiding (guarded: Active→Subsiding only), deactivate
+  - addEvent (no duplicates), findEvent, eventCount, majorEvents
+  - setActivity, tick
+- [x] VolcanoSystem — multi-volcano coordinator (max 64 volcanoes / 512 events)
+  - createVolcano, byName, addEvent (routes to volcano by name)
+  - eruptingCount, majorEventCount, tick propagation
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G40 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1504 tests, 0 failures (1480 existing + 14 S21 + 10 G40 = 1504).
+
+---
+
+## S22 — Workspace Layout Manager ✅
+
+- [x] LayoutPanelType enum ×8 (Viewport, Inspector, Hierarchy, ContentBrowser, Console, Profiler, Timeline, Custom)
+  - layoutPanelTypeName() for all 8 types
+- [x] LayoutDockZone enum ×4 (Left, Right, Top, Bottom)
+  - layoutDockZoneName() for all 4 zones
+- [x] LayoutPanel struct (id, title, type, dockZone, width, height, visible, pinned)
+  - show/hide, pin/unpin, isVisible, isPinned, hasSize (both dims > 0)
+- [x] LayoutSplit struct (firstPanelId, secondPanelId, isHorizontal, ratio)
+  - isValid (non-empty ids, 0 < ratio < 1), flipOrientation
+- [x] WorkspaceLayout — named layout with panels + splits
+  - addPanel (duplicate rejected), removePanel, findPanel
+  - addSplit (invalid rejected), visiblePanelCount, pinnedPanelCount
+  - showAll, hideAll
+- [x] WorkspaceLayoutManager — multi-layout registry (max 32)
+  - createLayout, removeLayout (clears active if removed), findLayout
+  - setActive/activeLayout/activeName/hasActive
+- [x] 14 new editor tests (test_s22_editor.cpp), all passing
+
+## S22 Complete ✅
+
+---
+
+## G41 — Tsunami System ✅
+
+- [x] TsunamiCause enum ×8 (Earthquake, Landslide, Volcanic, Meteorite, Submarine, Glacial, Nuclear, Unknown)
+  - tsunamiCauseName() for all 8 causes
+- [x] TsunamiStatus enum ×4 (Forming, Traveling, Striking, Receding)
+- [x] TsunamiWave struct (heightMeters, speedKmh, periodSeconds, broke)
+  - breakWave, hasBroken, isDevastating (height ≥ 10m), isFast (speed ≥ 800 km/h)
+- [x] Tsunami class — per-tsunami state machine + wave list
+  - advance() chains: Forming→Traveling→Striking→Receding (no-op from Receding)
+  - setCause, addWave, maxWaveHeight, isDevastating, isStriking, isReceding
+- [x] TsunamiSystem — multi-tsunami coordinator (max 64)
+  - create (duplicate rejected), find, tick propagation
+  - strikingCount, devastatingCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G41 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1528 tests, 0 failures (1504 existing + 14 S22 + 10 G41 = 1528).

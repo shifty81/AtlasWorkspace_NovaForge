@@ -8441,4 +8441,933 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// ============================================================
+// G36 — Famine System
+// ============================================================
+
+enum class FamineType : uint8_t {
+    Drought   = 0,
+    Blight    = 1,
+    Flood     = 2,
+    Pest      = 3,
+    War       = 4,
+    Blockade  = 5,
+    Economic  = 6,
+    Climate   = 7,
+};
+
+inline const char* famineTypeName(FamineType t) {
+    switch (t) {
+        case FamineType::Drought:  return "Drought";
+        case FamineType::Blight:   return "Blight";
+        case FamineType::Flood:    return "Flood";
+        case FamineType::Pest:     return "Pest";
+        case FamineType::War:      return "War";
+        case FamineType::Blockade: return "Blockade";
+        case FamineType::Economic: return "Economic";
+        case FamineType::Climate:  return "Climate";
+        default:                   return "Unknown";
+    }
+}
+
+enum class FamineSeverity : uint8_t {
+    None         = 0,
+    Mild         = 1,
+    Moderate     = 2,
+    Severe       = 3,
+    Catastrophic = 4,
+};
+
+struct FamineEvent {
+    std::string    id;
+    std::string    region;
+    FamineType     type     = FamineType::Drought;
+    FamineSeverity severity = FamineSeverity::None;
+    float          duration = 0.f;
+    bool           resolved = false;
+
+    [[nodiscard]] bool isActive()   const { return !resolved; }
+    [[nodiscard]] bool isCritical() const { return severity >= FamineSeverity::Severe; }
+
+    void resolve() { resolved = true; }
+    void advanceDuration(float dt) { if (!resolved) duration += dt; }
+};
+
+class FamineRegion {
+public:
+    explicit FamineRegion(std::string name, float pop = 1000.f, float food = 500.f, float rate = 1.f)
+        : m_name(std::move(name)), m_population(pop), m_foodSupply(food), m_consumptionRate(rate) {}
+
+    [[nodiscard]] const std::string& name()            const { return m_name; }
+    [[nodiscard]] float              population()      const { return m_population; }
+    [[nodiscard]] float              foodSupply()      const { return m_foodSupply; }
+    [[nodiscard]] float              consumptionRate() const { return m_consumptionRate; }
+    [[nodiscard]] size_t             tickCount()       const { return m_tickCount; }
+
+    [[nodiscard]] FamineSeverity severity() const {
+        if (m_population <= 0.f) return FamineSeverity::None;
+        float ratio = m_foodSupply / m_population;
+        if (ratio >= 0.5f)  return FamineSeverity::None;
+        if (ratio >= 0.35f) return FamineSeverity::Mild;
+        if (ratio >= 0.2f)  return FamineSeverity::Moderate;
+        if (ratio >= 0.05f) return FamineSeverity::Severe;
+        return FamineSeverity::Catastrophic;
+    }
+
+    void addAid(float amount) {
+        if (amount > 0.f) m_foodSupply += amount;
+    }
+
+    void tick(float dt) {
+        float consumed = m_consumptionRate * m_population * dt;
+        m_foodSupply -= consumed;
+        if (m_foodSupply < 0.f) m_foodSupply = 0.f;
+        m_tickCount++;
+    }
+
+private:
+    std::string m_name;
+    float       m_population;
+    float       m_foodSupply;
+    float       m_consumptionRate;
+    size_t      m_tickCount = 0;
+};
+
+class FamineSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+    static constexpr size_t MAX_EVENTS  = 64;
+
+    FamineRegion* createRegion(const std::string& name, float pop = 1000.f,
+                                float food = 500.f, float rate = 1.f) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name, pop, food, rate);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] FamineRegion* regionByName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    bool addEvent(const FamineEvent& ev) {
+        if (m_events.size() >= MAX_EVENTS) return false;
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] FamineEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& r : m_regions) r.tick(dt);
+        for (auto& e : m_events)  e.advanceDuration(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount()       const { return m_regions.size(); }
+    [[nodiscard]] size_t eventCount()        const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t resolvedEventCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (!e.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t criticalRegionCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions)
+            if (r.severity() >= FamineSeverity::Severe) c++;
+        return c;
+    }
+
+private:
+    std::vector<FamineRegion> m_regions;
+    std::vector<FamineEvent>  m_events;
+    size_t                    m_tickCount = 0;
+};
+
+// ============================================================
+// G37 — Refugee System
+// ============================================================
+
+enum class RefugeeOrigin : uint8_t {
+    War        = 0,
+    Famine     = 1,
+    Plague     = 2,
+    Disaster   = 3,
+    Political  = 4,
+    Economic   = 5,
+    Religious  = 6,
+    Climate    = 7,
+};
+
+inline const char* refugeeOriginName(RefugeeOrigin o) {
+    switch (o) {
+        case RefugeeOrigin::War:       return "War";
+        case RefugeeOrigin::Famine:    return "Famine";
+        case RefugeeOrigin::Plague:    return "Plague";
+        case RefugeeOrigin::Disaster:  return "Disaster";
+        case RefugeeOrigin::Political: return "Political";
+        case RefugeeOrigin::Economic:  return "Economic";
+        case RefugeeOrigin::Religious: return "Religious";
+        case RefugeeOrigin::Climate:   return "Climate";
+        default:                       return "Unknown";
+    }
+}
+
+enum class RefugeeStatus : uint8_t {
+    InTransit  = 0,
+    Sheltered  = 1,
+    Settled    = 2,
+    Displaced  = 3,
+    Returned   = 4,
+};
+
+struct Refugee {
+    std::string    id;
+    std::string    name;
+    RefugeeOrigin  origin  = RefugeeOrigin::War;
+    RefugeeStatus  status  = RefugeeStatus::InTransit;
+    float          health  = 1.0f;  // 0..1
+
+    [[nodiscard]] bool isInTransit() const { return status == RefugeeStatus::InTransit; }
+    [[nodiscard]] bool isSheltered() const { return status == RefugeeStatus::Sheltered; }
+    [[nodiscard]] bool isSettled()   const { return status == RefugeeStatus::Settled;   }
+    [[nodiscard]] bool isDisplaced() const { return status == RefugeeStatus::Displaced; }
+    [[nodiscard]] bool isReturned()  const { return status == RefugeeStatus::Returned;  }
+
+    bool shelter() {
+        if (status != RefugeeStatus::InTransit && status != RefugeeStatus::Displaced)
+            return false;
+        status = RefugeeStatus::Sheltered;
+        return true;
+    }
+
+    bool settle() {
+        if (status != RefugeeStatus::Sheltered) return false;
+        status = RefugeeStatus::Settled;
+        return true;
+    }
+
+    bool displace() {
+        if (status == RefugeeStatus::Returned || status == RefugeeStatus::Settled)
+            return false;
+        status = RefugeeStatus::Displaced;
+        return true;
+    }
+
+    bool sendHome() {
+        if (status != RefugeeStatus::Sheltered && status != RefugeeStatus::Settled)
+            return false;
+        status = RefugeeStatus::Returned;
+        return true;
+    }
+};
+
+class RefugeeCamp {
+public:
+    static constexpr size_t MAX_REFUGEES = 512;
+
+    explicit RefugeeCamp(std::string name, size_t capacity = 100)
+        : m_name(std::move(name)), m_capacity(capacity) {}
+
+    [[nodiscard]] const std::string& name()     const { return m_name; }
+    [[nodiscard]] size_t capacity()             const { return m_capacity; }
+    [[nodiscard]] size_t refugeeCount()         const { return m_refugees.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+
+    bool addRefugee(const Refugee& r) {
+        if (m_refugees.size() >= MAX_REFUGEES) return false;
+        if (m_refugees.size() >= m_capacity)   return false;
+        for (auto& ref : m_refugees) if (ref.id == r.id) return false;
+        m_refugees.push_back(r);
+        return true;
+    }
+
+    bool removeRefugee(const std::string& id) {
+        for (auto it = m_refugees.begin(); it != m_refugees.end(); ++it) {
+            if (it->id == id) { m_refugees.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Refugee* findRefugee(const std::string& id) {
+        for (auto& r : m_refugees) if (r.id == id) return &r;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t shelteredCount() const {
+        size_t c = 0;
+        for (auto& r : m_refugees) if (r.isSheltered()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t settledCount() const {
+        size_t c = 0;
+        for (auto& r : m_refugees) if (r.isSettled()) c++;
+        return c;
+    }
+
+    [[nodiscard]] bool isFull() const { return m_refugees.size() >= m_capacity; }
+
+    void tick(float /*dt*/) { m_tickCount++; }
+
+private:
+    std::string         m_name;
+    size_t              m_capacity;
+    std::vector<Refugee> m_refugees;
+    size_t              m_tickCount = 0;
+};
+
+class RefugeeSystem {
+public:
+    static constexpr size_t MAX_CAMPS = 32;
+
+    RefugeeCamp* createCamp(const std::string& name, size_t capacity = 100) {
+        if (m_camps.size() >= MAX_CAMPS) return nullptr;
+        for (auto& c : m_camps) if (c.name() == name) return nullptr;
+        m_camps.emplace_back(name, capacity);
+        return &m_camps.back();
+    }
+
+    [[nodiscard]] RefugeeCamp* campByName(const std::string& name) {
+        for (auto& c : m_camps) if (c.name() == name) return &c;
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& c : m_camps) c.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t campCount() const { return m_camps.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalRefugees() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) c += camp.refugeeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t totalSheltered() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) c += camp.shelteredCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t totalSettled() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) c += camp.settledCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t fullCampCount() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) if (camp.isFull()) c++;
+        return c;
+    }
+
+private:
+    std::vector<RefugeeCamp> m_camps;
+    size_t                   m_tickCount = 0;
+};
+
+// ============================================================
+// G38 — Storm System
+// ============================================================
+
+enum class StormType : uint8_t {
+    Thunderstorm  = 0,
+    Hurricane     = 1,
+    Blizzard      = 2,
+    Sandstorm     = 3,
+    Firestorm     = 4,
+    Hailstorm     = 5,
+    Tornado       = 6,
+    ElectricStorm = 7,
+};
+
+inline const char* stormTypeName(StormType t) {
+    switch (t) {
+        case StormType::Thunderstorm:  return "Thunderstorm";
+        case StormType::Hurricane:     return "Hurricane";
+        case StormType::Blizzard:      return "Blizzard";
+        case StormType::Sandstorm:     return "Sandstorm";
+        case StormType::Firestorm:     return "Firestorm";
+        case StormType::Hailstorm:     return "Hailstorm";
+        case StormType::Tornado:       return "Tornado";
+        case StormType::ElectricStorm: return "ElectricStorm";
+        default:                       return "Unknown";
+    }
+}
+
+enum class StormSeverity : uint8_t {
+    None         = 0,
+    Mild         = 1,
+    Moderate     = 2,
+    Severe       = 3,
+    Catastrophic = 4,
+};
+
+struct Storm {
+    std::string   id;
+    std::string   region;
+    StormType     type     = StormType::Thunderstorm;
+    StormSeverity severity = StormSeverity::Mild;
+    uint32_t      duration = 0;    // ticks remaining
+    bool          active   = true;
+
+    [[nodiscard]] bool isActive()   const { return active && duration > 0; }
+    [[nodiscard]] bool isCritical() const { return severity >= StormSeverity::Severe; }
+
+    void dissipate() { active = false; duration = 0; }
+
+    void advanceDuration() {
+        if (!active) return;
+        if (duration > 0) duration--;
+        if (duration == 0) active = false;
+    }
+};
+
+class StormRegion {
+public:
+    explicit StormRegion(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()  const { return m_name; }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+
+    [[nodiscard]] StormSeverity currentSeverity() const {
+        StormSeverity worst = StormSeverity::None;
+        for (auto& s : m_storms) {
+            if (s.isActive() && s.severity > worst)
+                worst = s.severity;
+        }
+        return worst;
+    }
+
+    bool addStorm(const Storm& s) {
+        for (auto& existing : m_storms) if (existing.id == s.id) return false;
+        m_storms.push_back(s);
+        return true;
+    }
+
+    [[nodiscard]] Storm* findStorm(const std::string& id) {
+        for (auto& s : m_storms) if (s.id == id) return &s;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t stormCount()  const { return m_storms.size(); }
+
+    [[nodiscard]] size_t activeStormCount() const {
+        size_t c = 0;
+        for (auto& s : m_storms) if (s.isActive()) c++;
+        return c;
+    }
+
+    void tick() {
+        for (auto& s : m_storms) s.advanceDuration();
+        m_tickCount++;
+    }
+
+private:
+    std::string        m_name;
+    std::vector<Storm> m_storms;
+    size_t             m_tickCount = 0;
+};
+
+class StormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+    static constexpr size_t MAX_STORMS  = 128;
+
+    StormRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] StormRegion* regionByName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    bool addStorm(const Storm& s) {
+        if (m_stormCount >= MAX_STORMS) return false;
+        auto* region = regionByName(s.region);
+        if (!region) return false;
+        if (region->addStorm(s)) { m_stormCount++; return true; }
+        return false;
+    }
+
+    void tick() {
+        for (auto& r : m_regions) r.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount()      const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t totalStormCount()  const { return m_stormCount; }
+
+    [[nodiscard]] size_t activeStormCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeStormCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t criticalRegionCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions)
+            if (r.currentSeverity() >= StormSeverity::Severe) c++;
+        return c;
+    }
+
+private:
+    std::vector<StormRegion> m_regions;
+    size_t                   m_tickCount  = 0;
+    size_t                   m_stormCount = 0;
+};
+
+// ============================================================
+// G39 — Earthquake System
+// ============================================================
+
+enum class EarthquakeScale : uint8_t {
+    Micro       = 0,
+    Minor       = 1,
+    Light       = 2,
+    Moderate    = 3,
+    Strong      = 4,
+    Major       = 5,
+    Great       = 6,
+    Catastrophic = 7,
+};
+
+inline const char* earthquakeScaleName(EarthquakeScale s) {
+    switch (s) {
+        case EarthquakeScale::Micro:        return "Micro";
+        case EarthquakeScale::Minor:        return "Minor";
+        case EarthquakeScale::Light:        return "Light";
+        case EarthquakeScale::Moderate:     return "Moderate";
+        case EarthquakeScale::Strong:       return "Strong";
+        case EarthquakeScale::Major:        return "Major";
+        case EarthquakeScale::Great:        return "Great";
+        case EarthquakeScale::Catastrophic: return "Catastrophic";
+        default:                            return "Unknown";
+    }
+}
+
+enum class EarthquakeStatus : uint8_t {
+    Pending    = 0,
+    Active     = 1,
+    Aftershock = 2,
+    Resolved   = 3,
+};
+
+struct Earthquake {
+    std::string      id;
+    std::string      region;
+    EarthquakeScale  scale    = EarthquakeScale::Minor;
+    EarthquakeStatus status   = EarthquakeStatus::Pending;
+    float            magnitude = 0.0f;
+    uint32_t         depth     = 0;    // km
+    uint32_t         duration  = 0;    // ticks
+
+    [[nodiscard]] bool isActive()     const { return status == EarthquakeStatus::Active;     }
+    [[nodiscard]] bool isPending()    const { return status == EarthquakeStatus::Pending;    }
+    [[nodiscard]] bool isResolved()   const { return status == EarthquakeStatus::Resolved;   }
+    [[nodiscard]] bool isAftershock() const { return status == EarthquakeStatus::Aftershock; }
+    [[nodiscard]] bool isMajor()      const { return scale >= EarthquakeScale::Major;        }
+
+    void activate()  { if (status == EarthquakeStatus::Pending)    status = EarthquakeStatus::Active;     }
+    void resolve()   { status = EarthquakeStatus::Resolved;   }
+    void toAftershock() { if (status == EarthquakeStatus::Active) status = EarthquakeStatus::Aftershock; }
+};
+
+class FaultLine {
+public:
+    explicit FaultLine(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()  const { return m_name; }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+
+    bool addEarthquake(const Earthquake& eq) {
+        for (auto& e : m_earthquakes) if (e.id == eq.id) return false;
+        m_earthquakes.push_back(eq);
+        return true;
+    }
+
+    [[nodiscard]] Earthquake* find(const std::string& id) {
+        for (auto& e : m_earthquakes) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t earthquakeCount() const { return m_earthquakes.size(); }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& e : m_earthquakes) if (e.isActive() || e.isAftershock()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorCount() const {
+        size_t c = 0;
+        for (auto& e : m_earthquakes) if (e.isMajor()) c++;
+        return c;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string            m_name;
+    std::vector<Earthquake> m_earthquakes;
+    size_t                 m_tickCount = 0;
+};
+
+class EarthquakeSystem {
+public:
+    static constexpr size_t MAX_FAULTS      = 32;
+    static constexpr size_t MAX_EARTHQUAKES = 256;
+
+    FaultLine* createFaultLine(const std::string& name) {
+        if (m_faults.size() >= MAX_FAULTS) return nullptr;
+        for (auto& f : m_faults) if (f.name() == name) return nullptr;
+        m_faults.emplace_back(name);
+        return &m_faults.back();
+    }
+
+    [[nodiscard]] FaultLine* faultByName(const std::string& name) {
+        for (auto& f : m_faults) if (f.name() == name) return &f;
+        return nullptr;
+    }
+
+    bool addEarthquake(const Earthquake& eq) {
+        if (m_eqCount >= MAX_EARTHQUAKES) return false;
+        auto* fault = faultByName(eq.region);
+        if (!fault) return false;
+        if (fault->addEarthquake(eq)) { m_eqCount++; return true; }
+        return false;
+    }
+
+    void tick() {
+        for (auto& f : m_faults) f.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t faultCount()       const { return m_faults.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount;     }
+    [[nodiscard]] size_t earthquakeCount()  const { return m_eqCount;       }
+
+    [[nodiscard]] size_t activeEarthquakeCount() const {
+        size_t c = 0;
+        for (auto& f : m_faults) c += f.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEarthquakeCount() const {
+        size_t c = 0;
+        for (auto& f : m_faults) c += f.majorCount();
+        return c;
+    }
+
+private:
+    std::vector<FaultLine> m_faults;
+    size_t                 m_tickCount = 0;
+    size_t                 m_eqCount   = 0;
+};
+
+// ============================================================
+// G40 — Volcano System
+// ============================================================
+
+enum class VolcanoActivity : uint8_t {
+    Dormant      = 0,
+    Restless     = 1,
+    Elevated     = 2,
+    Unrest       = 3,
+    Minor        = 4,
+    Moderate     = 5,
+    Major        = 6,
+    Catastrophic = 7,
+};
+
+inline const char* volcanoActivityName(VolcanoActivity a) {
+    switch (a) {
+        case VolcanoActivity::Dormant:      return "Dormant";
+        case VolcanoActivity::Restless:     return "Restless";
+        case VolcanoActivity::Elevated:     return "Elevated";
+        case VolcanoActivity::Unrest:       return "Unrest";
+        case VolcanoActivity::Minor:        return "Minor";
+        case VolcanoActivity::Moderate:     return "Moderate";
+        case VolcanoActivity::Major:        return "Major";
+        case VolcanoActivity::Catastrophic: return "Catastrophic";
+        default:                            return "Unknown";
+    }
+}
+
+enum class VolcanoStatus : uint8_t {
+    Inactive  = 0,
+    Monitoring = 1,
+    Erupting  = 2,
+    Subsiding = 3,
+};
+
+struct VolcanicEvent {
+    std::string     id;
+    VolcanoActivity activity = VolcanoActivity::Minor;
+    uint32_t        duration = 0;    // ticks
+    uint32_t        ashfall  = 0;    // km radius
+    bool            resolved = false;
+
+    void resolve() { resolved = true; }
+    [[nodiscard]] bool isResolved()     const { return resolved;                          }
+    [[nodiscard]] bool isMajor()        const { return activity >= VolcanoActivity::Major; }
+    [[nodiscard]] bool isCatastrophic() const { return activity == VolcanoActivity::Catastrophic; }
+};
+
+class Volcano {
+public:
+    explicit Volcano(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()    const { return m_name;    }
+    [[nodiscard]] VolcanoStatus      status()   const { return m_status;  }
+    [[nodiscard]] VolcanoActivity    activity() const { return m_activity; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+    void setActivity(VolcanoActivity a) { m_activity = a; }
+    void startEruption()  { m_status = VolcanoStatus::Erupting;   }
+    void beginSubsiding() { if (m_status == VolcanoStatus::Erupting) m_status = VolcanoStatus::Subsiding; }
+    void deactivate()     { m_status = VolcanoStatus::Inactive;   }
+    void monitor()        { m_status = VolcanoStatus::Monitoring;  }
+
+    [[nodiscard]] bool isErupting()  const { return m_status == VolcanoStatus::Erupting;  }
+    [[nodiscard]] bool isInactive()  const { return m_status == VolcanoStatus::Inactive;  }
+    [[nodiscard]] bool isSubsiding() const { return m_status == VolcanoStatus::Subsiding; }
+
+    bool addEvent(const VolcanicEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] VolcanicEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t eventCount()   const { return m_events.size(); }
+    [[nodiscard]] size_t majorEvents()  const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.isMajor()) c++;
+        return c;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string               m_name;
+    VolcanoStatus             m_status   = VolcanoStatus::Inactive;
+    VolcanoActivity           m_activity = VolcanoActivity::Dormant;
+    std::vector<VolcanicEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class VolcanoSystem {
+public:
+    static constexpr size_t MAX_VOLCANOES = 64;
+    static constexpr size_t MAX_EVENTS    = 512;
+
+    Volcano* createVolcano(const std::string& name) {
+        if (m_volcanoes.size() >= MAX_VOLCANOES) return nullptr;
+        for (auto& v : m_volcanoes) if (v.name() == name) return nullptr;
+        m_volcanoes.emplace_back(name);
+        return &m_volcanoes.back();
+    }
+
+    [[nodiscard]] Volcano* byName(const std::string& name) {
+        for (auto& v : m_volcanoes) if (v.name() == name) return &v;
+        return nullptr;
+    }
+
+    bool addEvent(const std::string& volcanoName, const VolcanicEvent& ev) {
+        if (m_eventCount >= MAX_EVENTS) return false;
+        auto* v = byName(volcanoName);
+        if (!v) return false;
+        if (v->addEvent(ev)) { m_eventCount++; return true; }
+        return false;
+    }
+
+    void tick() {
+        for (auto& v : m_volcanoes) v.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t volcanoCount()  const { return m_volcanoes.size(); }
+    [[nodiscard]] size_t eventCount()    const { return m_eventCount;       }
+    [[nodiscard]] size_t tickCount()     const { return m_tickCount;        }
+
+    [[nodiscard]] size_t eruptingCount() const {
+        size_t c = 0;
+        for (auto& v : m_volcanoes) if (v.isErupting()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEventCount() const {
+        size_t c = 0;
+        for (auto& v : m_volcanoes) c += v.majorEvents();
+        return c;
+    }
+
+private:
+    std::vector<Volcano> m_volcanoes;
+    size_t               m_tickCount  = 0;
+    size_t               m_eventCount = 0;
+};
+
+// ============================================================
+// G41 — Tsunami System
+// ============================================================
+
+enum class TsunamiCause : uint8_t {
+    Earthquake   = 0,
+    Landslide    = 1,
+    Volcanic     = 2,
+    Meteorite    = 3,
+    Submarine    = 4,
+    Glacial      = 5,
+    Nuclear      = 6,
+    Unknown      = 7,
+};
+
+inline const char* tsunamiCauseName(TsunamiCause c) {
+    switch (c) {
+        case TsunamiCause::Earthquake:  return "Earthquake";
+        case TsunamiCause::Landslide:   return "Landslide";
+        case TsunamiCause::Volcanic:    return "Volcanic";
+        case TsunamiCause::Meteorite:   return "Meteorite";
+        case TsunamiCause::Submarine:   return "Submarine";
+        case TsunamiCause::Glacial:     return "Glacial";
+        case TsunamiCause::Nuclear:     return "Nuclear";
+        case TsunamiCause::Unknown:     return "Unknown";
+        default:                        return "Unknown";
+    }
+}
+
+enum class TsunamiStatus : uint8_t {
+    Forming   = 0,
+    Traveling = 1,
+    Striking  = 2,
+    Receding  = 3,
+};
+
+struct TsunamiWave {
+    float    heightMeters  = 0.f;
+    float    speedKmh      = 0.f;
+    float    periodSeconds = 0.f;
+    bool     broke         = false;
+
+    void breakWave() { broke = true; }
+    [[nodiscard]] bool hasBroken()    const { return broke;                  }
+    [[nodiscard]] bool isDevastating() const { return heightMeters >= 10.f;  }
+    [[nodiscard]] bool isFast()        const { return speedKmh >= 800.f;     }
+};
+
+class Tsunami {
+public:
+    explicit Tsunami(std::string id) : m_id(std::move(id)) {}
+
+    [[nodiscard]] const std::string& id()      const { return m_id;     }
+    [[nodiscard]] TsunamiStatus      status()   const { return m_status; }
+    [[nodiscard]] TsunamiCause       cause()    const { return m_cause;  }
+    [[nodiscard]] size_t             waveCount() const { return m_waves.size(); }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount;    }
+
+    void setCause(TsunamiCause c) { m_cause = c; }
+    void advance() {
+        switch (m_status) {
+            case TsunamiStatus::Forming:   m_status = TsunamiStatus::Traveling; break;
+            case TsunamiStatus::Traveling: m_status = TsunamiStatus::Striking;  break;
+            case TsunamiStatus::Striking:  m_status = TsunamiStatus::Receding;  break;
+            default: break;
+        }
+    }
+
+    bool addWave(const TsunamiWave& w) {
+        m_waves.push_back(w);
+        return true;
+    }
+
+    [[nodiscard]] float maxWaveHeight() const {
+        float max = 0.f;
+        for (auto& w : m_waves) if (w.heightMeters > max) max = w.heightMeters;
+        return max;
+    }
+
+    [[nodiscard]] bool isDevastating() const { return maxWaveHeight() >= 10.f; }
+    [[nodiscard]] bool isReceding()    const { return m_status == TsunamiStatus::Receding;  }
+    [[nodiscard]] bool isStriking()    const { return m_status == TsunamiStatus::Striking;  }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string          m_id;
+    TsunamiStatus        m_status    = TsunamiStatus::Forming;
+    TsunamiCause         m_cause     = TsunamiCause::Unknown;
+    std::vector<TsunamiWave> m_waves;
+    size_t               m_tickCount = 0;
+};
+
+class TsunamiSystem {
+public:
+    static constexpr size_t MAX_TSUNAMIS = 64;
+
+    Tsunami* create(const std::string& id) {
+        if (m_tsunamis.size() >= MAX_TSUNAMIS) return nullptr;
+        for (auto& t : m_tsunamis) if (t.id() == id) return nullptr;
+        m_tsunamis.emplace_back(id);
+        return &m_tsunamis.back();
+    }
+
+    [[nodiscard]] Tsunami* find(const std::string& id) {
+        for (auto& t : m_tsunamis) if (t.id() == id) return &t;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& t : m_tsunamis) t.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t count()       const { return m_tsunamis.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount;       }
+
+    [[nodiscard]] size_t strikingCount() const {
+        size_t c = 0;
+        for (auto& t : m_tsunamis) if (t.isStriking()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t devastatingCount() const {
+        size_t c = 0;
+        for (auto& t : m_tsunamis) if (t.isDevastating()) c++;
+        return c;
+    }
+
+private:
+    std::vector<Tsunami> m_tsunamis;
+    size_t               m_tickCount = 0;
+};
+
 } // namespace NF

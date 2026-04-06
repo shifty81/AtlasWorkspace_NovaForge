@@ -65,7 +65,13 @@
 | **G33** — Migration System | MigrationTrigger×8, Migrant, MigrationWave, MigrationRoute, MigrationSystem | ✅ Done |
 | **G34** — Insurgency System | InsurgencyType×8, InsurgentStatus×4, Insurgent, InsurgencyCell, InsurgencyMovement, InsurgencySystem | ✅ Done |
 | **G35** — Plague System | PlagueType×8, InfectionStatus×5, PlagueCarrier, PlagueStat, PlagueRegion, PlagueSystem | ✅ Done |
-| **G36** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G36** — Famine System | FamineType×8, FamineSeverity×5, FamineEvent, FamineRegion, FamineSystem | ✅ Done |
+| **G37** — Refugee System | RefugeeOrigin×8, RefugeeStatus×5, Refugee, RefugeeCamp, RefugeeSystem | ✅ Done |
+| **G38** — Storm System | StormType×8, StormSeverity×5, Storm, StormRegion, StormSystem | ✅ Done |
+| **G39** — Earthquake System | EarthquakeScale×8, EarthquakeStatus×4, Earthquake, FaultLine, EarthquakeSystem | ✅ Done |
+| **G40** — Volcano System | VolcanoActivity×8, VolcanoStatus×4, VolcanicEvent, Volcano, VolcanoSystem | ✅ Done |
+| **G41** — Tsunami System | TsunamiCause×8, TsunamiStatus×4, TsunamiWave, Tsunami, TsunamiSystem | ✅ Done |
+| **G42** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -112,7 +118,13 @@
 | **S14** — Plugin System | PluginState×8, PluginManifest, PluginInstance, PluginRegistry, PluginLoader, PluginSystem | ✅ Done |
 | **S15** — Scripting Console | ScriptLanguage×8, ScriptVariable, ScriptResult, ScriptContext, ScriptConsole | ✅ Done |
 | **S16** — Hot-Reload System | HotReloadAssetType×8, HotReloadStatus×5, HotReloadEntry, HotReloadWatcher, HotReloadDispatcher, HotReloadSystem | ✅ Done |
-| **S17** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S17** — Asset Dependency Tracker | AssetDepType×8, AssetDepStatus×4, AssetDepNode, AssetDepGraph, AssetDependencyTracker | ✅ Done |
+| **S18** — Build Configuration System | BuildTarget×8, BuildPlatform×5, BuildConfig, BuildProfile, BuildConfigurationSystem | ✅ Done |
+| **S19** — Scene Snapshot System | SceneSnapshotType×8, SceneSnapshotState×4, SceneSnapshotFrame, SceneSnapshotHistory, SceneSnapshotSystem | ✅ Done |
+| **S20** — Resource Monitor System | ResourceMonitorMetric×8, ResourceMonitorLevel×4, ResourceMonitorSample, ResourceMonitorChannel, ResourceMonitorSystem | ✅ Done |
+| **S21** — Editor Event Bus System | EditorEventPriority×8, EditorBusState×4, EditorBusEvent, EditorEventSubscription, EditorEventBus | ✅ Done |
+| **S22** — Workspace Layout Manager | LayoutPanelType×8, LayoutDockZone×4, LayoutPanel, LayoutSplit, WorkspaceLayout, WorkspaceLayoutManager | ✅ Done |
+| **S23** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

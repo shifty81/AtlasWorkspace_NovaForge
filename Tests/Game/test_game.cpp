@@ -6626,3 +6626,754 @@ TEST_CASE("PlagueSystem tick propagates to regions", "[Game][G35][Plague]") {
     REQUIRE(sys.tickCount() == 2);
     REQUIRE(sys.regionByName("East")->tickCount() == 2);
 }
+
+// ============================================================
+// G36 — Famine System tests
+// ============================================================
+
+TEST_CASE("FamineType names", "[Game][G36][Famine]") {
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Drought))  == "Drought");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Blight))   == "Blight");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Flood))    == "Flood");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Pest))     == "Pest");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::War))      == "War");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Blockade)) == "Blockade");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Economic)) == "Economic");
+    REQUIRE(std::string(NF::famineTypeName(NF::FamineType::Climate))  == "Climate");
+}
+
+TEST_CASE("FamineEvent lifecycle", "[Game][G36][Famine]") {
+    NF::FamineEvent ev;
+    ev.id       = "fev1";
+    ev.region   = "North";
+    ev.type     = NF::FamineType::Drought;
+    ev.severity = NF::FamineSeverity::Severe;
+
+    REQUIRE(ev.isActive());
+    REQUIRE(ev.isCritical());
+    REQUIRE(ev.duration == 0.f);
+
+    ev.advanceDuration(5.f);
+    REQUIRE(ev.duration == 5.f);
+
+    ev.resolve();
+    REQUIRE_FALSE(ev.isActive());
+
+    ev.advanceDuration(5.f); // no advance after resolved
+    REQUIRE(ev.duration == 5.f);
+}
+
+TEST_CASE("FamineEvent isCritical threshold", "[Game][G36][Famine]") {
+    NF::FamineEvent ev;
+    ev.severity = NF::FamineSeverity::Moderate;
+    REQUIRE_FALSE(ev.isCritical());
+    ev.severity = NF::FamineSeverity::Catastrophic;
+    REQUIRE(ev.isCritical());
+}
+
+TEST_CASE("FamineRegion severity levels", "[Game][G36][Famine]") {
+    // food/pop ratio drives severity
+    NF::FamineRegion abundant("Fertile", 100.f, 100.f, 0.f);  // ratio=1.0 → None
+    REQUIRE(abundant.severity() == NF::FamineSeverity::None);
+
+    NF::FamineRegion mild("MildZone", 100.f, 40.f, 0.f);       // ratio=0.4 → Mild
+    REQUIRE(mild.severity() == NF::FamineSeverity::Mild);
+
+    NF::FamineRegion moderate("ModZone", 100.f, 25.f, 0.f);    // ratio=0.25 → Moderate
+    REQUIRE(moderate.severity() == NF::FamineSeverity::Moderate);
+
+    NF::FamineRegion severe("SevZone", 100.f, 8.f, 0.f);       // ratio=0.08 → Severe
+    REQUIRE(severe.severity() == NF::FamineSeverity::Severe);
+
+    NF::FamineRegion catastrophic("CatZone", 100.f, 1.f, 0.f); // ratio=0.01 → Catastrophic
+    REQUIRE(catastrophic.severity() == NF::FamineSeverity::Catastrophic);
+}
+
+TEST_CASE("FamineRegion addAid increases food supply", "[Game][G36][Famine]") {
+    NF::FamineRegion r("AidZone", 100.f, 10.f, 0.f);
+    REQUIRE(r.foodSupply() == 10.f);
+    r.addAid(50.f);
+    REQUIRE(r.foodSupply() == 60.f);
+    r.addAid(-5.f); // negative aid ignored
+    REQUIRE(r.foodSupply() == 60.f);
+}
+
+TEST_CASE("FamineRegion tick depletes food", "[Game][G36][Famine]") {
+    NF::FamineRegion r("DepletingZone", 100.f, 500.f, 1.f); // consumes 100 per tick (dt=1)
+    r.tick(1.f);
+    REQUIRE(r.foodSupply() == 400.f);
+    REQUIRE(r.tickCount() == 1);
+}
+
+TEST_CASE("FamineRegion food floor at zero", "[Game][G36][Famine]") {
+    NF::FamineRegion r("EmptyZone", 100.f, 5.f, 1.f);
+    r.tick(1.f); // consumes 100, floor at 0
+    REQUIRE(r.foodSupply() == 0.f);
+}
+
+TEST_CASE("FamineSystem createRegion + duplicate rejection", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    REQUIRE(sys.createRegion("North") != nullptr);
+    REQUIRE(sys.createRegion("South") != nullptr);
+    REQUIRE(sys.createRegion("North") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("FamineSystem addEvent + activeEventCount + resolvedEventCount", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    NF::FamineEvent e1; e1.id = "ev1"; e1.resolved = false;
+    NF::FamineEvent e2; e2.id = "ev2"; e2.resolved = true;
+    NF::FamineEvent e3; e3.id = "ev1"; // duplicate
+
+    REQUIRE(sys.addEvent(e1));
+    REQUIRE(sys.addEvent(e2));
+    REQUIRE_FALSE(sys.addEvent(e3));
+    REQUIRE(sys.eventCount() == 2);
+    REQUIRE(sys.activeEventCount() == 1);
+    REQUIRE(sys.resolvedEventCount() == 1);
+}
+
+TEST_CASE("FamineSystem findEvent + resolve", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    NF::FamineEvent ev; ev.id = "drought1"; ev.type = NF::FamineType::Drought;
+    sys.addEvent(ev);
+
+    auto* found = sys.findEvent("drought1");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->type == NF::FamineType::Drought);
+
+    found->resolve();
+    REQUIRE(sys.activeEventCount() == 0);
+    REQUIRE(sys.resolvedEventCount() == 1);
+}
+
+TEST_CASE("FamineSystem tick propagates to regions and events", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    sys.createRegion("West", 100.f, 500.f, 1.f);
+    NF::FamineEvent ev; ev.id = "ev1";
+    sys.addEvent(ev);
+
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.regionByName("West")->tickCount() == 2);
+    REQUIRE(sys.findEvent("ev1")->duration == 2.f);
+}
+
+TEST_CASE("FamineSystem criticalRegionCount", "[Game][G36][Famine]") {
+    NF::FamineSystem sys;
+    sys.createRegion("ZoneA", 100.f, 500.f, 0.f); // ratio=5 → None
+    sys.createRegion("ZoneB", 100.f, 3.f,   0.f); // ratio=0.03 → Catastrophic
+    REQUIRE(sys.criticalRegionCount() == 1);
+}
+
+// ============================================================
+// G37 — Refugee System tests
+// ============================================================
+
+TEST_CASE("RefugeeOrigin names cover all 8 values", "[Game][G37][Refugee]") {
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::War))       == "War");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Famine))    == "Famine");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Plague))    == "Plague");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Disaster))  == "Disaster");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Political)) == "Political");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Economic))  == "Economic");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Religious)) == "Religious");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Climate))   == "Climate");
+}
+
+TEST_CASE("Refugee status predicates", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r1"; r.status = NF::RefugeeStatus::InTransit;
+    REQUIRE(r.isInTransit());
+    REQUIRE_FALSE(r.isSheltered());
+    REQUIRE_FALSE(r.isSettled());
+    REQUIRE_FALSE(r.isDisplaced());
+    REQUIRE_FALSE(r.isReturned());
+}
+
+TEST_CASE("Refugee shelter + settle + sendHome transitions", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r1"; r.status = NF::RefugeeStatus::InTransit;
+
+    REQUIRE(r.shelter());
+    REQUIRE(r.isSheltered());
+
+    REQUIRE(r.settle());
+    REQUIRE(r.isSettled());
+
+    REQUIRE(r.sendHome());
+    REQUIRE(r.isReturned());
+
+    // cannot transition further from Returned
+    REQUIRE_FALSE(r.shelter());
+    REQUIRE_FALSE(r.displace());
+}
+
+TEST_CASE("Refugee displace blocks from settled/returned", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r2"; r.status = NF::RefugeeStatus::Settled;
+    REQUIRE_FALSE(r.displace()); // settled can't be displaced
+
+    NF::Refugee r2;
+    r2.id = "r3"; r2.status = NF::RefugeeStatus::InTransit;
+    REQUIRE(r2.displace()); // in transit can be displaced
+    REQUIRE(r2.isDisplaced());
+
+    // can shelter from displaced
+    REQUIRE(r2.shelter());
+    REQUIRE(r2.isSheltered());
+}
+
+TEST_CASE("Refugee settle only from Sheltered", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r4"; r.status = NF::RefugeeStatus::InTransit;
+    REQUIRE_FALSE(r.settle()); // not sheltered yet
+}
+
+TEST_CASE("RefugeeCamp addRefugee + duplicate rejection + capacity", "[Game][G37][Refugee]") {
+    NF::RefugeeCamp camp("CampAlpha", 2);
+    NF::Refugee r1; r1.id = "r1";
+    NF::Refugee r2; r2.id = "r2";
+    NF::Refugee r3; r3.id = "r3";
+    NF::Refugee r1dup; r1dup.id = "r1"; // duplicate
+
+    REQUIRE(camp.addRefugee(r1));
+    REQUIRE_FALSE(camp.addRefugee(r1dup)); // duplicate
+    REQUIRE(camp.addRefugee(r2));
+    REQUIRE_FALSE(camp.addRefugee(r3)); // over capacity
+    REQUIRE(camp.refugeeCount() == 2);
+    REQUIRE(camp.isFull());
+}
+
+TEST_CASE("RefugeeCamp removeRefugee + findRefugee", "[Game][G37][Refugee]") {
+    NF::RefugeeCamp camp("CampBeta", 10);
+    NF::Refugee r1; r1.id = "r1"; r1.status = NF::RefugeeStatus::Sheltered;
+    camp.addRefugee(r1);
+
+    REQUIRE(camp.findRefugee("r1") != nullptr);
+    REQUIRE(camp.findRefugee("r1")->isSheltered());
+    REQUIRE(camp.removeRefugee("r1"));
+    REQUIRE(camp.findRefugee("r1") == nullptr);
+    REQUIRE_FALSE(camp.removeRefugee("r1")); // already gone
+}
+
+TEST_CASE("RefugeeCamp shelteredCount + settledCount", "[Game][G37][Refugee]") {
+    NF::RefugeeCamp camp("CampGamma", 10);
+    NF::Refugee r1; r1.id = "r1"; r1.status = NF::RefugeeStatus::Sheltered;
+    NF::Refugee r2; r2.id = "r2"; r2.status = NF::RefugeeStatus::Settled;
+    NF::Refugee r3; r3.id = "r3"; r3.status = NF::RefugeeStatus::InTransit;
+    camp.addRefugee(r1);
+    camp.addRefugee(r2);
+    camp.addRefugee(r3);
+
+    REQUIRE(camp.shelteredCount() == 1);
+    REQUIRE(camp.settledCount()   == 1);
+}
+
+TEST_CASE("RefugeeSystem createCamp + duplicate rejection", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    REQUIRE(sys.createCamp("Alpha") != nullptr);
+    REQUIRE(sys.createCamp("Beta")  != nullptr);
+    REQUIRE(sys.createCamp("Alpha") == nullptr); // duplicate
+    REQUIRE(sys.campCount() == 2);
+}
+
+TEST_CASE("RefugeeSystem totalRefugees + totalSheltered + totalSettled", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    sys.createCamp("A", 10);
+    sys.createCamp("B", 10);
+
+    NF::Refugee r1; r1.id = "r1"; r1.status = NF::RefugeeStatus::Sheltered;
+    NF::Refugee r2; r2.id = "r2"; r2.status = NF::RefugeeStatus::Settled;
+    NF::Refugee r3; r3.id = "r3"; r3.status = NF::RefugeeStatus::InTransit;
+    sys.campByName("A")->addRefugee(r1);
+    sys.campByName("A")->addRefugee(r2);
+    sys.campByName("B")->addRefugee(r3);
+
+    REQUIRE(sys.totalRefugees()  == 3);
+    REQUIRE(sys.totalSheltered() == 1);
+    REQUIRE(sys.totalSettled()   == 1);
+}
+
+TEST_CASE("RefugeeSystem fullCampCount", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    sys.createCamp("Full", 1);
+    sys.createCamp("Empty", 10);
+
+    NF::Refugee r1; r1.id = "r1";
+    sys.campByName("Full")->addRefugee(r1);
+
+    REQUIRE(sys.fullCampCount() == 1);
+}
+
+TEST_CASE("RefugeeSystem tick propagates to camps", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    sys.createCamp("Delta");
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.campByName("Delta")->tickCount() == 2);
+}
+
+// ============================================================
+// G38 — Storm System tests
+// ============================================================
+
+TEST_CASE("StormType names cover all 8 values", "[Game][G38][Storm]") {
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Thunderstorm))  == "Thunderstorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Hurricane))     == "Hurricane");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Blizzard))      == "Blizzard");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Sandstorm))     == "Sandstorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Firestorm))     == "Firestorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Hailstorm))     == "Hailstorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Tornado))       == "Tornado");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::ElectricStorm)) == "ElectricStorm");
+}
+
+TEST_CASE("Storm isActive and isCritical predicates", "[Game][G38][Storm]") {
+    NF::Storm s;
+    s.id = "s1"; s.active = true; s.duration = 5; s.severity = NF::StormSeverity::Mild;
+    REQUIRE(s.isActive());
+    REQUIRE_FALSE(s.isCritical());
+
+    s.severity = NF::StormSeverity::Severe;
+    REQUIRE(s.isCritical());
+
+    s.duration = 0;
+    REQUIRE_FALSE(s.isActive());
+}
+
+TEST_CASE("Storm dissipate clears active and duration", "[Game][G38][Storm]") {
+    NF::Storm s;
+    s.id = "s1"; s.active = true; s.duration = 10;
+    s.dissipate();
+    REQUIRE_FALSE(s.active);
+    REQUIRE(s.duration == 0);
+    REQUIRE_FALSE(s.isActive());
+}
+
+TEST_CASE("Storm advanceDuration counts down and auto-dissipates", "[Game][G38][Storm]") {
+    NF::Storm s;
+    s.id = "s1"; s.active = true; s.duration = 2;
+    s.advanceDuration();
+    REQUIRE(s.duration == 1);
+    REQUIRE(s.isActive());
+    s.advanceDuration();
+    REQUIRE(s.duration == 0);
+    REQUIRE_FALSE(s.isActive());
+}
+
+TEST_CASE("StormRegion addStorm + duplicate rejection", "[Game][G38][Storm]") {
+    NF::StormRegion region("Coast");
+    NF::Storm s1; s1.id = "s1"; s1.active = true; s1.duration = 3;
+    NF::Storm s1dup; s1dup.id = "s1";
+
+    REQUIRE(region.addStorm(s1));
+    REQUIRE_FALSE(region.addStorm(s1dup));
+    REQUIRE(region.stormCount() == 1);
+}
+
+TEST_CASE("StormRegion activeStormCount + currentSeverity", "[Game][G38][Storm]") {
+    NF::StormRegion region("Plains");
+    NF::Storm s1; s1.id = "s1"; s1.active = true;  s1.duration = 5; s1.severity = NF::StormSeverity::Moderate;
+    NF::Storm s2; s2.id = "s2"; s2.active = false; s2.duration = 0; s2.severity = NF::StormSeverity::Catastrophic;
+    region.addStorm(s1);
+    region.addStorm(s2);
+
+    REQUIRE(region.activeStormCount() == 1);
+    REQUIRE(region.currentSeverity() == NF::StormSeverity::Moderate); // s2 inactive
+}
+
+TEST_CASE("StormRegion tick advances storms and region tickCount", "[Game][G38][Storm]") {
+    NF::StormRegion region("Valley");
+    NF::Storm s; s.id = "s1"; s.active = true; s.duration = 3;
+    region.addStorm(s);
+
+    region.tick();
+    region.tick();
+    REQUIRE(region.tickCount() == 2);
+    REQUIRE(region.findStorm("s1")->duration == 1);
+}
+
+TEST_CASE("StormSystem createRegion + duplicate rejection", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    REQUIRE(sys.createRegion("North") != nullptr);
+    REQUIRE(sys.createRegion("South") != nullptr);
+    REQUIRE(sys.createRegion("North") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("StormSystem addStorm + activeStormCount", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    sys.createRegion("East");
+
+    NF::Storm s; s.id = "st1"; s.region = "East"; s.active = true; s.duration = 5;
+    REQUIRE(sys.addStorm(s));
+    REQUIRE(sys.totalStormCount() == 1);
+    REQUIRE(sys.activeStormCount() == 1);
+
+    // bad region returns false
+    NF::Storm bad; bad.id = "st2"; bad.region = "Nowhere"; bad.active = true; bad.duration = 1;
+    REQUIRE_FALSE(sys.addStorm(bad));
+}
+
+TEST_CASE("StormSystem criticalRegionCount", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    sys.createRegion("R1");
+    sys.createRegion("R2");
+
+    NF::Storm severe; severe.id = "st1"; severe.region = "R1";
+    severe.active = true; severe.duration = 10; severe.severity = NF::StormSeverity::Severe;
+    sys.addStorm(severe);
+
+    NF::Storm mild; mild.id = "st2"; mild.region = "R2";
+    mild.active = true; mild.duration = 5; mild.severity = NF::StormSeverity::Mild;
+    sys.addStorm(mild);
+
+    REQUIRE(sys.criticalRegionCount() == 1);
+}
+
+TEST_CASE("StormSystem tick propagates to all regions", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    sys.createRegion("Alpha");
+    sys.createRegion("Beta");
+    sys.tick();
+    sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.regionByName("Alpha")->tickCount() == 2);
+    REQUIRE(sys.regionByName("Beta")->tickCount() == 2);
+}
+
+// ============================================================
+// G39 — Earthquake System tests
+// ============================================================
+
+TEST_CASE("EarthquakeScale names cover all 8 values", "[Game][G39][Earthquake]") {
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Micro))        == "Micro");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Minor))        == "Minor");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Light))        == "Light");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Strong))       == "Strong");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Major))        == "Major");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Great))        == "Great");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("Earthquake status predicates", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq;
+    eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Pending;
+    REQUIRE(eq.isPending());
+    REQUIRE_FALSE(eq.isActive());
+
+    eq.activate();
+    REQUIRE(eq.isActive());
+    REQUIRE_FALSE(eq.isPending());
+}
+
+TEST_CASE("Earthquake isMajor threshold at Major+", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq; eq.id = "eq1";
+    eq.scale = NF::EarthquakeScale::Strong;
+    REQUIRE_FALSE(eq.isMajor());
+    eq.scale = NF::EarthquakeScale::Major;
+    REQUIRE(eq.isMajor());
+    eq.scale = NF::EarthquakeScale::Catastrophic;
+    REQUIRE(eq.isMajor());
+}
+
+TEST_CASE("Earthquake toAftershock only from Active", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq; eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Pending;
+    eq.toAftershock();
+    REQUIRE(eq.isPending()); // no change from Pending
+
+    eq.activate();
+    eq.toAftershock();
+    REQUIRE(eq.isAftershock());
+}
+
+TEST_CASE("Earthquake resolve sets Resolved", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq; eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Active;
+    eq.resolve();
+    REQUIRE(eq.isResolved());
+}
+
+TEST_CASE("FaultLine addEarthquake + duplicate rejection", "[Game][G39][Earthquake]") {
+    NF::FaultLine fault("Pacific");
+    NF::Earthquake eq; eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Active;
+    NF::Earthquake eqdup; eqdup.id = "eq1";
+
+    REQUIRE(fault.addEarthquake(eq));
+    REQUIRE_FALSE(fault.addEarthquake(eqdup));
+    REQUIRE(fault.earthquakeCount() == 1);
+}
+
+TEST_CASE("FaultLine activeCount + majorCount", "[Game][G39][Earthquake]") {
+    NF::FaultLine fault("Alpine");
+    NF::Earthquake eq1; eq1.id = "e1"; eq1.status = NF::EarthquakeStatus::Active;     eq1.scale = NF::EarthquakeScale::Major;
+    NF::Earthquake eq2; eq2.id = "e2"; eq2.status = NF::EarthquakeStatus::Aftershock; eq2.scale = NF::EarthquakeScale::Minor;
+    NF::Earthquake eq3; eq3.id = "e3"; eq3.status = NF::EarthquakeStatus::Resolved;   eq3.scale = NF::EarthquakeScale::Great;
+    fault.addEarthquake(eq1);
+    fault.addEarthquake(eq2);
+    fault.addEarthquake(eq3);
+
+    REQUIRE(fault.activeCount() == 2); // Active + Aftershock
+    REQUIRE(fault.majorCount()  == 2); // Major + Great (resolved still counts by scale)
+}
+
+TEST_CASE("FaultLine tick increments tickCount", "[Game][G39][Earthquake]") {
+    NF::FaultLine fault("Anatolian");
+    fault.tick(); fault.tick();
+    REQUIRE(fault.tickCount() == 2);
+}
+
+TEST_CASE("EarthquakeSystem createFaultLine + duplicate rejection", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    REQUIRE(sys.createFaultLine("SanAndreas") != nullptr);
+    REQUIRE(sys.createFaultLine("Cascadia")   != nullptr);
+    REQUIRE(sys.createFaultLine("SanAndreas") == nullptr); // duplicate
+    REQUIRE(sys.faultCount() == 2);
+}
+
+TEST_CASE("EarthquakeSystem addEarthquake + bad-region rejection", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    sys.createFaultLine("Japan");
+
+    NF::Earthquake eq; eq.id = "e1"; eq.region = "Japan"; eq.status = NF::EarthquakeStatus::Active;
+    REQUIRE(sys.addEarthquake(eq));
+    REQUIRE(sys.earthquakeCount() == 1);
+
+    NF::Earthquake bad; bad.id = "e2"; bad.region = "Nowhere";
+    REQUIRE_FALSE(sys.addEarthquake(bad));
+}
+
+TEST_CASE("EarthquakeSystem activeEarthquakeCount + majorEarthquakeCount", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    sys.createFaultLine("Fault1");
+
+    NF::Earthquake e1; e1.id = "e1"; e1.region = "Fault1"; e1.status = NF::EarthquakeStatus::Active;     e1.scale = NF::EarthquakeScale::Major;
+    NF::Earthquake e2; e2.id = "e2"; e2.region = "Fault1"; e2.status = NF::EarthquakeStatus::Resolved;   e2.scale = NF::EarthquakeScale::Minor;
+    sys.addEarthquake(e1);
+    sys.addEarthquake(e2);
+
+    REQUIRE(sys.activeEarthquakeCount() == 1);
+    REQUIRE(sys.majorEarthquakeCount()  == 1);
+}
+
+TEST_CASE("EarthquakeSystem tick propagates to faults and increments tickCount", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    sys.createFaultLine("F1");
+    sys.createFaultLine("F2");
+    sys.tick();
+    sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.faultByName("F1")->tickCount() == 2);
+    REQUIRE(sys.faultByName("F2")->tickCount() == 2);
+}
+
+// ============================================================
+// G40 — Volcano System tests
+// ============================================================
+
+TEST_CASE("VolcanoActivity names cover all 8 values", "[Game][G40][Volcano]") {
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Dormant))      == "Dormant");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Restless))     == "Restless");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Elevated))     == "Elevated");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Unrest))       == "Unrest");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Major))        == "Major");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("Volcano status transitions", "[Game][G40][Volcano]") {
+    NF::Volcano v("Vesuvius");
+    REQUIRE(v.isInactive());
+
+    v.monitor();
+    REQUIRE(v.status() == NF::VolcanoStatus::Monitoring);
+
+    v.startEruption();
+    REQUIRE(v.isErupting());
+
+    v.beginSubsiding();
+    REQUIRE(v.isSubsiding());
+}
+
+TEST_CASE("Volcano beginSubsiding only from Erupting", "[Game][G40][Volcano]") {
+    NF::Volcano v("Etna");
+    v.monitor();
+    v.beginSubsiding(); // not erupting — should be no-op
+    REQUIRE(v.status() == NF::VolcanoStatus::Monitoring);
+}
+
+TEST_CASE("Volcano isMajor via setActivity", "[Game][G40][Volcano]") {
+    NF::Volcano v("Fuji");
+    v.setActivity(NF::VolcanoActivity::Moderate);
+    REQUIRE_FALSE(v.activity() >= NF::VolcanoActivity::Major);
+
+    v.setActivity(NF::VolcanoActivity::Major);
+    REQUIRE(v.activity() >= NF::VolcanoActivity::Major);
+}
+
+TEST_CASE("VolcanicEvent addEvent + duplicate rejection", "[Game][G40][Volcano]") {
+    NF::Volcano v("Krakatau");
+    NF::VolcanicEvent ev; ev.id = "ev1"; ev.activity = NF::VolcanoActivity::Major;
+    NF::VolcanicEvent dup; dup.id = "ev1";
+
+    REQUIRE(v.addEvent(ev));
+    REQUIRE_FALSE(v.addEvent(dup));
+    REQUIRE(v.eventCount() == 1);
+}
+
+TEST_CASE("Volcano majorEvents count", "[Game][G40][Volcano]") {
+    NF::Volcano v("Pinatubo");
+    NF::VolcanicEvent e1; e1.id = "e1"; e1.activity = NF::VolcanoActivity::Major;
+    NF::VolcanicEvent e2; e2.id = "e2"; e2.activity = NF::VolcanoActivity::Minor;
+    NF::VolcanicEvent e3; e3.id = "e3"; e3.activity = NF::VolcanoActivity::Catastrophic;
+    v.addEvent(e1); v.addEvent(e2); v.addEvent(e3);
+
+    REQUIRE(v.majorEvents() == 2); // Major + Catastrophic
+}
+
+TEST_CASE("VolcanicEvent isCatastrophic predicate", "[Game][G40][Volcano]") {
+    NF::VolcanicEvent ev; ev.id = "e1";
+    ev.activity = NF::VolcanoActivity::Major;
+    REQUIRE_FALSE(ev.isCatastrophic());
+    ev.activity = NF::VolcanoActivity::Catastrophic;
+    REQUIRE(ev.isCatastrophic());
+}
+
+TEST_CASE("VolcanoSystem createVolcano + duplicate rejection", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    REQUIRE(sys.createVolcano("Tambora") != nullptr);
+    REQUIRE(sys.createVolcano("Stromboli") != nullptr);
+    REQUIRE(sys.createVolcano("Tambora") == nullptr); // duplicate
+    REQUIRE(sys.volcanoCount() == 2);
+}
+
+TEST_CASE("VolcanoSystem addEvent + bad-volcano rejection", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    sys.createVolcano("MaunaLoa");
+
+    NF::VolcanicEvent ev; ev.id = "e1"; ev.activity = NF::VolcanoActivity::Minor;
+    REQUIRE(sys.addEvent("MaunaLoa", ev));
+    REQUIRE(sys.eventCount() == 1);
+
+    NF::VolcanicEvent bad; bad.id = "e2";
+    REQUIRE_FALSE(sys.addEvent("Nowhere", bad));
+}
+
+TEST_CASE("VolcanoSystem eruptingCount + majorEventCount", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    sys.createVolcano("V1");
+    sys.createVolcano("V2");
+    sys.byName("V1")->startEruption();
+
+    NF::VolcanicEvent ev; ev.id = "e1"; ev.activity = NF::VolcanoActivity::Catastrophic;
+    sys.addEvent("V2", ev);
+
+    REQUIRE(sys.eruptingCount()   == 1);
+    REQUIRE(sys.majorEventCount() == 1);
+}
+
+TEST_CASE("VolcanoSystem tick propagates to volcanoes and increments tickCount", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    sys.createVolcano("A");
+    sys.createVolcano("B");
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.byName("A")->tickCount() == 2);
+    REQUIRE(sys.byName("B")->tickCount() == 2);
+}
+
+// ============================================================
+// G41 — Tsunami System tests
+// ============================================================
+
+TEST_CASE("TsunamiCause names cover all 8 values", "[Game][G41][Tsunami]") {
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Earthquake))  == "Earthquake");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Landslide))   == "Landslide");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Volcanic))    == "Volcanic");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Meteorite))   == "Meteorite");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Submarine))   == "Submarine");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Glacial))     == "Glacial");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Nuclear))     == "Nuclear");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Unknown))     == "Unknown");
+}
+
+TEST_CASE("Tsunami status advance chain", "[Game][G41][Tsunami]") {
+    NF::Tsunami t("t1");
+    REQUIRE(t.status() == NF::TsunamiStatus::Forming);
+    t.advance();
+    REQUIRE(t.status() == NF::TsunamiStatus::Traveling);
+    t.advance();
+    REQUIRE(t.status() == NF::TsunamiStatus::Striking);
+    REQUIRE(t.isStriking());
+    t.advance();
+    REQUIRE(t.status() == NF::TsunamiStatus::Receding);
+    REQUIRE(t.isReceding());
+}
+
+TEST_CASE("Tsunami advance is no-op from Receding", "[Game][G41][Tsunami]") {
+    NF::Tsunami t("t2");
+    t.advance(); t.advance(); t.advance(); // reach Receding
+    t.advance(); // should stay Receding
+    REQUIRE(t.isReceding());
+}
+
+TEST_CASE("TsunamiWave isDevastating threshold", "[Game][G41][Tsunami]") {
+    NF::TsunamiWave w;
+    w.heightMeters = 9.9f;
+    REQUIRE_FALSE(w.isDevastating());
+    w.heightMeters = 10.f;
+    REQUIRE(w.isDevastating());
+}
+
+TEST_CASE("TsunamiWave isFast threshold", "[Game][G41][Tsunami]") {
+    NF::TsunamiWave w;
+    w.speedKmh = 799.f;
+    REQUIRE_FALSE(w.isFast());
+    w.speedKmh = 800.f;
+    REQUIRE(w.isFast());
+}
+
+TEST_CASE("Tsunami maxWaveHeight and isDevastating via waves", "[Game][G41][Tsunami]") {
+    NF::Tsunami t("t3");
+    NF::TsunamiWave w1; w1.heightMeters = 5.f;
+    NF::TsunamiWave w2; w2.heightMeters = 15.f;
+    t.addWave(w1); t.addWave(w2);
+    REQUIRE(t.maxWaveHeight() == 15.f);
+    REQUIRE(t.isDevastating());
+    REQUIRE(t.waveCount() == 2);
+}
+
+TEST_CASE("TsunamiSystem create + duplicate rejection", "[Game][G41][Tsunami]") {
+    NF::TsunamiSystem sys;
+    REQUIRE(sys.create("pacific-1") != nullptr);
+    REQUIRE(sys.create("indian-1")  != nullptr);
+    REQUIRE(sys.create("pacific-1") == nullptr); // duplicate
+    REQUIRE(sys.count() == 2);
+}
+
+TEST_CASE("TsunamiSystem strikingCount and devastatingCount", "[Game][G41][Tsunami]") {
+    NF::TsunamiSystem sys;
+    sys.create("a");
+    sys.create("b");
+    // Use find() after both are inserted to avoid dangling pointer on vector realloc
+    sys.find("a")->advance(); sys.find("a")->advance(); // Forming → Traveling → Striking
+
+    NF::TsunamiWave big; big.heightMeters = 20.f;
+    sys.find("b")->addWave(big);
+
+    REQUIRE(sys.strikingCount()    == 1);
+    REQUIRE(sys.devastatingCount() == 1);
+}
+
+TEST_CASE("TsunamiSystem tick increments all tsunami tickCounts", "[Game][G41][Tsunami]") {
+    NF::TsunamiSystem sys;
+    sys.create("x"); sys.create("y");
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 3);
+    REQUIRE(sys.find("x")->tickCount() == 3);
+    REQUIRE(sys.find("y")->tickCount() == 3);
+}

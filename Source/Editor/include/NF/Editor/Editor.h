@@ -7428,4 +7428,1042 @@ private:
     size_t m_tickCount   = 0;
 };
 
+// ============================================================
+// S17 — Asset Dependency Tracker
+// ============================================================
+
+enum class AssetDepType : uint8_t {
+    Texture   = 0,
+    Mesh      = 1,
+    Shader    = 2,
+    Script    = 3,
+    Audio     = 4,
+    Material  = 5,
+    Animation = 6,
+    Level     = 7,
+};
+
+inline const char* assetDepTypeName(AssetDepType t) {
+    switch (t) {
+        case AssetDepType::Texture:   return "Texture";
+        case AssetDepType::Mesh:      return "Mesh";
+        case AssetDepType::Shader:    return "Shader";
+        case AssetDepType::Script:    return "Script";
+        case AssetDepType::Audio:     return "Audio";
+        case AssetDepType::Material:  return "Material";
+        case AssetDepType::Animation: return "Animation";
+        case AssetDepType::Level:     return "Level";
+        default:                      return "Unknown";
+    }
+}
+
+enum class AssetDepStatus : uint8_t {
+    Unknown  = 0,
+    Resolved = 1,
+    Missing  = 2,
+    Circular = 3,
+};
+
+struct AssetDepNode {
+    std::string   assetId;
+    std::string   assetPath;
+    AssetDepType  type   = AssetDepType::Texture;
+    AssetDepStatus status = AssetDepStatus::Unknown;
+
+    std::vector<std::string> dependencies; // ids of direct deps
+
+    [[nodiscard]] bool isResolved() const { return status == AssetDepStatus::Resolved; }
+    [[nodiscard]] bool isMissing()  const { return status == AssetDepStatus::Missing;  }
+    [[nodiscard]] bool isCircular() const { return status == AssetDepStatus::Circular; }
+
+    bool addDependency(const std::string& depId) {
+        if (depId == assetId) return false; // no self-dep
+        for (auto& d : dependencies) if (d == depId) return false;
+        dependencies.push_back(depId);
+        return true;
+    }
+
+    [[nodiscard]] bool hasDependency(const std::string& depId) const {
+        for (auto& d : dependencies) if (d == depId) return true;
+        return false;
+    }
+
+    [[nodiscard]] size_t dependencyCount() const { return dependencies.size(); }
+};
+
+class AssetDepGraph {
+public:
+    static constexpr size_t MAX_NODES = 512;
+
+    bool addNode(const AssetDepNode& node) {
+        if (m_nodes.size() >= MAX_NODES) return false;
+        for (auto& n : m_nodes) if (n.assetId == node.assetId) return false;
+        m_nodes.push_back(node);
+        return true;
+    }
+
+    bool removeNode(const std::string& assetId) {
+        for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+            if (it->assetId == assetId) {
+                m_nodes.erase(it);
+                // remove references to this node from other nodes
+                for (auto& n : m_nodes) {
+                    auto& deps = n.dependencies;
+                    deps.erase(std::remove(deps.begin(), deps.end(), assetId), deps.end());
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] AssetDepNode* findNode(const std::string& assetId) {
+        for (auto& n : m_nodes) if (n.assetId == assetId) return &n;
+        return nullptr;
+    }
+    [[nodiscard]] const AssetDepNode* findNode(const std::string& assetId) const {
+        for (auto& n : m_nodes) if (n.assetId == assetId) return &n;
+        return nullptr;
+    }
+
+    bool addEdge(const std::string& sourceId, const std::string& depId) {
+        AssetDepNode* src = findNode(sourceId);
+        if (!src) return false;
+        if (!findNode(depId)) return false;
+        return src->addDependency(depId);
+    }
+
+    [[nodiscard]] bool hasEdge(const std::string& sourceId, const std::string& depId) const {
+        const AssetDepNode* src = findNode(sourceId);
+        if (!src) return false;
+        return src->hasDependency(depId);
+    }
+
+    void resolveAll() {
+        for (auto& n : m_nodes)
+            if (n.status == AssetDepStatus::Unknown)
+                n.status = AssetDepStatus::Resolved;
+    }
+
+    void detectCircular() {
+        // Simple DFS cycle detection; mark involved nodes as Circular
+        std::vector<std::string> visited;
+        std::vector<std::string> stack;
+
+        std::function<bool(const std::string&)> dfs = [&](const std::string& id) -> bool {
+            visited.push_back(id);
+            stack.push_back(id);
+            const AssetDepNode* node = findNode(id);
+            if (node) {
+                for (auto& dep : node->dependencies) {
+                    bool inStack = false;
+                    for (auto& s : stack) if (s == dep) { inStack = true; break; }
+                    if (inStack) {
+                        // mark all nodes in the current stack as Circular
+                        for (auto& s : stack) {
+                            AssetDepNode* n = findNode(s);
+                            if (n) n->status = AssetDepStatus::Circular;
+                        }
+                        AssetDepNode* n = findNode(dep);
+                        if (n) n->status = AssetDepStatus::Circular;
+                        stack.pop_back();
+                        return true;
+                    }
+                    bool inVisited = false;
+                    for (auto& v : visited) if (v == dep) { inVisited = true; break; }
+                    if (!inVisited) dfs(dep);
+                }
+            }
+            stack.pop_back();
+            return false;
+        };
+
+        for (auto& n : m_nodes) {
+            bool inVisited = false;
+            for (auto& v : visited) if (v == n.assetId) { inVisited = true; break; }
+            if (!inVisited) dfs(n.assetId);
+        }
+    }
+
+    [[nodiscard]] size_t nodeCount() const { return m_nodes.size(); }
+
+    [[nodiscard]] size_t unresolvedCount() const {
+        size_t c = 0;
+        for (auto& n : m_nodes)
+            if (n.status == AssetDepStatus::Unknown || n.status == AssetDepStatus::Missing)
+                c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t totalEdgeCount() const {
+        size_t c = 0;
+        for (auto& n : m_nodes) c += n.dependencyCount();
+        return c;
+    }
+
+    [[nodiscard]] const std::vector<AssetDepNode>& nodes() const { return m_nodes; }
+
+private:
+    std::vector<AssetDepNode> m_nodes;
+};
+
+class AssetDependencyTracker {
+public:
+    bool registerAsset(const std::string& assetId, const std::string& assetPath, AssetDepType type) {
+        AssetDepNode node;
+        node.assetId   = assetId;
+        node.assetPath = assetPath;
+        node.type      = type;
+        node.status    = AssetDepStatus::Unknown;
+        return m_graph.addNode(node);
+    }
+
+    bool unregisterAsset(const std::string& assetId) {
+        return m_graph.removeNode(assetId);
+    }
+
+    bool addDependency(const std::string& sourceId, const std::string& depId) {
+        return m_graph.addEdge(sourceId, depId);
+    }
+
+    [[nodiscard]] bool hasDependency(const std::string& sourceId, const std::string& depId) const {
+        return m_graph.hasEdge(sourceId, depId);
+    }
+
+    void resolveAll() {
+        m_graph.resolveAll();
+    }
+
+    void detectCircular() {
+        m_graph.detectCircular();
+    }
+
+    [[nodiscard]] AssetDepNode* findAsset(const std::string& assetId) {
+        return m_graph.findNode(assetId);
+    }
+
+    [[nodiscard]] size_t assetCount()        const { return m_graph.nodeCount(); }
+    [[nodiscard]] size_t unresolvedCount()   const { return m_graph.unresolvedCount(); }
+    [[nodiscard]] size_t totalDependencies() const { return m_graph.totalEdgeCount(); }
+
+    [[nodiscard]] AssetDepGraph&       graph()       { return m_graph; }
+    [[nodiscard]] const AssetDepGraph& graph() const { return m_graph; }
+
+private:
+    AssetDepGraph m_graph;
+};
+
+// ============================================================
+// S18 — Build Configuration System
+// ============================================================
+
+enum class BuildTarget : uint8_t {
+    Executable   = 0,
+    SharedLib    = 1,
+    StaticLib    = 2,
+    HeaderOnly   = 3,
+    TestSuite    = 4,
+    Plugin       = 5,
+    Shader       = 6,
+    ContentPack  = 7,
+};
+
+inline const char* buildTargetName(BuildTarget t) {
+    switch (t) {
+        case BuildTarget::Executable:  return "Executable";
+        case BuildTarget::SharedLib:   return "SharedLib";
+        case BuildTarget::StaticLib:   return "StaticLib";
+        case BuildTarget::HeaderOnly:  return "HeaderOnly";
+        case BuildTarget::TestSuite:   return "TestSuite";
+        case BuildTarget::Plugin:      return "Plugin";
+        case BuildTarget::Shader:      return "Shader";
+        case BuildTarget::ContentPack: return "ContentPack";
+        default:                       return "Unknown";
+    }
+}
+
+enum class BuildPlatform : uint8_t {
+    Windows  = 0,
+    Linux    = 1,
+    MacOS    = 2,
+    WebAsm   = 3,
+    Console  = 4,
+};
+
+inline const char* buildPlatformName(BuildPlatform p) {
+    switch (p) {
+        case BuildPlatform::Windows: return "Windows";
+        case BuildPlatform::Linux:   return "Linux";
+        case BuildPlatform::MacOS:   return "MacOS";
+        case BuildPlatform::WebAsm:  return "WebAsm";
+        case BuildPlatform::Console: return "Console";
+        default:                     return "Unknown";
+    }
+}
+
+struct BuildConfig {
+    std::string   name;
+    BuildTarget   target   = BuildTarget::Executable;
+    BuildPlatform platform = BuildPlatform::Windows;
+    bool          debugSymbols   = false;
+    bool          optimized      = false;
+    bool          sanitizers     = false;
+
+    std::vector<std::string> defines;
+    std::vector<std::string> includePaths;
+
+    [[nodiscard]] bool isDebug()   const { return debugSymbols && !optimized; }
+    [[nodiscard]] bool isRelease() const { return optimized && !debugSymbols; }
+
+    bool addDefine(const std::string& def) {
+        for (auto& d : defines) if (d == def) return false;
+        defines.push_back(def);
+        return true;
+    }
+
+    bool addIncludePath(const std::string& path) {
+        for (auto& p : includePaths) if (p == path) return false;
+        includePaths.push_back(path);
+        return true;
+    }
+
+    [[nodiscard]] size_t defineCount()      const { return defines.size(); }
+    [[nodiscard]] size_t includePathCount() const { return includePaths.size(); }
+};
+
+class BuildProfile {
+public:
+    static constexpr size_t MAX_CONFIGS = 64;
+
+    bool addConfig(const BuildConfig& cfg) {
+        if (m_configs.size() >= MAX_CONFIGS) return false;
+        for (auto& c : m_configs) if (c.name == cfg.name) return false;
+        m_configs.push_back(cfg);
+        return true;
+    }
+
+    bool removeConfig(const std::string& name) {
+        for (auto it = m_configs.begin(); it != m_configs.end(); ++it) {
+            if (it->name == name) { m_configs.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] BuildConfig* findConfig(const std::string& name) {
+        for (auto& c : m_configs) if (c.name == name) return &c;
+        return nullptr;
+    }
+
+    [[nodiscard]] const BuildConfig* findConfig(const std::string& name) const {
+        for (auto& c : m_configs) if (c.name == name) return &c;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t configCount() const { return m_configs.size(); }
+
+    [[nodiscard]] size_t debugConfigCount() const {
+        size_t c = 0;
+        for (auto& cfg : m_configs) if (cfg.isDebug()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t releaseConfigCount() const {
+        size_t c = 0;
+        for (auto& cfg : m_configs) if (cfg.isRelease()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::vector<BuildConfig>& configs() const { return m_configs; }
+
+private:
+    std::vector<BuildConfig> m_configs;
+};
+
+class BuildConfigurationSystem {
+public:
+    void init() { m_initialized = true; m_activeProfile.clear(); }
+    void shutdown() { m_profiles.clear(); m_activeProfile.clear(); m_initialized = false; }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+    bool createProfile(const std::string& name) {
+        if (!m_initialized) return false;
+        if (m_profiles.size() >= 16) return false;
+        for (auto& p : m_profiles) if (p.first == name) return false;
+        m_profiles.push_back({name, BuildProfile{}});
+        return true;
+    }
+
+    bool removeProfile(const std::string& name) {
+        if (!m_initialized) return false;
+        for (auto it = m_profiles.begin(); it != m_profiles.end(); ++it) {
+            if (it->first == name) {
+                if (m_activeProfile == name) m_activeProfile.clear();
+                m_profiles.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] BuildProfile* findProfile(const std::string& name) {
+        for (auto& p : m_profiles) if (p.first == name) return &p.second;
+        return nullptr;
+    }
+
+    bool setActiveProfile(const std::string& name) {
+        if (!m_initialized) return false;
+        for (auto& p : m_profiles) {
+            if (p.first == name) { m_activeProfile = name; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeProfileName() const { return m_activeProfile; }
+
+    [[nodiscard]] BuildProfile* activeProfile() {
+        if (m_activeProfile.empty()) return nullptr;
+        return findProfile(m_activeProfile);
+    }
+
+    [[nodiscard]] size_t profileCount() const { return m_profiles.size(); }
+
+    [[nodiscard]] size_t totalConfigCount() const {
+        size_t c = 0;
+        for (auto& p : m_profiles) c += p.second.configCount();
+        return c;
+    }
+
+private:
+    std::vector<std::pair<std::string, BuildProfile>> m_profiles;
+    std::string m_activeProfile;
+    bool m_initialized = false;
+};
+
+// ============================================================
+// S19 — Scene Snapshot System
+// ============================================================
+
+enum class SceneSnapshotType : uint8_t {
+    Full      = 0,
+    Delta     = 1,
+    Lighting  = 2,
+    Physics   = 3,
+    AI        = 4,
+    Audio     = 5,
+    Visual    = 6,
+    Meta      = 7,
+};
+
+inline const char* sceneSnapshotTypeName(SceneSnapshotType t) {
+    switch (t) {
+        case SceneSnapshotType::Full:     return "Full";
+        case SceneSnapshotType::Delta:    return "Delta";
+        case SceneSnapshotType::Lighting: return "Lighting";
+        case SceneSnapshotType::Physics:  return "Physics";
+        case SceneSnapshotType::AI:       return "AI";
+        case SceneSnapshotType::Audio:    return "Audio";
+        case SceneSnapshotType::Visual:   return "Visual";
+        case SceneSnapshotType::Meta:     return "Meta";
+        default:                          return "Unknown";
+    }
+}
+
+enum class SceneSnapshotState : uint8_t {
+    Valid     = 0,
+    Outdated  = 1,
+    Corrupted = 2,
+    Partial   = 3,
+};
+
+struct SceneSnapshotFrame {
+    std::string        id;
+    std::string        label;
+    SceneSnapshotType  type  = SceneSnapshotType::Full;
+    SceneSnapshotState state = SceneSnapshotState::Valid;
+    uint64_t           timestamp = 0;
+    size_t             dataSize  = 0;   // bytes captured
+
+    [[nodiscard]] bool isValid()     const { return state == SceneSnapshotState::Valid;     }
+    [[nodiscard]] bool isOutdated()  const { return state == SceneSnapshotState::Outdated;  }
+    [[nodiscard]] bool isCorrupted() const { return state == SceneSnapshotState::Corrupted; }
+    [[nodiscard]] bool isPartial()   const { return state == SceneSnapshotState::Partial;   }
+
+    void markOutdated()  { if (state == SceneSnapshotState::Valid) state = SceneSnapshotState::Outdated;  }
+    void markCorrupted() { state = SceneSnapshotState::Corrupted; }
+};
+
+class SceneSnapshotHistory {
+public:
+    static constexpr size_t MAX_FRAMES = 128;
+
+    bool push(const SceneSnapshotFrame& frame) {
+        if (m_frames.size() >= MAX_FRAMES) return false;
+        for (auto& f : m_frames) if (f.id == frame.id) return false;
+        m_frames.push_back(frame);
+        return true;
+    }
+
+    bool remove(const std::string& id) {
+        for (auto it = m_frames.begin(); it != m_frames.end(); ++it) {
+            if (it->id == id) { m_frames.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SceneSnapshotFrame* find(const std::string& id) {
+        for (auto& f : m_frames) if (f.id == id) return &f;
+        return nullptr;
+    }
+
+    [[nodiscard]] const SceneSnapshotFrame* find(const std::string& id) const {
+        for (auto& f : m_frames) if (f.id == id) return &f;
+        return nullptr;
+    }
+
+    [[nodiscard]] SceneSnapshotFrame* latest() {
+        if (m_frames.empty()) return nullptr;
+        return &m_frames.back();
+    }
+
+    void markAllOutdated() {
+        for (auto& f : m_frames) f.markOutdated();
+    }
+
+    [[nodiscard]] size_t frameCount()     const { return m_frames.size(); }
+    [[nodiscard]] bool   empty()          const { return m_frames.empty(); }
+
+    [[nodiscard]] size_t validCount() const {
+        size_t c = 0;
+        for (auto& f : m_frames) if (f.isValid()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t corruptedCount() const {
+        size_t c = 0;
+        for (auto& f : m_frames) if (f.isCorrupted()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t totalDataSize() const {
+        size_t total = 0;
+        for (auto& f : m_frames) total += f.dataSize;
+        return total;
+    }
+
+    [[nodiscard]] const std::vector<SceneSnapshotFrame>& frames() const { return m_frames; }
+
+private:
+    std::vector<SceneSnapshotFrame> m_frames;
+};
+
+class SceneSnapshotSystem {
+public:
+    void init()     { m_initialized = true;  m_history = SceneSnapshotHistory{}; }
+    void shutdown() { m_initialized = false; m_history = SceneSnapshotHistory{}; }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+    bool capture(const SceneSnapshotFrame& frame) {
+        if (!m_initialized) return false;
+        return m_history.push(frame);
+    }
+
+    bool discard(const std::string& id) {
+        if (!m_initialized) return false;
+        return m_history.remove(id);
+    }
+
+    [[nodiscard]] SceneSnapshotFrame* find(const std::string& id) {
+        return m_history.find(id);
+    }
+
+    [[nodiscard]] SceneSnapshotFrame* latest() {
+        return m_history.latest();
+    }
+
+    void invalidateAll() {
+        m_history.markAllOutdated();
+    }
+
+    [[nodiscard]] size_t frameCount()     const { return m_history.frameCount();     }
+    [[nodiscard]] size_t validCount()     const { return m_history.validCount();     }
+    [[nodiscard]] size_t corruptedCount() const { return m_history.corruptedCount(); }
+    [[nodiscard]] size_t totalDataSize()  const { return m_history.totalDataSize();  }
+
+    [[nodiscard]] SceneSnapshotHistory&       history()       { return m_history; }
+    [[nodiscard]] const SceneSnapshotHistory& history() const { return m_history; }
+
+private:
+    SceneSnapshotHistory m_history;
+    bool                 m_initialized = false;
+};
+
+// ============================================================
+// S20 — Resource Monitor System
+// ============================================================
+
+enum class ResourceMonitorMetric : uint8_t {
+    CPU        = 0,
+    GPU        = 1,
+    Memory     = 2,
+    DiskIO     = 3,
+    NetworkIO  = 4,
+    FrameTime  = 5,
+    DrawCalls  = 6,
+    ThreadLoad = 7,
+};
+
+inline const char* resourceMonitorMetricName(ResourceMonitorMetric m) {
+    switch (m) {
+        case ResourceMonitorMetric::CPU:        return "CPU";
+        case ResourceMonitorMetric::GPU:        return "GPU";
+        case ResourceMonitorMetric::Memory:     return "Memory";
+        case ResourceMonitorMetric::DiskIO:     return "DiskIO";
+        case ResourceMonitorMetric::NetworkIO:  return "NetworkIO";
+        case ResourceMonitorMetric::FrameTime:  return "FrameTime";
+        case ResourceMonitorMetric::DrawCalls:  return "DrawCalls";
+        case ResourceMonitorMetric::ThreadLoad: return "ThreadLoad";
+        default:                                return "Unknown";
+    }
+}
+
+enum class ResourceMonitorLevel : uint8_t {
+    Normal   = 0,
+    Warning  = 1,
+    Critical = 2,
+    Overflow = 3,
+};
+
+struct ResourceMonitorSample {
+    ResourceMonitorMetric metric    = ResourceMonitorMetric::CPU;
+    ResourceMonitorLevel  level     = ResourceMonitorLevel::Normal;
+    float                 value     = 0.0f;
+    uint64_t              timestamp = 0;
+
+    [[nodiscard]] bool isWarning()  const { return level == ResourceMonitorLevel::Warning;  }
+    [[nodiscard]] bool isCritical() const { return level == ResourceMonitorLevel::Critical; }
+    [[nodiscard]] bool isOverflow() const { return level == ResourceMonitorLevel::Overflow; }
+    [[nodiscard]] bool isHealthy()  const { return level == ResourceMonitorLevel::Normal;   }
+
+    [[nodiscard]] ResourceMonitorLevel computeLevel(float warnThreshold, float critThreshold) const {
+        if (value >= critThreshold) return ResourceMonitorLevel::Critical;
+        if (value >= warnThreshold) return ResourceMonitorLevel::Warning;
+        return ResourceMonitorLevel::Normal;
+    }
+};
+
+class ResourceMonitorChannel {
+public:
+    static constexpr size_t MAX_SAMPLES = 256;
+
+    explicit ResourceMonitorChannel(ResourceMonitorMetric metric) : m_metric(metric) {}
+
+    [[nodiscard]] ResourceMonitorMetric metric() const { return m_metric; }
+
+    bool push(const ResourceMonitorSample& s) {
+        if (s.metric != m_metric) return false;
+        if (m_samples.size() >= MAX_SAMPLES) m_samples.erase(m_samples.begin());
+        m_samples.push_back(s);
+        return true;
+    }
+
+    [[nodiscard]] const ResourceMonitorSample* latest() const {
+        if (m_samples.empty()) return nullptr;
+        return &m_samples.back();
+    }
+
+    [[nodiscard]] size_t sampleCount() const { return m_samples.size(); }
+    [[nodiscard]] bool   empty()       const { return m_samples.empty(); }
+
+    [[nodiscard]] float average() const {
+        if (m_samples.empty()) return 0.0f;
+        float sum = 0.0f;
+        for (auto& s : m_samples) sum += s.value;
+        return sum / static_cast<float>(m_samples.size());
+    }
+
+    [[nodiscard]] float peak() const {
+        float p = 0.0f;
+        for (auto& s : m_samples) if (s.value > p) p = s.value;
+        return p;
+    }
+
+    [[nodiscard]] size_t warningCount() const {
+        size_t c = 0;
+        for (auto& s : m_samples) if (s.isWarning() || s.isCritical()) c++;
+        return c;
+    }
+
+    void clear() { m_samples.clear(); }
+
+    [[nodiscard]] const std::vector<ResourceMonitorSample>& samples() const { return m_samples; }
+
+private:
+    ResourceMonitorMetric              m_metric;
+    std::vector<ResourceMonitorSample> m_samples;
+};
+
+class ResourceMonitorSystem {
+public:
+    void init() {
+        m_initialized = true;
+        m_channels.clear();
+        for (uint8_t i = 0; i <= static_cast<uint8_t>(ResourceMonitorMetric::ThreadLoad); ++i) {
+            m_channels.emplace_back(static_cast<ResourceMonitorMetric>(i));
+        }
+    }
+
+    void shutdown() {
+        m_initialized = false;
+        m_channels.clear();
+    }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+    bool record(const ResourceMonitorSample& s) {
+        if (!m_initialized) return false;
+        auto* ch = channelFor(s.metric);
+        if (!ch) return false;
+        return ch->push(s);
+    }
+
+    [[nodiscard]] ResourceMonitorChannel* channelFor(ResourceMonitorMetric m) {
+        for (auto& ch : m_channels) if (ch.metric() == m) return &ch;
+        return nullptr;
+    }
+
+    [[nodiscard]] const ResourceMonitorChannel* channelFor(ResourceMonitorMetric m) const {
+        for (auto& ch : m_channels) if (ch.metric() == m) return &ch;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t channelCount() const { return m_channels.size(); }
+
+    [[nodiscard]] size_t totalSamples() const {
+        size_t t = 0;
+        for (auto& ch : m_channels) t += ch.sampleCount();
+        return t;
+    }
+
+    [[nodiscard]] size_t totalWarnings() const {
+        size_t t = 0;
+        for (auto& ch : m_channels) t += ch.warningCount();
+        return t;
+    }
+
+    void clearAll() {
+        for (auto& ch : m_channels) ch.clear();
+    }
+
+private:
+    std::vector<ResourceMonitorChannel> m_channels;
+    bool                                m_initialized = false;
+};
+
+// ============================================================
+// S21 — Event Bus System
+// ============================================================
+
+enum class EditorEventPriority : uint8_t {
+    Lowest  = 0,
+    Low     = 1,
+    Normal  = 2,
+    High    = 3,
+    Highest = 4,
+    System  = 5,
+    Critical = 6,
+    Realtime = 7,
+};
+
+inline const char* editorEventPriorityName(EditorEventPriority p) {
+    switch (p) {
+        case EditorEventPriority::Lowest:   return "Lowest";
+        case EditorEventPriority::Low:      return "Low";
+        case EditorEventPriority::Normal:   return "Normal";
+        case EditorEventPriority::High:     return "High";
+        case EditorEventPriority::Highest:  return "Highest";
+        case EditorEventPriority::System:   return "System";
+        case EditorEventPriority::Critical: return "Critical";
+        case EditorEventPriority::Realtime: return "Realtime";
+        default:                            return "Unknown";
+    }
+}
+
+enum class EditorBusState : uint8_t {
+    Idle      = 0,
+    Posting   = 1,
+    Flushing  = 2,
+    Suspended = 3,
+};
+
+struct EditorBusEvent {
+    std::string          topic;
+    std::string          payload;
+    EditorEventPriority  priority  = EditorEventPriority::Normal;
+    uint64_t             timestamp = 0;
+    bool                 consumed  = false;
+
+    void consume() { consumed = true; }
+    [[nodiscard]] bool isConsumed() const { return consumed; }
+    [[nodiscard]] bool isHighPrio() const { return priority >= EditorEventPriority::High; }
+    [[nodiscard]] bool isCritical() const { return priority >= EditorEventPriority::Critical; }
+};
+
+class EditorEventSubscription {
+public:
+    using Handler = std::function<void(const EditorBusEvent&)>;
+
+    EditorEventSubscription(std::string topic, EditorEventPriority minPrio, Handler handler)
+        : m_topic(std::move(topic)), m_minPriority(minPrio), m_handler(std::move(handler)) {}
+
+    [[nodiscard]] const std::string& topic()      const { return m_topic;       }
+    [[nodiscard]] EditorEventPriority minPriority() const { return m_minPriority; }
+    [[nodiscard]] size_t             callCount()  const { return m_callCount;   }
+    [[nodiscard]] bool               isActive()   const { return m_active;      }
+
+    void deliver(const EditorBusEvent& ev) {
+        if (!m_active) return;
+        if (ev.priority < m_minPriority) return;
+        if (m_handler) { m_handler(ev); ++m_callCount; }
+    }
+
+    void cancel() { m_active = false; }
+
+private:
+    std::string          m_topic;
+    EditorEventPriority  m_minPriority;
+    Handler              m_handler;
+    size_t               m_callCount = 0;
+    bool                 m_active    = true;
+};
+
+class EditorEventBus {
+public:
+    static constexpr size_t MAX_SUBSCRIPTIONS = 256;
+    static constexpr size_t MAX_QUEUE         = 512;
+
+    EditorEventSubscription* subscribe(const std::string& topic, EditorEventPriority minPrio,
+                                        EditorEventSubscription::Handler handler) {
+        if (m_subscriptions.size() >= MAX_SUBSCRIPTIONS) return nullptr;
+        m_subscriptions.emplace_back(topic, minPrio, std::move(handler));
+        return &m_subscriptions.back();
+    }
+
+    bool post(const EditorBusEvent& ev) {
+        if (m_state == EditorBusState::Suspended) return false;
+        if (m_queue.size() >= MAX_QUEUE) return false;
+        m_queue.push_back(ev);
+        return true;
+    }
+
+    size_t flush() {
+        if (m_state == EditorBusState::Suspended) return 0;
+        m_state = EditorBusState::Flushing;
+        size_t dispatched = 0;
+        for (auto& ev : m_queue) {
+            for (auto& sub : m_subscriptions) {
+                if (sub.topic() == ev.topic || sub.topic() == "*") {
+                    sub.deliver(ev);
+                    ++dispatched;
+                }
+            }
+        }
+        m_queue.clear();
+        m_state = EditorBusState::Idle;
+        return dispatched;
+    }
+
+    void suspend()    { m_state = EditorBusState::Suspended; }
+    void resume()     { if (m_state == EditorBusState::Suspended) m_state = EditorBusState::Idle; }
+    void clearQueue() { m_queue.clear(); }
+
+    [[nodiscard]] EditorBusState state()             const { return m_state;                 }
+    [[nodiscard]] size_t         queueSize()          const { return m_queue.size();          }
+    [[nodiscard]] size_t         subscriptionCount()  const { return m_subscriptions.size(); }
+    [[nodiscard]] bool           isSuspended()        const { return m_state == EditorBusState::Suspended; }
+
+private:
+    std::vector<EditorEventSubscription> m_subscriptions;
+    std::vector<EditorBusEvent>          m_queue;
+    EditorBusState                       m_state = EditorBusState::Idle;
+};
+
+// ============================================================
+// S22 — Workspace Layout Manager
+// ============================================================
+
+enum class LayoutPanelType : uint8_t {
+    Viewport    = 0,
+    Inspector   = 1,
+    Hierarchy   = 2,
+    ContentBrowser = 3,
+    Console     = 4,
+    Profiler    = 5,
+    Timeline    = 6,
+    Custom      = 7,
+};
+
+inline const char* layoutPanelTypeName(LayoutPanelType t) {
+    switch (t) {
+        case LayoutPanelType::Viewport:       return "Viewport";
+        case LayoutPanelType::Inspector:      return "Inspector";
+        case LayoutPanelType::Hierarchy:      return "Hierarchy";
+        case LayoutPanelType::ContentBrowser: return "ContentBrowser";
+        case LayoutPanelType::Console:        return "Console";
+        case LayoutPanelType::Profiler:       return "Profiler";
+        case LayoutPanelType::Timeline:       return "Timeline";
+        case LayoutPanelType::Custom:         return "Custom";
+        default:                              return "Unknown";
+    }
+}
+
+enum class LayoutDockZone : uint8_t {
+    Left   = 0,
+    Right  = 1,
+    Top    = 2,
+    Bottom = 3,
+};
+
+inline const char* layoutDockZoneName(LayoutDockZone z) {
+    switch (z) {
+        case LayoutDockZone::Left:   return "Left";
+        case LayoutDockZone::Right:  return "Right";
+        case LayoutDockZone::Top:    return "Top";
+        case LayoutDockZone::Bottom: return "Bottom";
+        default:                     return "Unknown";
+    }
+}
+
+struct LayoutPanel {
+    std::string     id;
+    std::string     title;
+    LayoutPanelType type     = LayoutPanelType::Custom;
+    LayoutDockZone  dockZone = LayoutDockZone::Left;
+    float           width    = 0.f;
+    float           height   = 0.f;
+    bool            visible  = true;
+    bool            pinned   = false;
+
+    void show()    { visible = true;  }
+    void hide()    { visible = false; }
+    void pin()     { pinned = true;   }
+    void unpin()   { pinned = false;  }
+
+    [[nodiscard]] bool isVisible() const { return visible; }
+    [[nodiscard]] bool isPinned()  const { return pinned;  }
+    [[nodiscard]] bool hasSize()   const { return width > 0.f && height > 0.f; }
+};
+
+struct LayoutSplit {
+    std::string firstPanelId;
+    std::string secondPanelId;
+    bool        isHorizontal = true;
+    float       ratio        = 0.5f;
+
+    [[nodiscard]] bool isValid() const {
+        return !firstPanelId.empty() && !secondPanelId.empty() && ratio > 0.f && ratio < 1.f;
+    }
+    void flipOrientation() { isHorizontal = !isHorizontal; }
+};
+
+class WorkspaceLayout {
+public:
+    explicit WorkspaceLayout(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()       const { return m_name;       }
+    [[nodiscard]] size_t             panelCount()  const { return m_panels.size();  }
+    [[nodiscard]] size_t             splitCount()  const { return m_splits.size();  }
+
+    bool addPanel(const LayoutPanel& p) {
+        for (auto& existing : m_panels) if (existing.id == p.id) return false;
+        m_panels.push_back(p);
+        return true;
+    }
+
+    bool removePanel(const std::string& id) {
+        for (auto it = m_panels.begin(); it != m_panels.end(); ++it) {
+            if (it->id == id) { m_panels.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] LayoutPanel* findPanel(const std::string& id) {
+        for (auto& p : m_panels) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+    bool addSplit(const LayoutSplit& s) {
+        if (!s.isValid()) return false;
+        m_splits.push_back(s);
+        return true;
+    }
+
+    [[nodiscard]] size_t visiblePanelCount() const {
+        size_t c = 0;
+        for (auto& p : m_panels) if (p.isVisible()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t pinnedPanelCount() const {
+        size_t c = 0;
+        for (auto& p : m_panels) if (p.isPinned()) c++;
+        return c;
+    }
+
+    void showAll() { for (auto& p : m_panels) p.show(); }
+    void hideAll() { for (auto& p : m_panels) p.hide(); }
+
+private:
+    std::string              m_name;
+    std::vector<LayoutPanel> m_panels;
+    std::vector<LayoutSplit> m_splits;
+};
+
+class WorkspaceLayoutManager {
+public:
+    static constexpr size_t MAX_LAYOUTS = 32;
+
+    WorkspaceLayout* createLayout(const std::string& name) {
+        if (m_layouts.size() >= MAX_LAYOUTS) return nullptr;
+        for (auto& l : m_layouts) if (l.name() == name) return nullptr;
+        m_layouts.emplace_back(name);
+        return &m_layouts.back();
+    }
+
+    bool removeLayout(const std::string& name) {
+        for (auto it = m_layouts.begin(); it != m_layouts.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeLayout == name) m_activeLayout.clear();
+                m_layouts.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] WorkspaceLayout* findLayout(const std::string& name) {
+        for (auto& l : m_layouts) if (l.name() == name) return &l;
+        return nullptr;
+    }
+
+    bool setActive(const std::string& name) {
+        if (!findLayout(name)) return false;
+        m_activeLayout = name;
+        return true;
+    }
+
+    [[nodiscard]] WorkspaceLayout* activeLayout() {
+        return findLayout(m_activeLayout);
+    }
+
+    [[nodiscard]] const std::string& activeName()  const { return m_activeLayout; }
+    [[nodiscard]] size_t             layoutCount() const { return m_layouts.size(); }
+    [[nodiscard]] bool               hasActive()   const { return !m_activeLayout.empty(); }
+
+private:
+    std::vector<WorkspaceLayout> m_layouts;
+    std::string                  m_activeLayout;
+};
+
 } // namespace NF
