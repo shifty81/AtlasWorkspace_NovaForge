@@ -2755,3 +2755,43 @@ Total: 1830 tests, 0 failures (1805 existing + 14 S34 + 11 G53 = 1830).
 ## Build Verification ✅
 
 Total: 1852 tests, 0 failures (1830 existing + 14 S35 + 8 G54 = 1852).
+
+---
+
+## S36 — Font Editor ✅
+
+- [x] FontStyle enum ×4 (Normal, Italic, Oblique, Inherit) + fontStyleName()
+- [x] FontWeight enum ×6 (Thin, ExtraLight, Light, Regular, Medium, Bold) + fontWeightName()
+- [x] FontVariant enum ×4 (Normal, SmallCaps, AllSmallCaps, PetiteCaps) + fontVariantName()
+- [x] FontAsset (family, size, lineHeight, letterSpacing, style, weight, variant, embedded, dirty)
+  - isBold (Medium/Bold), isItalic (Italic/Oblique)
+- [x] FontEditor (max 128 fonts)
+  - addFont (duplicate rejected), removeFont (clears activeFont), findFont, setActiveFont
+  - fontCount, dirtyCount, embeddedCount, boldCount, italicCount
+- [x] 14 new editor tests (test_s36_editor.cpp), all passing
+
+## S36 Complete ✅
+
+---
+
+## G55 — Dust Storm System ✅
+
+- [x] DustDensity enum ×5 (Trace, Light, Moderate, Heavy, Extreme) + dustDensityName()
+- [x] DustStormPhase enum ×5 (Forming, Advancing, Peak, Retreating, Clearing) + dustStormPhaseName()
+- [x] DustStormEvent (id, density, phase, windSpeed, visibility, active)
+  - activate, deactivate, isHazardous (>= Heavy), isAtPeak (Peak), isLowVisibility (< 200m), hazardScore
+- [x] DustStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, hazardousCount, peakCount, lowVisCount
+- [x] DustStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, hazardousEventCount, peakEventCount
+- [x] 9 new game tests (in test_game.cpp), all passing
+
+## G55 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1875 tests, 0 failures (1852 existing + 14 S36 + 9 G55 = 1875).

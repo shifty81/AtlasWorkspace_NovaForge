@@ -84,6 +84,7 @@
 | **G52** — Sandstorm System | SandstormType×8, SandstormSeverity×6, SandstormEvent, SandstormRegion, SandstormSystem | ✅ Done |
 | **G53** — Cyclone System | CycloneCategory×6, CycloneStage×6, CycloneEvent, CycloneRegion, CycloneSystem | ✅ Done |
 | **G54** — Tornado System | TornadoScale×6, TornadoStage×6, TornadoEvent, TornadoRegion, TornadoSystem | ✅ Done |
+| **G55** — Dust Storm System | DustDensity×5, DustStormPhase×5, DustStormEvent, DustStormRegion, DustStormSystem | ✅ Done |
 
 ---
 
@@ -149,6 +150,7 @@
 | **S33** — Shader Graph Editor | ShaderNodeType×8, ShaderPortKind×4, ShaderNode, ShaderGraphEdge, ShaderGraphEditor | ✅ Done |
 | **S34** — Material Editor | MaterialShadingModel×8, MaterialBlendMode×4, MaterialParameter, MaterialAsset, MaterialEditor | ✅ Done |
 | **S35** — Texture Editor | TextureFormat×8, TextureFilter×4, TextureWrapMode×4, TextureAsset, TextureEditor | ✅ Done |
+| **S36** — Font Editor | FontStyle×4, FontWeight×6, FontVariant×4, FontAsset, FontEditor | ✅ Done |
 
 ## Status Key
 

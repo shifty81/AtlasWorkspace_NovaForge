@@ -8975,3 +8975,109 @@ TEST_CASE("TornadoSystem activeEventCount, violentEventCount, peakEventCount", "
     REQUIRE(sys.violentEventCount() == 1); // only x (y is EF2, z inactive)
     REQUIRE(sys.peakEventCount()    == 1); // only x (y is Rope, z inactive)
 }
+
+// ── G55 — Dust Storm System ───────────────────────────────────────
+
+TEST_CASE("DustDensity names cover all 5 values", "[Game][G55][DustStorm]") {
+    REQUIRE(std::string(NF::dustDensityName(NF::DustDensity::Trace))    == "Trace");
+    REQUIRE(std::string(NF::dustDensityName(NF::DustDensity::Light))    == "Light");
+    REQUIRE(std::string(NF::dustDensityName(NF::DustDensity::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::dustDensityName(NF::DustDensity::Heavy))    == "Heavy");
+    REQUIRE(std::string(NF::dustDensityName(NF::DustDensity::Extreme))  == "Extreme");
+}
+
+TEST_CASE("DustStormPhase names cover all 5 values", "[Game][G55][DustStorm]") {
+    REQUIRE(std::string(NF::dustStormPhaseName(NF::DustStormPhase::Forming))    == "Forming");
+    REQUIRE(std::string(NF::dustStormPhaseName(NF::DustStormPhase::Advancing))  == "Advancing");
+    REQUIRE(std::string(NF::dustStormPhaseName(NF::DustStormPhase::Peak))       == "Peak");
+    REQUIRE(std::string(NF::dustStormPhaseName(NF::DustStormPhase::Retreating)) == "Retreating");
+    REQUIRE(std::string(NF::dustStormPhaseName(NF::DustStormPhase::Clearing))   == "Clearing");
+}
+
+TEST_CASE("DustStormEvent isHazardous threshold is Heavy+", "[Game][G55][DustStorm]") {
+    NF::DustStormEvent ev; ev.id = "d1";
+    ev.density = NF::DustDensity::Moderate;
+    REQUIRE_FALSE(ev.isHazardous());
+
+    ev.density = NF::DustDensity::Heavy;
+    REQUIRE(ev.isHazardous());
+
+    ev.density = NF::DustDensity::Extreme;
+    REQUIRE(ev.isHazardous());
+}
+
+TEST_CASE("DustStormEvent isAtPeak and isLowVisibility", "[Game][G55][DustStorm]") {
+    NF::DustStormEvent ev; ev.id = "d2";
+    ev.phase = NF::DustStormPhase::Advancing;
+    ev.visibility = 500.0f;
+    REQUIRE_FALSE(ev.isAtPeak());
+    REQUIRE_FALSE(ev.isLowVisibility());
+
+    ev.phase = NF::DustStormPhase::Peak;
+    ev.visibility = 100.0f;
+    REQUIRE(ev.isAtPeak());
+    REQUIRE(ev.isLowVisibility());
+}
+
+TEST_CASE("DustStormEvent hazardScore calculation", "[Game][G55][DustStorm]") {
+    NF::DustStormEvent ev; ev.id = "d3";
+    // Moderate (uint8=2): (2+1) * 50 / 50 = 3.0
+    ev.density   = NF::DustDensity::Moderate;
+    ev.windSpeed = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(3.0f));
+}
+
+TEST_CASE("DustStormEvent activate and deactivate", "[Game][G55][DustStorm]") {
+    NF::DustStormEvent ev; ev.id = "d4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("DustStormRegion hazardousCount and peakCount", "[Game][G55][DustStorm]") {
+    NF::DustStormRegion region("sahara");
+
+    NF::DustStormEvent a; a.id = "a"; a.density = NF::DustDensity::Extreme; a.phase = NF::DustStormPhase::Peak;     a.activate();
+    NF::DustStormEvent b; b.id = "b"; b.density = NF::DustDensity::Heavy;   b.phase = NF::DustStormPhase::Advancing;a.activate(); b.activate();
+    NF::DustStormEvent c; c.id = "c"; c.density = NF::DustDensity::Light;   c.phase = NF::DustStormPhase::Peak;     c.activate();
+
+    region.addEvent(a);
+    region.addEvent(b);
+    region.addEvent(c);
+
+    REQUIRE(region.hazardousCount() == 2); // a and b (Heavy+)
+    REQUIRE(region.peakCount()      == 2); // a and c (Peak phase)
+}
+
+TEST_CASE("DustStormSystem createRegion and tick propagation", "[Game][G55][DustStorm]") {
+    NF::DustStormSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+    REQUIRE(sys.byName("r2")->tickCount() == 2);
+}
+
+TEST_CASE("DustStormSystem aggregate event counts", "[Game][G55][DustStorm]") {
+    NF::DustStormSystem sys;
+    sys.createRegion("ra");
+    sys.createRegion("rb");
+
+    NF::DustStormEvent x; x.id = "x"; x.density = NF::DustDensity::Extreme; x.phase = NF::DustStormPhase::Peak; x.activate();
+    NF::DustStormEvent y; y.id = "y"; y.density = NF::DustDensity::Light;   y.phase = NF::DustStormPhase::Advancing; y.activate();
+    NF::DustStormEvent z; z.id = "z"; z.density = NF::DustDensity::Heavy;   z.phase = NF::DustStormPhase::Peak; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()    == 2);
+    REQUIRE(sys.hazardousEventCount() == 1); // only x (y=Light, z inactive)
+    REQUIRE(sys.peakEventCount()      == 1); // only x (y=Advancing, z inactive)
+}

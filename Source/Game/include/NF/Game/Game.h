@@ -11216,4 +11216,144 @@ private:
     size_t                     m_tickCount = 0;
 };
 
+// ── G55 — Dust Storm System ───────────────────────────────────────
+
+enum class DustDensity : uint8_t {
+    Trace, Light, Moderate, Heavy, Extreme
+};
+
+inline const char* dustDensityName(DustDensity d) {
+    switch (d) {
+        case DustDensity::Trace:    return "Trace";
+        case DustDensity::Light:    return "Light";
+        case DustDensity::Moderate: return "Moderate";
+        case DustDensity::Heavy:    return "Heavy";
+        case DustDensity::Extreme:  return "Extreme";
+    }
+    return "Unknown";
+}
+
+enum class DustStormPhase : uint8_t {
+    Forming, Advancing, Peak, Retreating, Clearing
+};
+
+inline const char* dustStormPhaseName(DustStormPhase p) {
+    switch (p) {
+        case DustStormPhase::Forming:    return "Forming";
+        case DustStormPhase::Advancing:  return "Advancing";
+        case DustStormPhase::Peak:       return "Peak";
+        case DustStormPhase::Retreating: return "Retreating";
+        case DustStormPhase::Clearing:   return "Clearing";
+    }
+    return "Unknown";
+}
+
+struct DustStormEvent {
+    std::string    id;
+    DustDensity    density   = DustDensity::Light;
+    DustStormPhase phase     = DustStormPhase::Forming;
+    float          windSpeed = 0.0f;
+    float          visibility = 1000.0f; // metres
+    bool           active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isHazardous() const {
+        return static_cast<uint8_t>(density) >= static_cast<uint8_t>(DustDensity::Heavy);
+    }
+    [[nodiscard]] bool isAtPeak() const { return phase == DustStormPhase::Peak; }
+    [[nodiscard]] bool isLowVisibility() const { return visibility < 200.0f; }
+    [[nodiscard]] float hazardScore() const {
+        return (static_cast<float>(static_cast<uint8_t>(density) + 1)) * windSpeed / 50.0f;
+    }
+};
+
+class DustStormRegion {
+public:
+    explicit DustStormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const DustStormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] DustStormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()     const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t hazardousCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isHazardous()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+    [[nodiscard]] size_t lowVisCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isLowVisibility()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                  m_name;
+    std::vector<DustStormEvent>  m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class DustStormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    DustStormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] DustStormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()      const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount;      }
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t hazardousEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.hazardousCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+
+private:
+    std::vector<DustStormRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
 } // namespace NF
