@@ -218,6 +218,7 @@ public:
         m_contentPath = (std::filesystem::path(m_projectRoot) / "Content").string();
         m_dataPath = (std::filesystem::path(m_projectRoot) / "Data").string();
         m_configPath = (std::filesystem::path(m_projectRoot) / "Config").string();
+        m_savePath = (std::filesystem::path(m_projectRoot) / "Saved").string();
 
         NF_LOG_INFO("Editor", "Project root: " + m_projectRoot);
         NF_LOG_INFO("Editor", "Content path: " + m_contentPath);
@@ -228,6 +229,7 @@ public:
     [[nodiscard]] const std::string& contentPath() const { return m_contentPath; }
     [[nodiscard]] const std::string& dataPath() const { return m_dataPath; }
     [[nodiscard]] const std::string& configPath() const { return m_configPath; }
+    [[nodiscard]] const std::string& savePath() const { return m_savePath; }
 
     [[nodiscard]] std::string resolvePath(const std::string& relativePath) const {
         return (std::filesystem::path(m_projectRoot) / relativePath).string();
@@ -239,6 +241,7 @@ private:
     std::string m_contentPath;
     std::string m_dataPath;
     std::string m_configPath;
+    std::string m_savePath;
 };
 
 // ── Launch Service ───────────────────────────────────────────────
@@ -300,6 +303,220 @@ public:
 private:
     std::string m_gameExeName = "NovaForgeGame";
     std::string m_buildDir;
+};
+
+// ── M1-D: Project Workspace & Selector ──────────────────────────
+
+/// Descriptor for a discovered workspace project.
+struct ProjectEntry {
+    std::string name;        // display name (from JSON "name" field, else filename stem)
+    std::string path;        // absolute path to the .atlas.json file
+    std::string description; // optional description from JSON
+    std::string version;     // optional version string from JSON
+
+    [[nodiscard]] bool isValid() const { return !path.empty(); }
+};
+
+/// Scans a directory for *.atlas.json files, lists them, and tracks the selected project.
+/// On selection, records the loaded project path so EditorApp can wire paths accordingly.
+class ProjectPickerPanel {
+public:
+    static constexpr const char* kExtension = ".atlas.json";
+    static constexpr size_t kMaxProjects = 64;
+
+    /// Scan a directory for .atlas.json files and populate the project list.
+    /// Returns the number of projects found.
+    size_t scanDirectory(const std::string& dir) {
+        m_projects.clear();
+        m_selectedIndex = -1;
+        if (dir.empty()) return 0;
+
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec)) return 0;
+
+        for (auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file(ec)) continue;
+            auto p = entry.path();
+            std::string filename = p.filename().string();
+            // Match files ending with .atlas.json
+            if (filename.size() < 11) continue; // minimum: "x.atlas.json"
+            if (filename.substr(filename.size() - 11) != kExtension) continue;
+
+            ProjectEntry pe;
+            pe.path = p.string();
+            pe.name = p.stem().string(); // default: filename stem
+            // Strip second extension if present (e.g. "NovaForge.atlas" → "NovaForge")
+            if (pe.name.size() > 6 && pe.name.substr(pe.name.size() - 6) == ".atlas")
+                pe.name = pe.name.substr(0, pe.name.size() - 6);
+
+            // Best-effort JSON parse for name/version/description fields
+            std::ifstream f(pe.path);
+            if (f.is_open()) {
+                std::string content((std::istreambuf_iterator<char>(f)),
+                                     std::istreambuf_iterator<char>());
+                pe.name        = extractJsonString(content, "name",        pe.name);
+                pe.version     = extractJsonString(content, "version",     "");
+                pe.description = extractJsonString(content, "description", "");
+            }
+
+            m_projects.push_back(std::move(pe));
+            if (m_projects.size() >= kMaxProjects) break;
+        }
+        return m_projects.size();
+    }
+
+    void addProject(const ProjectEntry& entry) {
+        if (m_projects.size() < kMaxProjects)
+            m_projects.push_back(entry);
+    }
+
+    void clearProjects() {
+        m_projects.clear();
+        m_selectedIndex = -1;
+    }
+
+    /// Select a project by index (0-based). Returns false if out of range.
+    bool selectProject(int index) {
+        if (index < 0 || index >= static_cast<int>(m_projects.size())) return false;
+        m_selectedIndex = index;
+        return true;
+    }
+
+    /// Load the currently selected project. Returns false if nothing selected.
+    bool loadSelected() {
+        if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<int>(m_projects.size()))
+            return false;
+        m_loadedPath = m_projects[static_cast<size_t>(m_selectedIndex)].path;
+        m_loaded = true;
+        m_visible = false;
+        return true;
+    }
+
+    /// Directly load a project by path. Adds it to the list if not already present.
+    bool loadProject(const std::string& path) {
+        if (path.empty()) return false;
+        // Find or add entry
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(m_projects.size()); ++i) {
+            if (m_projects[static_cast<size_t>(i)].path == path) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0) {
+            ProjectEntry pe;
+            pe.path = path;
+            auto stem = std::filesystem::path(path).stem().string();
+            if (stem.size() > 6 && stem.substr(stem.size() - 6) == ".atlas")
+                stem = stem.substr(0, stem.size() - 6);
+            pe.name = stem;
+            m_projects.push_back(std::move(pe));
+            idx = static_cast<int>(m_projects.size()) - 1;
+        }
+        m_selectedIndex = idx;
+        m_loadedPath = path;
+        m_loaded = true;
+        m_visible = false;
+        return true;
+    }
+
+    // Visibility
+    void show()    { m_visible = true; }
+    void hide()    { m_visible = false; }
+    [[nodiscard]] bool isVisible() const { return m_visible; }
+
+    // Accessors
+    [[nodiscard]] const std::vector<ProjectEntry>& projects() const { return m_projects; }
+    [[nodiscard]] size_t projectCount() const { return m_projects.size(); }
+    [[nodiscard]] int selectedIndex() const { return m_selectedIndex; }
+    [[nodiscard]] bool hasSelection() const { return m_selectedIndex >= 0; }
+
+    [[nodiscard]] const ProjectEntry* selectedProject() const {
+        if (!hasSelection()) return nullptr;
+        return &m_projects[static_cast<size_t>(m_selectedIndex)];
+    }
+
+    [[nodiscard]] bool isLoaded() const { return m_loaded; }
+    [[nodiscard]] const std::string& loadedProjectPath() const { return m_loadedPath; }
+
+    /// Render a simple modal overlay over the editor.
+    /// Uses hardcoded dark-theme colors so this class doesn't depend on EditorTheme.
+    void render(UIRenderer& ui, float width, float height) {
+        if (!m_visible) return;
+
+        // Dim background
+        ui.drawRect({0.f, 0.f, width, height}, 0x000000AA);
+
+        // Dialog box
+        constexpr float dw = 520.f, dh = 360.f;
+        float dx = (width  - dw) * 0.5f;
+        float dy = (height - dh) * 0.5f;
+        Rect dlg{dx, dy, dw, dh};
+
+        ui.drawRect(dlg,        0x2B2B2BFF); // panelBackground
+        ui.drawRectOutline(dlg, 0x555555FF, 2.f); // panelBorder
+
+        // Title bar
+        Rect titleBar{dx, dy, dw, 28.f};
+        ui.drawRect(titleBar,   0x3C3C3CFF); // panelHeader
+        ui.drawText(dx + 12.f, dy + 6.f, "Open Workspace", 0xDCDCDCFF); // panelText
+
+        // Project list header
+        ui.drawText(dx + 12.f, dy + 40.f, "Available Projects:", 0x9CDCFEFF); // propertyLabel
+
+        float ly = dy + 62.f;
+        for (int i = 0; i < static_cast<int>(m_projects.size()); ++i) {
+            const auto& p = m_projects[static_cast<size_t>(i)];
+            Rect row{dx + 8.f, ly, dw - 16.f, 26.f};
+            uint32_t rowBg = (i == m_selectedIndex) ? 0x2255AAFF : 0x2A2A2AFF;
+            ui.drawRect(row, rowBg);
+            std::string label = p.name;
+            if (!p.version.empty()) label += "  v" + p.version;
+            ui.drawText(dx + 16.f, ly + 5.f, label, 0xDCDCDCFF);
+            ly += 30.f;
+        }
+
+        if (m_projects.empty()) {
+            ui.drawText(dx + 12.f, ly + 4.f, "No projects found in Project/ directory.", 0x9CDCFEFF);
+            ly += 28.f;
+        }
+        (void)ly;
+
+        // Buttons area
+        float bby = dy + dh - 40.f;
+        Rect openBtn{dx + dw - 200.f, bby, 88.f, 26.f};
+        Rect cancelBtn{dx + dw - 104.f, bby, 88.f, 26.f};
+
+        ui.drawRect(openBtn,   m_selectedIndex >= 0 ? 0x1A7A1AFF : 0x333333FF);
+        ui.drawRect(cancelBtn, 0x5A2222FF);
+        ui.drawRectOutline(openBtn,   0x555555FF, 1.f);
+        ui.drawRectOutline(cancelBtn, 0x555555FF, 1.f);
+        ui.drawText(openBtn.x   + 20.f, bby + 5.f, "Open",   0xDCDCDCFF);
+        ui.drawText(cancelBtn.x + 16.f, bby + 5.f, "Cancel", 0xDCDCDCFF);
+    }
+
+private:
+    static std::string extractJsonString(const std::string& json,
+                                         const std::string& key,
+                                         const std::string& fallback) {
+        std::string search = "\"" + key + "\"";
+        auto pos = json.find(search);
+        if (pos == std::string::npos) return fallback;
+        pos = json.find(':', pos + search.size());
+        if (pos == std::string::npos) return fallback;
+        pos = json.find('"', pos + 1);
+        if (pos == std::string::npos) return fallback;
+        auto end = json.find('"', pos + 1);
+        if (end == std::string::npos) return fallback;
+        return json.substr(pos + 1, end - pos - 1);
+    }
+
+    std::vector<ProjectEntry> m_projects;
+    int    m_selectedIndex = -1;
+    bool   m_visible       = false;
+    bool   m_loaded        = false;
+    std::string m_loadedPath;
 };
 
 // ── Editor Command State ─────────────────────────────────────────
@@ -3253,6 +3470,14 @@ public:
             NF_LOG_INFO("Editor", "Save world as...");
         }, "Save As", "Ctrl+Shift+S");
 
+        // M1-D: Open workspace/project picker
+        m_commands.registerCommand("project.open_workspace", [this]() {
+            std::string projectDir = m_projectPaths.resolvePath("Project");
+            m_projectPicker.scanDirectory(projectDir);
+            m_projectPicker.show();
+            NF_LOG_INFO("Editor", "Project picker opened");
+        }, "Open Workspace...", "Ctrl+Shift+O");
+
         m_commands.registerCommand("edit.undo", [this]() {
             if (m_commandStack.canUndo()) {
                 std::string desc = m_commandStack.undoDescription();
@@ -3658,6 +3883,15 @@ public:
         // ── Load persisted layout from Saved/ ───────────────────────
         loadEditorState();
 
+        // ── M1-D: Project Workspace & Selector ──────────────────────
+        {
+            std::string projectDir = m_projectPaths.resolvePath("Project");
+            m_projectPicker.scanDirectory(projectDir);
+            // Show the project picker on startup if no project was pre-loaded
+            if (!m_projectPicker.isLoaded())
+                m_projectPicker.show();
+        }
+
         NF_LOG_INFO("Editor", "NovaForge Editor initialized");
         return true;
     }
@@ -3749,6 +3983,10 @@ public:
                 m_ui.drawText(nr.x + 8.f, nr.y + 7.f, n->message, 0xFFFFFFFF);
             }
         }
+
+        // M1-D: Project picker modal overlay (rendered last so it appears on top)
+        if (m_projectPicker.isVisible())
+            m_projectPicker.render(m_ui, width, height);
 
         m_ui.endFrame();
     }
@@ -3876,6 +4114,14 @@ public:
     BlenderAutoImporter& blenderAutoImporter() { return m_blenderImporter; }
     const BlenderAutoImporter& blenderAutoImporter() const { return m_blenderImporter; }
 
+    // M1-D accessors: Project Workspace & Selector
+    ProjectPickerPanel& projectPicker() { return m_projectPicker; }
+    const ProjectPickerPanel& projectPicker() const { return m_projectPicker; }
+
+    void showProjectPicker() { m_projectPicker.show(); }
+    void hideProjectPicker() { m_projectPicker.hide(); }
+    [[nodiscard]] bool isProjectPickerVisible() const { return m_projectPicker.isVisible(); }
+
     [[nodiscard]] PCGTuningPanel* pcgTuningPanel() {
         for (auto& p : m_editorPanels) {
             if (auto* pcg = dynamic_cast<PCGTuningPanel*>(p.get())) return pcg;
@@ -3895,12 +4141,14 @@ private:
     void initMenuBar() {
         // File menu
         auto& file = m_menuBar.addCategory("File");
-        file.addItem("New World",   "file.new",     "Ctrl+N");
-        file.addItem("Open World",  "file.open",    "Ctrl+O");
-        file.addItem("Save",        "file.save",    "Ctrl+S");
-        file.addItem("Save As",     "file.save_as", "Ctrl+Shift+S");
+        file.addItem("New World",        "file.new",                "Ctrl+N");
+        file.addItem("Open World",       "file.open",               "Ctrl+O");
+        file.addItem("Save",             "file.save",               "Ctrl+S");
+        file.addItem("Save As",          "file.save_as",            "Ctrl+Shift+S");
         file.addSeparator();
-        file.addItem("Exit",        "file.exit",    "Alt+F4");
+        file.addItem("Open Workspace...", "project.open_workspace", "Ctrl+Shift+O");
+        file.addSeparator();
+        file.addItem("Exit",             "file.exit",               "Alt+F4");
 
         // Edit menu
         auto& edit = m_menuBar.addCategory("Edit");
@@ -4018,6 +4266,9 @@ private:
 
     // S4 Blender Bridge
     BlenderAutoImporter m_blenderImporter;
+
+    // M1-D Project Workspace & Selector
+    ProjectPickerPanel m_projectPicker;
 
     // ── State persistence ───────────────────────────────────────
 

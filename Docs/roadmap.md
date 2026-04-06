@@ -123,11 +123,11 @@ All source repos migrated. Outstanding cleanup items carried forward to Phase 1-
 - [x] `CharacterEditorPanel` — wired to `NFRenderViewport` base
 - [x] `PrefabEditorPanel` — scene-in-a-box, wired to `NFRenderViewport`
 
-### M1-D — Project Workspace & Selector
-- [ ] `ProjectPickerPanel` — scan `Project/` dir, list `.atlas.json` projects, select to load
-- [ ] `ProjectPathService` wired — `contentPath()`, `dataPath()`, `configPath()`, `savePath()`
-- [ ] NovaForge selectable as a project in the workspace launcher
-- [ ] Opening workspace auto-shows project picker, selecting project loads all editor state
+### M1-D — Project Workspace & Selector ✅
+- [x] `ProjectPickerPanel` — scan `Project/` dir, list `.atlas.json` projects, select to load
+- [x] `ProjectPathService` wired — `contentPath()`, `dataPath()`, `configPath()`, `savePath()`
+- [x] NovaForge selectable as a project in the workspace launcher (`Project/NovaForge.atlas.json`)
+- [x] Opening workspace auto-shows project picker, selecting project loads all editor state
 
 ### M1-E — Play In Editor (PIE) Mode
 - [ ] `PlayInEditor` tool implemented
@@ -259,7 +259,7 @@ These are **future decisions only**. Do not create these repos until Phase 5 arc
 | `SkeletalEditorPanel` done           | ✅       | M1-C     | Implemented with NFRenderViewport base                       |
 | `AnimationEditorPanel` done          | ✅       | M1-C     | Implemented with NFRenderViewport base                       |
 | `GraphEditorPanel` is shell            | HIGH     | M1-B     | No node/pin rendering or GraphVM compile wiring              |
-| `ProjectPickerPanel` is stub           | HIGH     | M1-D     | 1.4KB, not functional                                        |
+| `ProjectPickerPanel` implemented      | ✅       | M1-D     | Scans Project/ dir, lists .atlas.json, modal overlay on startup |
 | `.novaforge/pipeline/` empty           | HIGH     | M1-G     | No ChangeEvent infrastructure                                |
 | `AtlasAssistantPanel` not wired        | HIGH     | M1-G     | No SwissAgent routing                                        |
 | `Source/AI/` completely empty          | MED      | Phase 4  | No C++ AI runtime stubs                                      |

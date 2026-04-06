@@ -3127,3 +3127,34 @@ Total: 2037 tests, 0 failures (2014 existing + 14 S43 + 10 G62 = 2038 — note: 
 ## Build Verification ✅
 
 Total: 2075 tests, 0 failures (2037 existing + 38 M1-C = 2075).
+
+## M1-D — Project Workspace & Selector ✅
+
+- [x] `savePath()` added to `ProjectPathService` — returns `<projectRoot>/Saved/` path
+- [x] `ProjectEntry` struct — name, path, description, version fields + `isValid()`
+- [x] `ProjectPickerPanel` class — workspace selector modal panel
+  - `scanDirectory(dir)` — scans for `*.atlas.json` files (max 64), parses name/version/description from JSON
+  - `addProject(entry)` / `clearProjects()` — manual project list management
+  - `selectProject(index)` — pick by index, `hasSelection()`, `selectedProject()` accessors
+  - `loadSelected()` — load selected project, hide picker, mark as loaded
+  - `loadProject(path)` — load directly by path, auto-add if not in list
+  - `show()` / `hide()` / `isVisible()` — modal visibility control
+  - `isLoaded()` / `loadedProjectPath()` — loaded state accessors
+  - `render(ui, width, height)` — dark-theme modal overlay with project list + Open/Cancel buttons
+- [x] `ProjectPickerPanel` wired into `EditorApp`:
+  - `m_projectPicker` member owned by EditorApp
+  - `projectPicker()` / `showProjectPicker()` / `hideProjectPicker()` / `isProjectPickerVisible()` accessors
+  - `init()` scans `Project/` directory on startup, shows picker if no project pre-loaded
+  - `renderAll()` renders picker modal on top when visible
+  - `project.open_workspace` command registered (`Ctrl+Shift+O`)
+  - "File → Open Workspace..." menu item wired to command
+- [x] `Project/NovaForge.atlas.json` — canonical NovaForge project descriptor (with `workspace.selector_on_startup: true`)
+- [x] 15 new editor tests (test_m1d_editor.cpp), all passing
+
+## M1-D Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2090 tests, 0 failures (2075 existing + 15 M1-D = 2090).
