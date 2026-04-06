@@ -8646,3 +8646,120 @@ TEST_CASE("BlizzardSystem activeEventCount, severeEventCount, whiteoutEventCount
     REQUIRE(sys.severeEventCount()   == 2); // both w1 and s1 >= Severe
     REQUIRE(sys.whiteoutEventCount() == 1); // only w1 is whiteout
 }
+
+// ── G52 — Sandstorm System ────────────────────────────────────────
+
+TEST_CASE("SandstormType names cover all 8 values", "[Game][G52][Sandstorm]") {
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Haboob))    == "Haboob");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Simoom))    == "Simoom");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Khamsin))   == "Khamsin");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Shamal))    == "Shamal");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Harmattan)) == "Harmattan");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Sirocco))   == "Sirocco");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Zonda))     == "Zonda");
+    REQUIRE(std::string(NF::sandstormTypeName(NF::SandstormType::Custom))    == "Custom");
+}
+
+TEST_CASE("SandstormSeverity names cover all 6 values", "[Game][G52][Sandstorm]") {
+    REQUIRE(std::string(NF::sandstormSeverityName(NF::SandstormSeverity::Dust))         == "Dust");
+    REQUIRE(std::string(NF::sandstormSeverityName(NF::SandstormSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::sandstormSeverityName(NF::SandstormSeverity::Strong))       == "Strong");
+    REQUIRE(std::string(NF::sandstormSeverityName(NF::SandstormSeverity::Severe))       == "Severe");
+    REQUIRE(std::string(NF::sandstormSeverityName(NF::SandstormSeverity::Violent))      == "Violent");
+    REQUIRE(std::string(NF::sandstormSeverityName(NF::SandstormSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("SandstormEvent isSevere and isCatastrophic thresholds", "[Game][G52][Sandstorm]") {
+    NF::SandstormEvent ev; ev.id = "ss1";
+
+    ev.severity = NF::SandstormSeverity::Dust;
+    REQUIRE_FALSE(ev.isSevere());
+    REQUIRE_FALSE(ev.isCatastrophic());
+
+    ev.severity = NF::SandstormSeverity::Severe;
+    REQUIRE(ev.isSevere());
+    REQUIRE_FALSE(ev.isCatastrophic());
+
+    ev.severity = NF::SandstormSeverity::Catastrophic;
+    REQUIRE(ev.isSevere());
+    REQUIRE(ev.isCatastrophic());
+}
+
+TEST_CASE("SandstormEvent particleDensity scales with severity and windSpeed", "[Game][G52][Sandstorm]") {
+    NF::SandstormEvent ev; ev.id = "ss2";
+    ev.severity  = NF::SandstormSeverity::Moderate; // uint8_t = 1, +1 = 2
+    ev.windSpeed = 10.0f;
+    REQUIRE(ev.particleDensity() == Catch::Approx(20.0f));
+
+    ev.severity  = NF::SandstormSeverity::Dust; // uint8_t = 0, +1 = 1
+    ev.windSpeed = 5.0f;
+    REQUIRE(ev.particleDensity() == Catch::Approx(5.0f));
+}
+
+TEST_CASE("SandstormEvent activate and deactivate toggle active", "[Game][G52][Sandstorm]") {
+    NF::SandstormEvent ev; ev.id = "ss3";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("SandstormRegion addEvent and duplicate rejection", "[Game][G52][Sandstorm]") {
+    NF::SandstormRegion region("sahara");
+    NF::SandstormEvent a; a.id = "a";
+    NF::SandstormEvent b; b.id = "b";
+    NF::SandstormEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("SandstormRegion severeCount and catastrophicCount", "[Game][G52][Sandstorm]") {
+    NF::SandstormRegion region("gobi");
+
+    NF::SandstormEvent cat; cat.id = "c1"; cat.severity = NF::SandstormSeverity::Catastrophic; cat.activate();
+    NF::SandstormEvent sev; sev.id = "s1"; sev.severity = NF::SandstormSeverity::Severe;       sev.activate();
+    NF::SandstormEvent dus; dus.id = "d1"; dus.severity = NF::SandstormSeverity::Dust;          dus.activate();
+
+    region.addEvent(cat);
+    region.addEvent(sev);
+    region.addEvent(dus);
+
+    REQUIRE(region.activeCount()        == 3);
+    REQUIRE(region.severeCount()        == 2); // Catastrophic + Severe
+    REQUIRE(region.catastrophicCount()  == 1);
+}
+
+TEST_CASE("SandstormSystem createRegion and tick propagation", "[Game][G52][Sandstorm]") {
+    NF::SandstormSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()              == 3);
+    REQUIRE(sys.byName("r1")->tickCount() == 3);
+    REQUIRE(sys.byName("r2")->tickCount() == 3);
+}
+
+TEST_CASE("SandstormSystem activeEventCount, severeEventCount, catastrophicEventCount", "[Game][G52][Sandstorm]") {
+    NF::SandstormSystem sys;
+    sys.createRegion("ra");
+    sys.createRegion("rb");
+
+    NF::SandstormEvent c1; c1.id = "c1"; c1.severity = NF::SandstormSeverity::Catastrophic; c1.activate();
+    NF::SandstormEvent s1; s1.id = "s1"; s1.severity = NF::SandstormSeverity::Severe;        s1.activate();
+    NF::SandstormEvent d1; d1.id = "d1"; d1.severity = NF::SandstormSeverity::Dust;
+
+    sys.byName("ra")->addEvent(c1);
+    sys.byName("ra")->addEvent(d1);
+    sys.byName("rb")->addEvent(s1);
+
+    REQUIRE(sys.activeEventCount()        == 2);
+    REQUIRE(sys.severeEventCount()        == 2); // c1 and s1
+    REQUIRE(sys.catastrophicEventCount()  == 1); // only c1
+}

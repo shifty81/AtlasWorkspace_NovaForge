@@ -10795,4 +10795,147 @@ private:
     size_t                      m_tickCount = 0;
 };
 
+// ── G52 — Sandstorm System ────────────────────────────────────────
+
+enum class SandstormType : uint8_t {
+    Haboob, Simoom, Khamsin, Shamal, Harmattan, Sirocco, Zonda, Custom
+};
+
+inline const char* sandstormTypeName(SandstormType t) {
+    switch (t) {
+        case SandstormType::Haboob:   return "Haboob";
+        case SandstormType::Simoom:   return "Simoom";
+        case SandstormType::Khamsin:  return "Khamsin";
+        case SandstormType::Shamal:   return "Shamal";
+        case SandstormType::Harmattan: return "Harmattan";
+        case SandstormType::Sirocco:  return "Sirocco";
+        case SandstormType::Zonda:    return "Zonda";
+        case SandstormType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class SandstormSeverity : uint8_t {
+    Dust, Moderate, Strong, Severe, Violent, Catastrophic
+};
+
+inline const char* sandstormSeverityName(SandstormSeverity s) {
+    switch (s) {
+        case SandstormSeverity::Dust:         return "Dust";
+        case SandstormSeverity::Moderate:     return "Moderate";
+        case SandstormSeverity::Strong:       return "Strong";
+        case SandstormSeverity::Severe:       return "Severe";
+        case SandstormSeverity::Violent:      return "Violent";
+        case SandstormSeverity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct SandstormEvent {
+    std::string       id;
+    SandstormType     type      = SandstormType::Haboob;
+    SandstormSeverity severity  = SandstormSeverity::Dust;
+    float             duration  = 1.0f;
+    float             windSpeed = 0.0f;
+    bool              active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere() const {
+        return static_cast<uint8_t>(severity) >= static_cast<uint8_t>(SandstormSeverity::Severe);
+    }
+    [[nodiscard]] bool isCatastrophic() const {
+        return severity == SandstormSeverity::Catastrophic;
+    }
+    [[nodiscard]] float particleDensity() const {
+        return static_cast<float>(static_cast<uint8_t>(severity) + 1) * windSpeed;
+    }
+};
+
+class SandstormRegion {
+public:
+    explicit SandstormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const SandstormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SandstormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()        const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere()) ++c; return c;
+    }
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isCatastrophic()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                m_name;
+    std::vector<SandstormEvent> m_events;
+    size_t                     m_tickCount = 0;
+};
+
+class SandstormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    SandstormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] SandstormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t severeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount(); return c;
+    }
+    [[nodiscard]] size_t catastrophicEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.catastrophicCount(); return c;
+    }
+
+private:
+    std::vector<SandstormRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
 } // namespace NF

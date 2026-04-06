@@ -2612,3 +2612,50 @@ Total: 1753 tests, 0 failures (1725 existing + 14 S31 + 14 G50 = 1753).
 ## Build Verification ✅
 
 Total: 1780 tests, 0 failures (1753 existing + 16 S32 + 11 G51 = 1780).
+
+---
+
+## S33 — Shader Graph Editor ✅
+
+- [x] ShaderNodeType enum ×8 (Input, Output, Math, Texture, Color, Vector, Blend, Custom)
+  - shaderNodeTypeName() for all 8 types
+- [x] ShaderPortKind enum ×4 (Float, Vector2, Vector3, Vector4)
+  - shaderPortKindName() for all 4 kinds
+- [x] ShaderNode struct (id, type, posX, posY, selected)
+  - select, deselect, setPosition
+- [x] ShaderGraphEdge struct (id, fromNode, toNode, portKind)
+- [x] ShaderGraphEditor class (max 256 nodes, max 512 edges)
+  - addNode (duplicate/full rejected), removeNode (also removes connected edges, clears activeNode)
+  - findNode, addEdge (validates endpoints, rejects duplicate id), removeEdge
+  - setActiveNode, activeNode, selectAll, deselectAll
+  - nodeCount, edgeCount, selectedCount
+- [x] 14 new editor tests (test_s33_editor.cpp), all passing
+
+## S33 Complete ✅
+
+---
+
+## G52 — Sandstorm System ✅
+
+- [x] SandstormType enum ×8 (Haboob, Simoom, Khamsin, Shamal, Harmattan, Sirocco, Zonda, Custom)
+  - sandstormTypeName() for all 8 types
+- [x] SandstormSeverity enum ×6 (Dust, Moderate, Strong, Severe, Violent, Catastrophic)
+  - sandstormSeverityName() for all 6 levels
+- [x] SandstormEvent struct (id, type, severity, duration, windSpeed, active)
+  - activate, deactivate, isSevere (>= Severe), isCatastrophic, particleDensity
+- [x] SandstormRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, severeCount, catastrophicCount
+  - name, tick, tickCount
+- [x] SandstormSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, catastrophicEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G52 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1805 tests, 0 failures (1780 existing + 14 S33 + 11 G52 = 1805).
