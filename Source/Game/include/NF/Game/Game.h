@@ -9370,4 +9370,829 @@ private:
     size_t               m_tickCount = 0;
 };
 
+// ============================================================
+// G42 — Wildfire System
+// ============================================================
+
+enum class WildfireType : uint8_t {
+    Forest, Grassland, Shrub, Peat, Urban, Agricultural, Desert, Tropical
+};
+
+[[nodiscard]] inline const char* wildfireTypeName(WildfireType t) {
+    switch (t) {
+        case WildfireType::Forest:       return "Forest";
+        case WildfireType::Grassland:    return "Grassland";
+        case WildfireType::Shrub:        return "Shrub";
+        case WildfireType::Peat:         return "Peat";
+        case WildfireType::Urban:        return "Urban";
+        case WildfireType::Agricultural: return "Agricultural";
+        case WildfireType::Desert:       return "Desert";
+        case WildfireType::Tropical:     return "Tropical";
+    }
+    return "Unknown";
+}
+
+enum class WildfireSeverity : uint8_t {
+    Minor, Moderate, Significant, Major, Catastrophic
+};
+
+[[nodiscard]] inline const char* wildfireSeverityName(WildfireSeverity s) {
+    switch (s) {
+        case WildfireSeverity::Minor:        return "Minor";
+        case WildfireSeverity::Moderate:     return "Moderate";
+        case WildfireSeverity::Significant:  return "Significant";
+        case WildfireSeverity::Major:        return "Major";
+        case WildfireSeverity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct WildfireFront {
+    std::string      id;
+    float            widthKm         = 0.f;
+    float            advanceRateKmh  = 0.f;
+    bool             contained       = false;
+    WildfireSeverity severity        = WildfireSeverity::Minor;
+
+    void contain()          { contained = true; }
+    void spread(float rate) { advanceRateKmh = rate; }
+
+    [[nodiscard]] bool isContained()    const { return contained; }
+    [[nodiscard]] bool isSpreading()    const { return advanceRateKmh > 0.f && !contained; }
+    [[nodiscard]] bool isCatastrophic() const { return severity == WildfireSeverity::Catastrophic; }
+};
+
+class WildfireZone {
+public:
+    explicit WildfireZone(const std::string& name) : m_name(name) {}
+
+    void setType(WildfireType t)         { m_type = t; }
+    void setSeverity(WildfireSeverity s) { m_severity = s; }
+
+    bool addFront(const WildfireFront& f) {
+        for (auto& existing : m_fronts) if (existing.id == f.id) return false;
+        m_fronts.push_back(f);
+        return true;
+    }
+
+    void containAll() { for (auto& f : m_fronts) f.contain(); }
+
+    [[nodiscard]] size_t frontCount() const { return m_fronts.size(); }
+
+    [[nodiscard]] size_t containedFronts() const {
+        size_t c = 0;
+        for (auto& f : m_fronts) if (f.isContained()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()     const { return m_name;     }
+    [[nodiscard]] WildfireType       type()     const { return m_type;     }
+    [[nodiscard]] WildfireSeverity   severity() const { return m_severity; }
+
+    [[nodiscard]] bool isActive() const {
+        for (auto& f : m_fronts) if (f.isSpreading()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                m_name;
+    WildfireType               m_type      = WildfireType::Forest;
+    WildfireSeverity           m_severity  = WildfireSeverity::Minor;
+    std::vector<WildfireFront> m_fronts;
+    size_t                     m_tickCount = 0;
+};
+
+class WildfireSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    WildfireZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] WildfireZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.severity() == WildfireSeverity::Catastrophic) c++;
+        return c;
+    }
+
+private:
+    std::vector<WildfireZone> m_zones;
+    size_t                    m_tickCount = 0;
+};
+
+// ============================================================
+// G43 — Flood System
+// ============================================================
+
+enum class FloodType : uint8_t { River, Coastal, Flash, Urban, Groundwater, Dam, Snowmelt, Tropical };
+
+inline const char* floodTypeName(FloodType t) {
+    switch (t) {
+        case FloodType::River:       return "River";
+        case FloodType::Coastal:     return "Coastal";
+        case FloodType::Flash:       return "Flash";
+        case FloodType::Urban:       return "Urban";
+        case FloodType::Groundwater: return "Groundwater";
+        case FloodType::Dam:         return "Dam";
+        case FloodType::Snowmelt:    return "Snowmelt";
+        case FloodType::Tropical:    return "Tropical";
+        default:                     return "Unknown";
+    }
+}
+
+enum class FloodSeverity : uint8_t { Minor, Moderate, Significant, Major, Catastrophic };
+
+inline const char* floodSeverityName(FloodSeverity s) {
+    switch (s) {
+        case FloodSeverity::Minor:        return "Minor";
+        case FloodSeverity::Moderate:     return "Moderate";
+        case FloodSeverity::Significant:  return "Significant";
+        case FloodSeverity::Major:        return "Major";
+        case FloodSeverity::Catastrophic: return "Catastrophic";
+        default:                          return "Unknown";
+    }
+}
+
+struct FloodWaterLevel {
+    std::string id;
+    float       depthMeters           = 0.f;
+    float       riseRateMetersPerHour = 0.f;
+    bool        receding              = false;
+
+    void startReceding()  { receding = true; }
+    void rise(float rate) { riseRateMetersPerHour = rate; }
+
+    [[nodiscard]] bool isRising()       const { return riseRateMetersPerHour > 0.f && !receding; }
+    [[nodiscard]] bool isDangerous()    const { return depthMeters >= 1.0f; }
+    [[nodiscard]] bool isCatastrophic() const { return depthMeters >= 5.0f; }
+};
+
+class FloodZone {
+public:
+    explicit FloodZone(const std::string& name) : m_name(name) {}
+
+    void setType(FloodType t)         { m_type = t;     }
+    void setSeverity(FloodSeverity s) { m_severity = s; }
+
+    bool addLevel(const FloodWaterLevel& l) {
+        for (auto& existing : m_levels) if (existing.id == l.id) return false;
+        m_levels.push_back(l);
+        return true;
+    }
+
+    void recessAll() { for (auto& l : m_levels) l.startReceding(); }
+
+    [[nodiscard]] size_t levelCount() const { return m_levels.size(); }
+
+    [[nodiscard]] size_t recedingLevels() const {
+        size_t c = 0;
+        for (auto& l : m_levels) if (l.receding) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()     const { return m_name;     }
+    [[nodiscard]] FloodType          type()     const { return m_type;     }
+    [[nodiscard]] FloodSeverity      severity() const { return m_severity; }
+
+    [[nodiscard]] bool isFlooding() const {
+        for (auto& l : m_levels) if (l.isRising()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                  m_name;
+    FloodType                    m_type      = FloodType::River;
+    FloodSeverity                m_severity  = FloodSeverity::Minor;
+    std::vector<FloodWaterLevel> m_levels;
+    size_t                       m_tickCount = 0;
+};
+
+class FloodSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    FloodZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] FloodZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t floodingCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isFlooding()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.severity() == FloodSeverity::Catastrophic) c++;
+        return c;
+    }
+
+private:
+    std::vector<FloodZone> m_zones;
+    size_t                 m_tickCount = 0;
+};
+
+// ============================================================
+// G44 — Landslide System
+// ============================================================
+
+enum class LandslideType : uint8_t { Debris, Rockfall, Mudflow, Slump, Creep, Avalanche, Earthflow, Topple };
+
+inline const char* landslideTypeName(LandslideType t) {
+    switch (t) {
+        case LandslideType::Debris:    return "Debris";
+        case LandslideType::Rockfall:  return "Rockfall";
+        case LandslideType::Mudflow:   return "Mudflow";
+        case LandslideType::Slump:     return "Slump";
+        case LandslideType::Creep:     return "Creep";
+        case LandslideType::Avalanche: return "Avalanche";
+        case LandslideType::Earthflow: return "Earthflow";
+        case LandslideType::Topple:    return "Topple";
+        default:                       return "Unknown";
+    }
+}
+
+enum class LandslideSeverity : uint8_t { Minor, Moderate, Significant, Major, Catastrophic };
+
+inline const char* landslideSeverityName(LandslideSeverity s) {
+    switch (s) {
+        case LandslideSeverity::Minor:        return "Minor";
+        case LandslideSeverity::Moderate:     return "Moderate";
+        case LandslideSeverity::Significant:  return "Significant";
+        case LandslideSeverity::Major:        return "Major";
+        case LandslideSeverity::Catastrophic: return "Catastrophic";
+        default:                              return "Unknown";
+    }
+}
+
+struct LandslideDebrisFlow {
+    std::string id;
+    float       volumeCubicMeters  = 0.f;
+    float       speedMetersPerSec  = 0.f;
+    bool        halted             = false;
+
+    void halt()                    { halted = true; }
+    void accelerate(float speed)   { speedMetersPerSec = speed; }
+
+    [[nodiscard]] bool isMoving()       const { return speedMetersPerSec > 0.f && !halted; }
+    [[nodiscard]] bool isDangerous()    const { return volumeCubicMeters >= 1000.f;         }
+    [[nodiscard]] bool isCatastrophic() const { return volumeCubicMeters >= 100000.f;       }
+};
+
+class LandslideZone {
+public:
+    explicit LandslideZone(const std::string& name) : m_name(name) {}
+
+    void setType(LandslideType t)         { m_type = t;     }
+    void setSeverity(LandslideSeverity s) { m_severity = s; }
+
+    bool addFlow(const LandslideDebrisFlow& f) {
+        for (auto& existing : m_flows) if (existing.id == f.id) return false;
+        m_flows.push_back(f);
+        return true;
+    }
+
+    void haltAll() { for (auto& f : m_flows) f.halt(); }
+
+    [[nodiscard]] size_t flowCount() const { return m_flows.size(); }
+
+    [[nodiscard]] size_t movingFlows() const {
+        size_t c = 0;
+        for (auto& f : m_flows) if (f.isMoving()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string&  name()     const { return m_name;     }
+    [[nodiscard]] LandslideType       type()     const { return m_type;     }
+    [[nodiscard]] LandslideSeverity   severity() const { return m_severity; }
+
+    [[nodiscard]] bool isActive() const {
+        for (auto& f : m_flows) if (f.isMoving()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                      m_name;
+    LandslideType                    m_type      = LandslideType::Debris;
+    LandslideSeverity                m_severity  = LandslideSeverity::Minor;
+    std::vector<LandslideDebrisFlow> m_flows;
+    size_t                           m_tickCount = 0;
+};
+
+class LandslideSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    LandslideZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] LandslideZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.severity() == LandslideSeverity::Catastrophic) c++;
+        return c;
+    }
+
+private:
+    std::vector<LandslideZone> m_zones;
+    size_t                     m_tickCount = 0;
+};
+
+// ============================================================
+// G45 — Drought System
+// ============================================================
+
+enum class DroughtType : uint8_t { Agricultural, Hydrological, Meteorological, Socioeconomic, Groundwater, Ecological, Coastal, Urban };
+
+inline const char* droughtTypeName(DroughtType t) {
+    switch (t) {
+        case DroughtType::Agricultural:   return "Agricultural";
+        case DroughtType::Hydrological:   return "Hydrological";
+        case DroughtType::Meteorological: return "Meteorological";
+        case DroughtType::Socioeconomic:  return "Socioeconomic";
+        case DroughtType::Groundwater:    return "Groundwater";
+        case DroughtType::Ecological:     return "Ecological";
+        case DroughtType::Coastal:        return "Coastal";
+        case DroughtType::Urban:          return "Urban";
+        default:                          return "Unknown";
+    }
+}
+
+enum class DroughtIntensity : uint8_t { Mild, Moderate, Severe, Extreme, Exceptional };
+
+inline const char* droughtIntensityName(DroughtIntensity i) {
+    switch (i) {
+        case DroughtIntensity::Mild:        return "Mild";
+        case DroughtIntensity::Moderate:    return "Moderate";
+        case DroughtIntensity::Severe:      return "Severe";
+        case DroughtIntensity::Extreme:     return "Extreme";
+        case DroughtIntensity::Exceptional: return "Exceptional";
+        default:                            return "Unknown";
+    }
+}
+
+struct DroughtRegion {
+    std::string id;
+    float       waterReservePercent = 100.0f;
+    float       precipitationMm     = 0.f;
+    bool        active              = false;
+
+    void deplete(float amount) {
+        waterReservePercent -= amount;
+        if (waterReservePercent < 0.f) waterReservePercent = 0.f;
+    }
+
+    void replenish(float amount) {
+        waterReservePercent += amount;
+        if (waterReservePercent > 100.f) waterReservePercent = 100.f;
+    }
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isArid()      const { return waterReservePercent < 25.0f; }
+    [[nodiscard]] bool isExhausted() const { return waterReservePercent <= 0.f;  }
+    [[nodiscard]] bool isCritical()  const { return waterReservePercent < 10.0f; }
+};
+
+class DroughtZone {
+public:
+    explicit DroughtZone(const std::string& name) : m_name(name) {}
+
+    void setType(DroughtType t)           { m_type = t;      }
+    void setIntensity(DroughtIntensity i) { m_intensity = i; }
+
+    bool addRegion(DroughtRegion r) {
+        for (auto& existing : m_regions) if (existing.id == r.id) return false;
+        m_regions.push_back(std::move(r));
+        return true;
+    }
+
+    void depleteAll(float amount)   { for (auto& r : m_regions) r.deplete(amount);   }
+    void replenishAll(float amount) { for (auto& r : m_regions) r.replenish(amount); }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+
+    [[nodiscard]] size_t aridCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) if (r.isArid()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t exhaustedCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) if (r.isExhausted()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] DroughtType        type()      const { return m_type;      }
+    [[nodiscard]] DroughtIntensity   intensity() const { return m_intensity; }
+
+    [[nodiscard]] bool isCritical() const {
+        for (auto& r : m_regions) if (r.isCritical()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                m_name;
+    DroughtType                m_type      = DroughtType::Agricultural;
+    DroughtIntensity           m_intensity = DroughtIntensity::Mild;
+    std::vector<DroughtRegion> m_regions;
+    size_t                     m_tickCount = 0;
+};
+
+class DroughtSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    DroughtZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] DroughtZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t criticalCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isCritical()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t exhaustedRegionCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) c += z.exhaustedCount();
+        return c;
+    }
+
+private:
+    std::vector<DroughtZone> m_zones;
+    size_t                   m_tickCount = 0;
+};
+
+// ============================================================
+// G46 — Epidemic System
+// ============================================================
+
+enum class EpidemicType : uint8_t { Viral, Bacterial, Fungal, Parasitic, Prion, Zoonotic, Waterborne, Airborne };
+
+inline const char* epidemicTypeName(EpidemicType t) {
+    switch (t) {
+        case EpidemicType::Viral:      return "Viral";
+        case EpidemicType::Bacterial:  return "Bacterial";
+        case EpidemicType::Fungal:     return "Fungal";
+        case EpidemicType::Parasitic:  return "Parasitic";
+        case EpidemicType::Prion:      return "Prion";
+        case EpidemicType::Zoonotic:   return "Zoonotic";
+        case EpidemicType::Waterborne: return "Waterborne";
+        case EpidemicType::Airborne:   return "Airborne";
+        default:                       return "Unknown";
+    }
+}
+
+enum class EpidemicPhase : uint8_t { Outbreak, Epidemic, Endemic, Pandemic, Resolved };
+
+inline const char* epidemicPhaseName(EpidemicPhase p) {
+    switch (p) {
+        case EpidemicPhase::Outbreak:  return "Outbreak";
+        case EpidemicPhase::Epidemic:  return "Epidemic";
+        case EpidemicPhase::Endemic:   return "Endemic";
+        case EpidemicPhase::Pandemic:  return "Pandemic";
+        case EpidemicPhase::Resolved:  return "Resolved";
+        default:                       return "Unknown";
+    }
+}
+
+struct EpidemicVector {
+    std::string id;
+    size_t      infectedCount  = 0;
+    size_t      populationSize = 1000;
+    bool        active         = false;
+
+    void infect(size_t count) {
+        infectedCount = (infectedCount + count > populationSize) ? populationSize : infectedCount + count;
+    }
+
+    void recover(size_t count) {
+        infectedCount = (count > infectedCount) ? 0 : infectedCount - count;
+    }
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] float infectionRate() const {
+        if (populationSize == 0) return 0.f;
+        return static_cast<float>(infectedCount) / static_cast<float>(populationSize);
+    }
+
+    [[nodiscard]] bool isContained() const { return infectionRate() < 0.05f; }
+    [[nodiscard]] bool isCritical()  const { return infectionRate() >= 0.5f; }
+};
+
+class EpidemicZone {
+public:
+    explicit EpidemicZone(const std::string& name) : m_name(name) {}
+
+    void setType(EpidemicType t)   { m_type  = t; }
+    void setPhase(EpidemicPhase p) { m_phase = p; }
+
+    bool addVector(EpidemicVector v) {
+        for (auto& existing : m_vectors) if (existing.id == v.id) return false;
+        m_vectors.push_back(std::move(v));
+        return true;
+    }
+
+    void infectAll(size_t count)  { for (auto& v : m_vectors) v.infect(count);  }
+    void recoverAll(size_t count) { for (auto& v : m_vectors) v.recover(count); }
+
+    [[nodiscard]] size_t vectorCount() const { return m_vectors.size(); }
+
+    [[nodiscard]] size_t criticalCount() const {
+        size_t c = 0;
+        for (auto& v : m_vectors) if (v.isCritical()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()  const { return m_name;  }
+    [[nodiscard]] EpidemicType       type()  const { return m_type;  }
+    [[nodiscard]] EpidemicPhase      phase() const { return m_phase; }
+
+    [[nodiscard]] bool isContained() const {
+        for (auto& v : m_vectors) if (!v.isContained()) return false;
+        return true;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                 m_name;
+    EpidemicType                m_type      = EpidemicType::Viral;
+    EpidemicPhase               m_phase     = EpidemicPhase::Outbreak;
+    std::vector<EpidemicVector> m_vectors;
+    size_t                      m_tickCount = 0;
+};
+
+class EpidemicSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    EpidemicZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] EpidemicZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t criticalZoneCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.criticalCount() > 0) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t containedZoneCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isContained()) c++;
+        return c;
+    }
+
+private:
+    std::vector<EpidemicZone> m_zones;
+    size_t                    m_tickCount = 0;
+};
+
+// ============================================================
+// G47 — Solar Flare System
+// ============================================================
+
+enum class SolarFlareClass : uint8_t { A, B, C, M, X, S, N, Z };
+
+inline const char* solarFlareClassName(SolarFlareClass c) {
+    switch (c) {
+        case SolarFlareClass::A: return "A";
+        case SolarFlareClass::B: return "B";
+        case SolarFlareClass::C: return "C";
+        case SolarFlareClass::M: return "M";
+        case SolarFlareClass::X: return "X";
+        case SolarFlareClass::S: return "S";
+        case SolarFlareClass::N: return "N";
+        case SolarFlareClass::Z: return "Z";
+        default:                 return "Unknown";
+    }
+}
+
+enum class SolarFlareEffect : uint8_t { RadioBlackout, RadiationStorm, GeomagneticStorm, PowerGridDisruption, SatelliteDamage, CommunicationLoss };
+
+inline const char* solarFlareEffectName(SolarFlareEffect e) {
+    switch (e) {
+        case SolarFlareEffect::RadioBlackout:        return "RadioBlackout";
+        case SolarFlareEffect::RadiationStorm:       return "RadiationStorm";
+        case SolarFlareEffect::GeomagneticStorm:     return "GeomagneticStorm";
+        case SolarFlareEffect::PowerGridDisruption:  return "PowerGridDisruption";
+        case SolarFlareEffect::SatelliteDamage:      return "SatelliteDamage";
+        case SolarFlareEffect::CommunicationLoss:    return "CommunicationLoss";
+        default:                                     return "Unknown";
+    }
+}
+
+struct SolarFlareEvent {
+    std::string     id;
+    SolarFlareClass flareClass  = SolarFlareClass::C;
+    float           intensity   = 1.0f;
+    float           duration    = 60.f;
+    bool            active      = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isMajor()    const { return flareClass >= SolarFlareClass::M; }
+    [[nodiscard]] bool isExtreme()  const { return flareClass >= SolarFlareClass::X; }
+    [[nodiscard]] float energyOutput() const { return intensity * duration; }
+};
+
+class SolarFlareRegion {
+public:
+    explicit SolarFlareRegion(const std::string& name) : m_name(name) {}
+
+    bool addEvent(SolarFlareEvent e) {
+        for (auto& existing : m_events) if (existing.id == e.id) return false;
+        m_events.push_back(std::move(e));
+        return true;
+    }
+
+    bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SolarFlareEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()  const { return m_events.size(); }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.active) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.isMajor()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void tick() { m_tickCount++; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string                  m_name;
+    std::vector<SolarFlareEvent> m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class SolarFlareSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    SolarFlareRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] SolarFlareRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& r : m_regions) r.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount;      }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.majorCount();
+        return c;
+    }
+
+private:
+    std::vector<SolarFlareRegion> m_regions;
+    size_t                        m_tickCount = 0;
+};
+
 } // namespace NF

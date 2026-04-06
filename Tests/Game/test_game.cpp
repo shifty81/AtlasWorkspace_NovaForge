@@ -7377,3 +7377,725 @@ TEST_CASE("TsunamiSystem tick increments all tsunami tickCounts", "[Game][G41][T
     REQUIRE(sys.find("x")->tickCount() == 3);
     REQUIRE(sys.find("y")->tickCount() == 3);
 }
+
+// ============================================================
+// G42 — Wildfire System
+// ============================================================
+
+TEST_CASE("WildfireType names cover all 8 values", "[Game][G42][Wildfire]") {
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Forest))       == "Forest");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Grassland))    == "Grassland");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Shrub))        == "Shrub");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Peat))         == "Peat");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Urban))        == "Urban");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Agricultural)) == "Agricultural");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Desert))       == "Desert");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Tropical))     == "Tropical");
+}
+
+TEST_CASE("WildfireSeverity names cover all 5 values", "[Game][G42][Wildfire]") {
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Significant))  == "Significant");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Major))        == "Major");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("WildfireFront contain/spread/isContained/isSpreading", "[Game][G42][Wildfire]") {
+    NF::WildfireFront f;
+    f.id = "front-1";
+    f.spread(15.f);
+    REQUIRE(f.isSpreading());
+    REQUIRE_FALSE(f.isContained());
+    f.contain();
+    REQUIRE(f.isContained());
+    REQUIRE_FALSE(f.isSpreading());
+}
+
+TEST_CASE("WildfireFront isCatastrophic threshold", "[Game][G42][Wildfire]") {
+    NF::WildfireFront f;
+    f.id = "front-2";
+    REQUIRE_FALSE(f.isCatastrophic());
+    f.severity = NF::WildfireSeverity::Catastrophic;
+    REQUIRE(f.isCatastrophic());
+}
+
+TEST_CASE("WildfireZone addFront and duplicate rejection", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("australia-east");
+    NF::WildfireFront f1; f1.id = "f1"; f1.spread(10.f);
+    NF::WildfireFront f2; f2.id = "f2"; f2.spread(5.f);
+    NF::WildfireFront dup; dup.id = "f1";
+
+    REQUIRE(zone.addFront(f1));
+    REQUIRE(zone.addFront(f2));
+    REQUIRE_FALSE(zone.addFront(dup));
+    REQUIRE(zone.frontCount() == 2);
+}
+
+TEST_CASE("WildfireZone containAll sets all fronts contained", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("california");
+    NF::WildfireFront f1; f1.id = "f1"; f1.spread(20.f);
+    NF::WildfireFront f2; f2.id = "f2"; f2.spread(8.f);
+    zone.addFront(f1);
+    zone.addFront(f2);
+    zone.containAll();
+    REQUIRE(zone.containedFronts() == 2);
+    REQUIRE_FALSE(zone.isActive());
+}
+
+TEST_CASE("WildfireZone isActive requires spreading front", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("portugal");
+    REQUIRE_FALSE(zone.isActive());
+    NF::WildfireFront f; f.id = "f1"; f.spread(3.f);
+    zone.addFront(f);
+    REQUIRE(zone.isActive());
+}
+
+TEST_CASE("WildfireZone frontCount and containedFronts count", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("greece");
+    NF::WildfireFront a; a.id = "a"; a.spread(5.f);
+    NF::WildfireFront b; b.id = "b"; b.contained = true;
+    zone.addFront(a);
+    zone.addFront(b);
+    REQUIRE(zone.frontCount() == 2);
+    REQUIRE(zone.containedFronts() == 1);
+}
+
+TEST_CASE("WildfireSystem createZone and duplicate rejection", "[Game][G42][Wildfire]") {
+    NF::WildfireSystem sys;
+    REQUIRE(sys.createZone("zone-a") != nullptr);
+    REQUIRE(sys.createZone("zone-b") != nullptr);
+    REQUIRE(sys.createZone("zone-a") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("WildfireSystem activeCount and tick", "[Game][G42][Wildfire]") {
+    NF::WildfireSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::WildfireFront f; f.id = "f1"; f.spread(12.f);
+    sys.byName("z1")->addFront(f);
+    sys.byName("z2")->setSeverity(NF::WildfireSeverity::Catastrophic);
+
+    REQUIRE(sys.activeCount()       == 1);
+    REQUIRE(sys.catastrophicCount() == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
+
+// ============================================================
+// G43 — Flood System tests
+// ============================================================
+
+TEST_CASE("FloodType names cover all 8 values", "[Game][G43][Flood]") {
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::River))       == "River");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Coastal))     == "Coastal");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Flash))       == "Flash");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Urban))       == "Urban");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Groundwater)) == "Groundwater");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Dam))         == "Dam");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Snowmelt))    == "Snowmelt");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Tropical))    == "Tropical");
+}
+
+TEST_CASE("FloodSeverity names cover all 5 values", "[Game][G43][Flood]") {
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Significant))  == "Significant");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Major))        == "Major");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("FloodWaterLevel isRising and startReceding", "[Game][G43][Flood]") {
+    NF::FloodWaterLevel lvl;
+    lvl.id = "river-gauge-1";
+
+    REQUIRE_FALSE(lvl.isRising());
+    lvl.rise(0.5f);
+    REQUIRE(lvl.isRising());
+    lvl.startReceding();
+    REQUIRE_FALSE(lvl.isRising());
+    REQUIRE(lvl.receding);
+}
+
+TEST_CASE("FloodWaterLevel isDangerous and isCatastrophic thresholds", "[Game][G43][Flood]") {
+    NF::FloodWaterLevel lvl;
+    lvl.id = "gauge-2";
+
+    lvl.depthMeters = 0.5f;
+    REQUIRE_FALSE(lvl.isDangerous());
+    REQUIRE_FALSE(lvl.isCatastrophic());
+
+    lvl.depthMeters = 1.0f;
+    REQUIRE(lvl.isDangerous());
+    REQUIRE_FALSE(lvl.isCatastrophic());
+
+    lvl.depthMeters = 5.0f;
+    REQUIRE(lvl.isDangerous());
+    REQUIRE(lvl.isCatastrophic());
+}
+
+TEST_CASE("FloodZone addLevel and duplicate rejection", "[Game][G43][Flood]") {
+    NF::FloodZone zone("thames-basin");
+    NF::FloodWaterLevel l1; l1.id = "l1"; l1.rise(0.3f);
+    NF::FloodWaterLevel l2; l2.id = "l2"; l2.rise(0.1f);
+    NF::FloodWaterLevel dup; dup.id = "l1";
+
+    REQUIRE(zone.addLevel(l1));
+    REQUIRE(zone.addLevel(l2));
+    REQUIRE_FALSE(zone.addLevel(dup));
+    REQUIRE(zone.levelCount() == 2);
+}
+
+TEST_CASE("FloodZone recessAll sets all levels receding", "[Game][G43][Flood]") {
+    NF::FloodZone zone("mississippi");
+    NF::FloodWaterLevel a; a.id = "a"; a.rise(1.0f);
+    NF::FloodWaterLevel b; b.id = "b"; b.rise(0.5f);
+    zone.addLevel(a);
+    zone.addLevel(b);
+
+    zone.recessAll();
+    REQUIRE(zone.recedingLevels() == 2);
+    REQUIRE_FALSE(zone.isFlooding());
+}
+
+TEST_CASE("FloodZone isFlooding requires rising level", "[Game][G43][Flood]") {
+    NF::FloodZone zone("seine");
+    REQUIRE_FALSE(zone.isFlooding());
+
+    NF::FloodWaterLevel l; l.id = "g1"; l.rise(0.8f);
+    zone.addLevel(l);
+    REQUIRE(zone.isFlooding());
+}
+
+TEST_CASE("FloodZone levelCount and recedingLevels count", "[Game][G43][Flood]") {
+    NF::FloodZone zone("danube");
+    NF::FloodWaterLevel a; a.id = "a"; a.rise(0.4f);
+    NF::FloodWaterLevel b; b.id = "b"; b.receding = true;
+    zone.addLevel(a);
+    zone.addLevel(b);
+
+    REQUIRE(zone.levelCount() == 2);
+    REQUIRE(zone.recedingLevels() == 1);
+}
+
+TEST_CASE("FloodSystem createZone and duplicate rejection", "[Game][G43][Flood]") {
+    NF::FloodSystem sys;
+    REQUIRE(sys.createZone("zone-a") != nullptr);
+    REQUIRE(sys.createZone("zone-b") != nullptr);
+    REQUIRE(sys.createZone("zone-a") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("FloodSystem floodingCount and tick", "[Game][G43][Flood]") {
+    NF::FloodSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::FloodWaterLevel l; l.id = "l1"; l.rise(1.5f);
+    sys.byName("z1")->addLevel(l);
+    sys.byName("z2")->setSeverity(NF::FloodSeverity::Catastrophic);
+
+    REQUIRE(sys.floodingCount()      == 1);
+    REQUIRE(sys.catastrophicCount()  == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
+
+// ============================================================
+// G44 — Landslide System
+// ============================================================
+
+TEST_CASE("LandslideType names cover all 8 values", "[Game][G44][Landslide]") {
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Debris))    == "Debris");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Rockfall))  == "Rockfall");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Mudflow))   == "Mudflow");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Slump))     == "Slump");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Creep))     == "Creep");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Avalanche)) == "Avalanche");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Earthflow)) == "Earthflow");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Topple))    == "Topple");
+}
+
+TEST_CASE("LandslideSeverity names cover all 5 values", "[Game][G44][Landslide]") {
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Significant))  == "Significant");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Major))        == "Major");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("LandslideDebrisFlow isMoving and halt", "[Game][G44][Landslide]") {
+    NF::LandslideDebrisFlow flow;
+    flow.id = "flow-1";
+
+    REQUIRE_FALSE(flow.isMoving());
+    flow.accelerate(5.0f);
+    REQUIRE(flow.isMoving());
+    flow.halt();
+    REQUIRE_FALSE(flow.isMoving());
+}
+
+TEST_CASE("LandslideDebrisFlow isDangerous and isCatastrophic thresholds", "[Game][G44][Landslide]") {
+    NF::LandslideDebrisFlow flow;
+    flow.id = "flow-2";
+
+    flow.volumeCubicMeters = 500.f;
+    REQUIRE_FALSE(flow.isDangerous());
+    REQUIRE_FALSE(flow.isCatastrophic());
+
+    flow.volumeCubicMeters = 1000.f;
+    REQUIRE(flow.isDangerous());
+    REQUIRE_FALSE(flow.isCatastrophic());
+
+    flow.volumeCubicMeters = 100000.f;
+    REQUIRE(flow.isDangerous());
+    REQUIRE(flow.isCatastrophic());
+}
+
+TEST_CASE("LandslideZone addFlow and duplicate rejection", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("alps-north");
+    NF::LandslideDebrisFlow f1; f1.id = "f1"; f1.accelerate(3.f);
+    NF::LandslideDebrisFlow f2; f2.id = "f2"; f2.accelerate(1.f);
+    NF::LandslideDebrisFlow dup; dup.id = "f1";
+
+    REQUIRE(zone.addFlow(f1));
+    REQUIRE(zone.addFlow(f2));
+    REQUIRE_FALSE(zone.addFlow(dup));
+    REQUIRE(zone.flowCount() == 2);
+}
+
+TEST_CASE("LandslideZone haltAll stops all flows", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("pyrenees");
+    NF::LandslideDebrisFlow a; a.id = "a"; a.accelerate(4.f);
+    NF::LandslideDebrisFlow b; b.id = "b"; b.accelerate(2.f);
+    zone.addFlow(a);
+    zone.addFlow(b);
+
+    REQUIRE(zone.movingFlows() == 2);
+    zone.haltAll();
+    REQUIRE(zone.movingFlows() == 0);
+}
+
+TEST_CASE("LandslideZone isActive requires moving flow", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("andes");
+    REQUIRE_FALSE(zone.isActive());
+
+    NF::LandslideDebrisFlow f; f.id = "f1"; f.accelerate(1.5f);
+    zone.addFlow(f);
+    REQUIRE(zone.isActive());
+
+    zone.haltAll();
+    REQUIRE_FALSE(zone.isActive());
+}
+
+TEST_CASE("LandslideZone movingFlows count", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("rockies");
+    NF::LandslideDebrisFlow a; a.id = "a"; a.accelerate(3.f);
+    NF::LandslideDebrisFlow b; b.id = "b"; b.accelerate(2.f); b.halt();
+    NF::LandslideDebrisFlow c; c.id = "c"; c.accelerate(0.5f);
+    zone.addFlow(a);
+    zone.addFlow(b);
+    zone.addFlow(c);
+
+    REQUIRE(zone.movingFlows() == 2);
+}
+
+TEST_CASE("LandslideSystem createZone and duplicate rejection", "[Game][G44][Landslide]") {
+    NF::LandslideSystem sys;
+    REQUIRE(sys.createZone("zone-a") != nullptr);
+    REQUIRE(sys.createZone("zone-b") != nullptr);
+    REQUIRE(sys.createZone("zone-a") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("LandslideSystem activeCount and tick", "[Game][G44][Landslide]") {
+    NF::LandslideSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::LandslideDebrisFlow f; f.id = "f1"; f.accelerate(2.f);
+    sys.byName("z1")->addFlow(f);
+    sys.byName("z2")->setSeverity(NF::LandslideSeverity::Catastrophic);
+
+    REQUIRE(sys.activeCount()        == 1);
+    REQUIRE(sys.catastrophicCount()  == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
+
+// ============================================================
+// G45 — Drought System
+// ============================================================
+
+TEST_CASE("DroughtType names cover all 8 values", "[Game][G45][Drought]") {
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Agricultural))  == "Agricultural");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Hydrological))  == "Hydrological");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Meteorological))== "Meteorological");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Socioeconomic)) == "Socioeconomic");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Groundwater))   == "Groundwater");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Ecological))    == "Ecological");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Coastal))       == "Coastal");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Urban))         == "Urban");
+}
+
+TEST_CASE("DroughtIntensity names cover all 5 values", "[Game][G45][Drought]") {
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Mild))        == "Mild");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Moderate))    == "Moderate");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Severe))      == "Severe");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Extreme))     == "Extreme");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Exceptional)) == "Exceptional");
+}
+
+TEST_CASE("DroughtRegion deplete clamps to 0", "[Game][G45][Drought]") {
+    NF::DroughtRegion r;
+    r.id = "r1";
+    r.waterReservePercent = 20.f;
+    r.deplete(30.f);
+    REQUIRE(r.waterReservePercent == 0.f);
+    r.deplete(10.f);
+    REQUIRE(r.waterReservePercent == 0.f);
+}
+
+TEST_CASE("DroughtRegion replenish clamps to 100", "[Game][G45][Drought]") {
+    NF::DroughtRegion r;
+    r.id = "r2";
+    r.waterReservePercent = 90.f;
+    r.replenish(20.f);
+    REQUIRE(r.waterReservePercent == 100.f);
+    r.replenish(5.f);
+    REQUIRE(r.waterReservePercent == 100.f);
+}
+
+TEST_CASE("DroughtRegion isArid / isCritical / isExhausted thresholds", "[Game][G45][Drought]") {
+    NF::DroughtRegion r;
+    r.id = "r3";
+
+    r.waterReservePercent = 50.f;
+    REQUIRE_FALSE(r.isArid());
+    REQUIRE_FALSE(r.isCritical());
+    REQUIRE_FALSE(r.isExhausted());
+
+    r.waterReservePercent = 20.f;
+    REQUIRE(r.isArid());
+    REQUIRE_FALSE(r.isCritical());
+
+    r.waterReservePercent = 5.f;
+    REQUIRE(r.isArid());
+    REQUIRE(r.isCritical());
+    REQUIRE_FALSE(r.isExhausted());
+
+    r.waterReservePercent = 0.f;
+    REQUIRE(r.isExhausted());
+    REQUIRE(r.isCritical());
+}
+
+TEST_CASE("DroughtZone addRegion and duplicate rejection", "[Game][G45][Drought]") {
+    NF::DroughtZone zone("sahara");
+
+    NF::DroughtRegion a; a.id = "r-a";
+    NF::DroughtRegion b; b.id = "r-b";
+    NF::DroughtRegion dup; dup.id = "r-a";
+
+    REQUIRE(zone.addRegion(a));
+    REQUIRE(zone.addRegion(b));
+    REQUIRE_FALSE(zone.addRegion(dup));
+    REQUIRE(zone.regionCount() == 2);
+}
+
+TEST_CASE("DroughtZone depleteAll reduces all regions", "[Game][G45][Drought]") {
+    NF::DroughtZone zone("kalahari");
+
+    NF::DroughtRegion a; a.id = "r1"; a.waterReservePercent = 80.f;
+    NF::DroughtRegion b; b.id = "r2"; b.waterReservePercent = 60.f;
+    zone.addRegion(a);
+    zone.addRegion(b);
+
+    zone.depleteAll(20.f);
+
+    // Both regions should be depleted by 20
+    REQUIRE(zone.aridCount() == 0); // 60 and 40 both >= 25
+    zone.depleteAll(40.f);
+    REQUIRE(zone.aridCount() == 2); // 20 and 0 both < 25
+}
+
+TEST_CASE("DroughtZone aridCount counts arid regions", "[Game][G45][Drought]") {
+    NF::DroughtZone zone("gobi");
+
+    NF::DroughtRegion a; a.id = "r1"; a.waterReservePercent = 10.f;
+    NF::DroughtRegion b; b.id = "r2"; b.waterReservePercent = 50.f;
+    NF::DroughtRegion c; c.id = "r3"; c.waterReservePercent = 15.f;
+    zone.addRegion(a);
+    zone.addRegion(b);
+    zone.addRegion(c);
+
+    REQUIRE(zone.aridCount() == 2);
+}
+
+TEST_CASE("DroughtSystem createZone and duplicate rejection", "[Game][G45][Drought]") {
+    NF::DroughtSystem sys;
+    REQUIRE(sys.createZone("zone-1") != nullptr);
+    REQUIRE(sys.createZone("zone-2") != nullptr);
+    REQUIRE(sys.createZone("zone-1") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("DroughtSystem criticalCount and tick", "[Game][G45][Drought]") {
+    NF::DroughtSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::DroughtRegion cr; cr.id = "c1"; cr.waterReservePercent = 5.f;
+    sys.byName("z1")->addRegion(cr);
+
+    REQUIRE(sys.criticalCount() == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
+
+TEST_CASE("EpidemicType names cover all 8 values", "[Game][G46][Epidemic]") {
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Viral))      == "Viral");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Bacterial))  == "Bacterial");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Fungal))     == "Fungal");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Parasitic))  == "Parasitic");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Prion))      == "Prion");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Zoonotic))   == "Zoonotic");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Waterborne)) == "Waterborne");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Airborne))   == "Airborne");
+}
+
+TEST_CASE("EpidemicPhase names cover all 5 values", "[Game][G46][Epidemic]") {
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Outbreak))  == "Outbreak");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Epidemic))  == "Epidemic");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Endemic))   == "Endemic");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Pandemic))  == "Pandemic");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Resolved))  == "Resolved");
+}
+
+TEST_CASE("EpidemicVector infect clamps to populationSize", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v1"; v.populationSize = 100;
+
+    v.infect(60);
+    REQUIRE(v.infectedCount == 60);
+    v.infect(60); // would exceed 100
+    REQUIRE(v.infectedCount == 100);
+}
+
+TEST_CASE("EpidemicVector recover clamps to 0", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v2"; v.populationSize = 100;
+
+    v.infect(40);
+    v.recover(20);
+    REQUIRE(v.infectedCount == 20);
+    v.recover(50); // would go below 0
+    REQUIRE(v.infectedCount == 0);
+}
+
+TEST_CASE("EpidemicVector infectionRate calculation", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v3"; v.populationSize = 1000;
+
+    v.infect(500);
+    REQUIRE(v.infectionRate() == Catch::Approx(0.5f));
+
+    NF::EpidemicVector empty;
+    empty.id = "v4"; empty.populationSize = 0;
+    REQUIRE(empty.infectionRate() == Catch::Approx(0.f));
+}
+
+TEST_CASE("EpidemicVector isContained and isCritical thresholds", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v5"; v.populationSize = 1000;
+
+    REQUIRE(v.isContained());  // 0% < 5%
+    REQUIRE_FALSE(v.isCritical());
+
+    v.infect(500);
+    REQUIRE_FALSE(v.isContained());
+    REQUIRE(v.isCritical()); // 50% >= 50%
+}
+
+TEST_CASE("EpidemicZone addVector and duplicate rejection", "[Game][G46][Epidemic]") {
+    NF::EpidemicZone zone("test-zone");
+
+    NF::EpidemicVector a; a.id = "vec-a";
+    NF::EpidemicVector b; b.id = "vec-b";
+    NF::EpidemicVector dup; dup.id = "vec-a";
+
+    REQUIRE(zone.addVector(a));
+    REQUIRE(zone.addVector(b));
+    REQUIRE_FALSE(zone.addVector(dup));
+    REQUIRE(zone.vectorCount() == 2);
+}
+
+TEST_CASE("EpidemicZone infectAll and recoverAll", "[Game][G46][Epidemic]") {
+    NF::EpidemicZone zone("spread-zone");
+
+    NF::EpidemicVector a; a.id = "a"; a.populationSize = 100;
+    NF::EpidemicVector b; b.id = "b"; b.populationSize = 200;
+    zone.addVector(a);
+    zone.addVector(b);
+
+    // infect all, then verify criticalCount
+    zone.infectAll(600); // clamps both to their population size
+    REQUIRE(zone.criticalCount() == 2); // both at 100% >= 50% threshold
+
+    zone.recoverAll(1000); // clamp both back to 0
+    REQUIRE(zone.criticalCount() == 0);
+}
+
+TEST_CASE("EpidemicSystem createZone and duplicate rejection", "[Game][G46][Epidemic]") {
+    NF::EpidemicSystem sys;
+    REQUIRE(sys.createZone("zone-1") != nullptr);
+    REQUIRE(sys.createZone("zone-2") != nullptr);
+    REQUIRE(sys.createZone("zone-1") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("EpidemicSystem criticalZoneCount and containedZoneCount", "[Game][G46][Epidemic]") {
+    NF::EpidemicSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::EpidemicVector cv; cv.id = "cv1"; cv.populationSize = 100;
+    cv.infect(80); // 80% — critical
+    sys.byName("z1")->addVector(cv);
+
+    NF::EpidemicVector sv; sv.id = "sv1"; sv.populationSize = 100;
+    // no infection — contained
+    sys.byName("z2")->addVector(sv);
+
+    REQUIRE(sys.criticalZoneCount()   == 1);
+    REQUIRE(sys.containedZoneCount()  == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
+
+TEST_CASE("SolarFlareClass names cover all 8 values", "[Game][G47][SolarFlare]") {
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::A)) == "A");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::B)) == "B");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::C)) == "C");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::M)) == "M");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::X)) == "X");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::S)) == "S");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::N)) == "N");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::Z)) == "Z");
+}
+
+TEST_CASE("SolarFlareEffect names cover all 6 values", "[Game][G47][SolarFlare]") {
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::RadioBlackout))       == "RadioBlackout");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::RadiationStorm))      == "RadiationStorm");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::GeomagneticStorm))    == "GeomagneticStorm");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::PowerGridDisruption)) == "PowerGridDisruption");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::SatelliteDamage))     == "SatelliteDamage");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::CommunicationLoss))   == "CommunicationLoss");
+}
+
+TEST_CASE("SolarFlareEvent isMajor and isExtreme thresholds", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareEvent e;
+    e.id = "ev1"; e.flareClass = NF::SolarFlareClass::C;
+
+    REQUIRE_FALSE(e.isMajor());
+    REQUIRE_FALSE(e.isExtreme());
+
+    e.flareClass = NF::SolarFlareClass::M;
+    REQUIRE(e.isMajor());
+    REQUIRE_FALSE(e.isExtreme());
+
+    e.flareClass = NF::SolarFlareClass::X;
+    REQUIRE(e.isMajor());
+    REQUIRE(e.isExtreme());
+}
+
+TEST_CASE("SolarFlareEvent energyOutput calculation", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareEvent e;
+    e.id = "ev2"; e.intensity = 2.0f; e.duration = 30.f;
+
+    REQUIRE(e.energyOutput() == Catch::Approx(60.f));
+}
+
+TEST_CASE("SolarFlareEvent activate and deactivate", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareEvent e;
+    e.id = "ev3";
+
+    REQUIRE_FALSE(e.active);
+    e.activate();
+    REQUIRE(e.active);
+    e.deactivate();
+    REQUIRE_FALSE(e.active);
+}
+
+TEST_CASE("SolarFlareRegion addEvent and duplicate rejection", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareRegion region("region-1");
+
+    NF::SolarFlareEvent a; a.id = "ev-a"; a.flareClass = NF::SolarFlareClass::M;
+    NF::SolarFlareEvent b; b.id = "ev-b"; b.flareClass = NF::SolarFlareClass::X;
+    NF::SolarFlareEvent dup; dup.id = "ev-a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("SolarFlareRegion activateAll and deactivateAll, activeCount", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareRegion region("region-2");
+
+    NF::SolarFlareEvent a; a.id = "a1";
+    NF::SolarFlareEvent b; b.id = "a2";
+    region.addEvent(a);
+    region.addEvent(b);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("SolarFlareRegion majorCount counts M+ class events", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareRegion region("region-3");
+
+    NF::SolarFlareEvent minor; minor.id = "c1"; minor.flareClass = NF::SolarFlareClass::C;
+    NF::SolarFlareEvent major; major.id = "m1"; major.flareClass = NF::SolarFlareClass::M;
+    NF::SolarFlareEvent extreme; extreme.id = "x1"; extreme.flareClass = NF::SolarFlareClass::X;
+
+    region.addEvent(minor);
+    region.addEvent(major);
+    region.addEvent(extreme);
+
+    REQUIRE(region.majorCount() == 2);
+}
+
+TEST_CASE("SolarFlareSystem createRegion and duplicate rejection", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareSystem sys;
+    REQUIRE(sys.createRegion("solar-a") != nullptr);
+    REQUIRE(sys.createRegion("solar-b") != nullptr);
+    REQUIRE(sys.createRegion("solar-a") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("SolarFlareSystem activeEventCount, majorEventCount and tick", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareSystem sys;
+    sys.createRegion("r1");
+    sys.createRegion("r2");
+
+    NF::SolarFlareEvent ae; ae.id = "ae1"; ae.flareClass = NF::SolarFlareClass::X; ae.active = true;
+    NF::SolarFlareEvent me; me.id = "me1"; me.flareClass = NF::SolarFlareClass::M;
+    sys.byName("r1")->addEvent(ae);
+    sys.byName("r2")->addEvent(me);
+
+    REQUIRE(sys.activeEventCount()  == 1);
+    REQUIRE(sys.majorEventCount()   == 2); // X and M are both major
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}

@@ -8466,4 +8466,834 @@ private:
     std::string                  m_activeLayout;
 };
 
+// ============================================================
+// S23 — Shortcut Manager
+// ============================================================
+
+enum class ShortcutCategory : uint8_t {
+    File, Edit, View, Navigate, Select, Debug, Tool, Custom
+};
+
+[[nodiscard]] inline const char* shortcutCategoryName(ShortcutCategory c) {
+    switch (c) {
+        case ShortcutCategory::File:     return "File";
+        case ShortcutCategory::Edit:     return "Edit";
+        case ShortcutCategory::View:     return "View";
+        case ShortcutCategory::Navigate: return "Navigate";
+        case ShortcutCategory::Select:   return "Select";
+        case ShortcutCategory::Debug:    return "Debug";
+        case ShortcutCategory::Tool:     return "Tool";
+        case ShortcutCategory::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class ShortcutState : uint8_t {
+    Inactive, Active, Pressed, Blocked
+};
+
+[[nodiscard]] inline const char* shortcutStateName(ShortcutState s) {
+    switch (s) {
+        case ShortcutState::Inactive: return "Inactive";
+        case ShortcutState::Active:   return "Active";
+        case ShortcutState::Pressed:  return "Pressed";
+        case ShortcutState::Blocked:  return "Blocked";
+    }
+    return "Unknown";
+}
+
+struct ShortcutBinding {
+    std::string      id;
+    std::string      name;
+    ShortcutCategory category  = ShortcutCategory::File;
+    std::string      key;
+    uint8_t          modifiers = 0;
+    bool             enabled   = true;
+    ShortcutState    state     = ShortcutState::Inactive;
+
+    void enable()   { enabled = true; }
+    void disable()  { enabled = false; }
+    void trigger()  { state = ShortcutState::Pressed; }
+    void reset()    { state = ShortcutState::Inactive; }
+
+    [[nodiscard]] bool isEnabled()  const { return enabled; }
+    [[nodiscard]] bool isActive()   const { return state == ShortcutState::Pressed; }
+    [[nodiscard]] bool hasKey()     const { return !key.empty(); }
+};
+
+class ShortcutContext {
+public:
+    explicit ShortcutContext(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name()         const { return m_name; }
+    [[nodiscard]] size_t             bindingCount() const { return m_bindings.size(); }
+
+    bool addBinding(const ShortcutBinding& b) {
+        for (auto& existing : m_bindings) if (existing.id == b.id) return false;
+        m_bindings.push_back(b);
+        return true;
+    }
+
+    bool removeBinding(const std::string& id) {
+        for (auto it = m_bindings.begin(); it != m_bindings.end(); ++it) {
+            if (it->id == id) { m_bindings.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ShortcutBinding* findBinding(const std::string& id) {
+        for (auto& b : m_bindings) if (b.id == id) return &b;
+        return nullptr;
+    }
+
+    void enableAll()  { for (auto& b : m_bindings) b.enable(); }
+    void disableAll() { for (auto& b : m_bindings) b.disable(); }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& b : m_bindings) if (b.isEnabled()) c++;
+        return c;
+    }
+
+private:
+    std::string                  m_name;
+    std::vector<ShortcutBinding> m_bindings;
+};
+
+class ShortcutManager {
+public:
+    static constexpr size_t MAX_CONTEXTS = 32;
+
+    ShortcutContext* createContext(const std::string& name) {
+        if (m_contexts.size() >= MAX_CONTEXTS) return nullptr;
+        for (auto& c : m_contexts) if (c.name() == name) return nullptr;
+        m_contexts.emplace_back(name);
+        return &m_contexts.back();
+    }
+
+    bool removeContext(const std::string& name) {
+        for (auto it = m_contexts.begin(); it != m_contexts.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeName == name) m_activeName.clear();
+                m_contexts.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ShortcutContext* findContext(const std::string& name) {
+        for (auto& c : m_contexts) if (c.name() == name) return &c;
+        return nullptr;
+    }
+
+    bool setActiveContext(const std::string& name) {
+        if (!findContext(name)) return false;
+        m_activeName = name;
+        return true;
+    }
+
+    [[nodiscard]] ShortcutContext* activeContext() { return findContext(m_activeName); }
+    [[nodiscard]] const std::string& activeName()  const { return m_activeName; }
+    [[nodiscard]] bool               hasActive()   const { return !m_activeName.empty(); }
+    [[nodiscard]] size_t             contextCount() const { return m_contexts.size(); }
+
+private:
+    std::vector<ShortcutContext> m_contexts;
+    std::string                  m_activeName;
+};
+
+// ============================================================
+// S24 — Notification System
+// ============================================================
+
+enum class NotificationSeverity : uint8_t { Info, Success, Warning, Error, Critical, Debug, Trace, System };
+
+inline const char* notificationSeverityName(NotificationSeverity s) {
+    switch (s) {
+        case NotificationSeverity::Info:     return "Info";
+        case NotificationSeverity::Success:  return "Success";
+        case NotificationSeverity::Warning:  return "Warning";
+        case NotificationSeverity::Error:    return "Error";
+        case NotificationSeverity::Critical: return "Critical";
+        case NotificationSeverity::Debug:    return "Debug";
+        case NotificationSeverity::Trace:    return "Trace";
+        case NotificationSeverity::System:   return "System";
+        default:                             return "Unknown";
+    }
+}
+
+enum class NotificationState : uint8_t { Pending, Shown, Dismissed, Expired };
+
+inline const char* notificationStateName(NotificationState s) {
+    switch (s) {
+        case NotificationState::Pending:   return "Pending";
+        case NotificationState::Shown:     return "Shown";
+        case NotificationState::Dismissed: return "Dismissed";
+        case NotificationState::Expired:   return "Expired";
+        default:                           return "Unknown";
+    }
+}
+
+struct Notification {
+    std::string          id;
+    std::string          title;
+    std::string          message;
+    NotificationSeverity severity   = NotificationSeverity::Info;
+    NotificationState    state      = NotificationState::Pending;
+    uint32_t             durationMs = 3000;
+    bool                 persistent = false;
+
+    void dismiss() { state = NotificationState::Dismissed; }
+    void expire()  { state = NotificationState::Expired;   }
+    void show()    { state = NotificationState::Shown;     }
+
+    [[nodiscard]] bool isDismissed() const { return state == NotificationState::Dismissed; }
+    [[nodiscard]] bool isExpired()   const { return state == NotificationState::Expired;   }
+    [[nodiscard]] bool isVisible()   const { return state == NotificationState::Shown;     }
+    [[nodiscard]] bool isError()     const { return severity >= NotificationSeverity::Error; }
+    [[nodiscard]] bool isCritical()  const { return severity == NotificationSeverity::Critical; }
+};
+
+class NotificationChannel {
+public:
+    explicit NotificationChannel(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name()              const { return m_name; }
+    [[nodiscard]] size_t             notificationCount() const { return m_notifications.size(); }
+
+    bool post(Notification n) {
+        for (auto& existing : m_notifications) if (existing.id == n.id) return false;
+        n.show();
+        m_notifications.push_back(std::move(n));
+        return true;
+    }
+
+    bool dismiss(const std::string& id) {
+        for (auto& n : m_notifications) {
+            if (n.id == id) { n.dismiss(); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Notification* find(const std::string& id) {
+        for (auto& n : m_notifications) if (n.id == id) return &n;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& n : m_notifications) if (n.isVisible()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t errorCount() const {
+        size_t c = 0;
+        for (auto& n : m_notifications) if (n.isError()) c++;
+        return c;
+    }
+
+    size_t clearDismissed() {
+        size_t before = m_notifications.size();
+        m_notifications.erase(
+            std::remove_if(m_notifications.begin(), m_notifications.end(),
+                [](const Notification& n){ return n.isDismissed() || n.isExpired(); }),
+            m_notifications.end());
+        return before - m_notifications.size();
+    }
+
+private:
+    std::string               m_name;
+    std::vector<Notification> m_notifications;
+};
+
+class NotificationSystem {
+public:
+    static constexpr size_t MAX_CHANNELS = 16;
+
+    NotificationChannel* createChannel(const std::string& name) {
+        if (m_channels.size() >= MAX_CHANNELS) return nullptr;
+        for (auto& c : m_channels) if (c.name() == name) return nullptr;
+        m_channels.emplace_back(name);
+        return &m_channels.back();
+    }
+
+    bool removeChannel(const std::string& name) {
+        for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
+            if (it->name() == name) { m_channels.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] NotificationChannel* findChannel(const std::string& name) {
+        for (auto& c : m_channels) if (c.name() == name) return &c;
+        return nullptr;
+    }
+
+    bool post(const std::string& channelName, Notification n) {
+        auto* ch = findChannel(channelName);
+        if (!ch) return false;
+        return ch->post(std::move(n));
+    }
+
+    [[nodiscard]] size_t channelCount() const { return m_channels.size(); }
+
+    [[nodiscard]] size_t totalActive() const {
+        size_t c = 0;
+        for (auto& ch : m_channels) c += ch.activeCount();
+        return c;
+    }
+
+private:
+    std::vector<NotificationChannel> m_channels;
+};
+
+// ============================================================
+// S25 — Undo/Redo System
+// ============================================================
+
+enum class UndoActionType : uint8_t { Create, Delete, Move, Resize, Rename, Modify, Group, Ungroup };
+
+inline const char* undoActionTypeName(UndoActionType t) {
+    switch (t) {
+        case UndoActionType::Create:   return "Create";
+        case UndoActionType::Delete:   return "Delete";
+        case UndoActionType::Move:     return "Move";
+        case UndoActionType::Resize:   return "Resize";
+        case UndoActionType::Rename:   return "Rename";
+        case UndoActionType::Modify:   return "Modify";
+        case UndoActionType::Group:    return "Group";
+        case UndoActionType::Ungroup:  return "Ungroup";
+        default:                       return "Unknown";
+    }
+}
+
+enum class UndoActionState : uint8_t { Pending, Applied, Undone, Invalid };
+
+inline const char* undoActionStateName(UndoActionState s) {
+    switch (s) {
+        case UndoActionState::Pending:  return "Pending";
+        case UndoActionState::Applied:  return "Applied";
+        case UndoActionState::Undone:   return "Undone";
+        case UndoActionState::Invalid:  return "Invalid";
+        default:                        return "Unknown";
+    }
+}
+
+struct UndoAction {
+    std::string     id;
+    std::string     description;
+    UndoActionType  type  = UndoActionType::Create;
+    UndoActionState state = UndoActionState::Pending;
+
+    void apply()      { state = UndoActionState::Applied; }
+    void undo()       { if (state == UndoActionState::Applied) state = UndoActionState::Undone; }
+    void invalidate() { state = UndoActionState::Invalid; }
+
+    [[nodiscard]] bool isApplied() const { return state == UndoActionState::Applied; }
+    [[nodiscard]] bool isUndone()  const { return state == UndoActionState::Undone;  }
+    [[nodiscard]] bool isValid()   const { return state != UndoActionState::Invalid; }
+    [[nodiscard]] bool canUndo()   const { return isApplied(); }
+    [[nodiscard]] bool canRedo()   const { return isUndone();  }
+};
+
+class UndoGroup {
+public:
+    explicit UndoGroup(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    bool addAction(UndoAction a) {
+        for (auto& existing : m_actions) if (existing.id == a.id) return false;
+        m_actions.push_back(std::move(a));
+        return true;
+    }
+
+    bool removeAction(const std::string& id) {
+        for (auto it = m_actions.begin(); it != m_actions.end(); ++it) {
+            if (it->id == id) { m_actions.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] UndoAction* find(const std::string& id) {
+        for (auto& a : m_actions) if (a.id == id) return &a;
+        return nullptr;
+    }
+
+    void applyAll() { for (auto& a : m_actions) a.apply(); }
+
+    void undoAll() {
+        for (auto& a : m_actions) if (a.isApplied()) a.undo();
+    }
+
+    [[nodiscard]] size_t actionCount() const { return m_actions.size(); }
+
+    [[nodiscard]] size_t appliedCount() const {
+        size_t c = 0;
+        for (auto& a : m_actions) if (a.isApplied()) c++;
+        return c;
+    }
+
+private:
+    std::string              m_name;
+    std::vector<UndoAction>  m_actions;
+};
+
+class UndoRedoSystem {
+public:
+    static constexpr size_t MAX_GROUPS = 64;
+
+    bool pushGroup(UndoGroup g) {
+        if (m_undoStack.size() >= MAX_GROUPS) return false;
+        m_redoStack.clear();
+        m_undoStack.push_back(std::move(g));
+        return true;
+    }
+
+    bool undo() {
+        if (m_undoStack.empty()) return false;
+        UndoGroup g = std::move(m_undoStack.back());
+        m_undoStack.pop_back();
+        g.undoAll();
+        m_redoStack.push_back(std::move(g));
+        return true;
+    }
+
+    bool redo() {
+        if (m_redoStack.empty()) return false;
+        UndoGroup g = std::move(m_redoStack.back());
+        m_redoStack.pop_back();
+        g.applyAll();
+        m_undoStack.push_back(std::move(g));
+        return true;
+    }
+
+    [[nodiscard]] bool   canUndo()    const { return !m_undoStack.empty(); }
+    [[nodiscard]] bool   canRedo()    const { return !m_redoStack.empty(); }
+    [[nodiscard]] size_t undoDepth()  const { return m_undoStack.size();   }
+    [[nodiscard]] size_t redoDepth()  const { return m_redoStack.size();   }
+
+    void clear() { m_undoStack.clear(); m_redoStack.clear(); }
+
+private:
+    std::vector<UndoGroup> m_undoStack;
+    std::vector<UndoGroup> m_redoStack;
+};
+
+// ============================================================
+// S26 — Command Palette
+// ============================================================
+
+enum class CommandPaletteCategory : uint8_t { File, Edit, View, Navigate, Debug, Build, Tools, Help };
+
+inline const char* commandPaletteCategoryName(CommandPaletteCategory c) {
+    switch (c) {
+        case CommandPaletteCategory::File:     return "File";
+        case CommandPaletteCategory::Edit:     return "Edit";
+        case CommandPaletteCategory::View:     return "View";
+        case CommandPaletteCategory::Navigate: return "Navigate";
+        case CommandPaletteCategory::Debug:    return "Debug";
+        case CommandPaletteCategory::Build:    return "Build";
+        case CommandPaletteCategory::Tools:    return "Tools";
+        case CommandPaletteCategory::Help:     return "Help";
+        default:                               return "Unknown";
+    }
+}
+
+enum class CommandPaletteState : uint8_t { Idle, Open, Searching, Executing };
+
+inline const char* commandPaletteStateName(CommandPaletteState s) {
+    switch (s) {
+        case CommandPaletteState::Idle:      return "Idle";
+        case CommandPaletteState::Open:      return "Open";
+        case CommandPaletteState::Searching: return "Searching";
+        case CommandPaletteState::Executing: return "Executing";
+        default:                             return "Unknown";
+    }
+}
+
+struct PaletteCommand {
+    std::string            id;
+    std::string            label;
+    CommandPaletteCategory category     = CommandPaletteCategory::File;
+    bool                   enabled      = true;
+    size_t                 executeCount = 0;
+
+    void execute()  { if (enabled) executeCount++; }
+    void disable()  { enabled = false; }
+    void enable()   { enabled = true;  }
+
+    [[nodiscard]] bool   hasBeenExecuted() const { return executeCount > 0; }
+    [[nodiscard]] bool   isEnabled()       const { return enabled;          }
+    [[nodiscard]] size_t timesExecuted()   const { return executeCount;     }
+};
+
+class PaletteCommandGroup {
+public:
+    explicit PaletteCommandGroup(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    bool addCommand(PaletteCommand cmd) {
+        for (auto& existing : m_commands) if (existing.id == cmd.id) return false;
+        m_commands.push_back(std::move(cmd));
+        return true;
+    }
+
+    bool removeCommand(const std::string& id) {
+        for (auto it = m_commands.begin(); it != m_commands.end(); ++it) {
+            if (it->id == id) { m_commands.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] PaletteCommand* find(const std::string& id) {
+        for (auto& c : m_commands) if (c.id == id) return &c;
+        return nullptr;
+    }
+
+    void enableAll()  { for (auto& c : m_commands) c.enable();  }
+    void disableAll() { for (auto& c : m_commands) c.disable(); }
+
+    [[nodiscard]] size_t commandCount() const { return m_commands.size(); }
+
+    [[nodiscard]] size_t enabledCount() const {
+        size_t n = 0;
+        for (auto& c : m_commands) if (c.isEnabled()) n++;
+        return n;
+    }
+
+private:
+    std::string                  m_name;
+    std::vector<PaletteCommand>  m_commands;
+};
+
+class CommandPalette {
+public:
+    static constexpr size_t MAX_COMMANDS = 128;
+
+    bool registerCommand(PaletteCommand cmd) {
+        if (m_commands.size() >= MAX_COMMANDS) return false;
+        for (auto& existing : m_commands) if (existing.id == cmd.id) return false;
+        m_commands.push_back(std::move(cmd));
+        return true;
+    }
+
+    bool unregisterCommand(const std::string& id) {
+        for (auto it = m_commands.begin(); it != m_commands.end(); ++it) {
+            if (it->id == id) { m_commands.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] PaletteCommand* find(const std::string& id) {
+        for (auto& c : m_commands) if (c.id == id) return &c;
+        return nullptr;
+    }
+
+    bool execute(const std::string& id) {
+        auto* cmd = find(id);
+        if (!cmd) return false;
+        cmd->execute();
+        return true;
+    }
+
+    [[nodiscard]] std::vector<PaletteCommand*> search(const std::string& query) {
+        std::vector<PaletteCommand*> results;
+        for (auto& c : m_commands)
+            if (c.label.find(query) != std::string::npos) results.push_back(&c);
+        return results;
+    }
+
+    [[nodiscard]] size_t commandCount() const { return m_commands.size(); }
+
+    [[nodiscard]] size_t enabledCount() const {
+        size_t n = 0;
+        for (auto& c : m_commands) if (c.isEnabled()) n++;
+        return n;
+    }
+
+    void setState(CommandPaletteState s) { m_state = s; }
+    [[nodiscard]] CommandPaletteState state() const { return m_state; }
+
+    void open()  { m_state = CommandPaletteState::Open; }
+    void close() { m_state = CommandPaletteState::Idle; }
+
+private:
+    std::vector<PaletteCommand> m_commands;
+    CommandPaletteState         m_state = CommandPaletteState::Idle;
+};
+
+// ============================================================
+// S27 — Theme Manager
+// ============================================================
+
+enum class ThemeMode : uint8_t { Light, Dark, HighContrast, Custom };
+
+inline const char* themeModeName(ThemeMode m) {
+    switch (m) {
+        case ThemeMode::Light:       return "Light";
+        case ThemeMode::Dark:        return "Dark";
+        case ThemeMode::HighContrast:return "HighContrast";
+        case ThemeMode::Custom:      return "Custom";
+        default:                     return "Unknown";
+    }
+}
+
+enum class ThemeColor : uint8_t { Background, Foreground, Primary, Secondary, Accent, Border, Error, Warning };
+
+inline const char* themeColorName(ThemeColor c) {
+    switch (c) {
+        case ThemeColor::Background: return "Background";
+        case ThemeColor::Foreground: return "Foreground";
+        case ThemeColor::Primary:    return "Primary";
+        case ThemeColor::Secondary:  return "Secondary";
+        case ThemeColor::Accent:     return "Accent";
+        case ThemeColor::Border:     return "Border";
+        case ThemeColor::Error:      return "Error";
+        case ThemeColor::Warning:    return "Warning";
+        default:                     return "Unknown";
+    }
+}
+
+struct ThemeToken {
+    std::string key;
+    std::string value;
+    ThemeMode   mode = ThemeMode::Dark;
+
+    [[nodiscard]] bool matches(ThemeMode m) const { return mode == m; }
+    void update(const std::string& newValue)      { value = newValue; }
+};
+
+struct Theme {
+    std::string name;
+    ThemeMode   m_mode    = ThemeMode::Dark;
+    uint32_t    version   = 1;
+
+    bool addToken(ThemeToken t) {
+        for (auto& existing : m_tokens) if (existing.key == t.key) return false;
+        m_tokens.push_back(std::move(t));
+        return true;
+    }
+
+    bool removeToken(const std::string& key) {
+        for (auto it = m_tokens.begin(); it != m_tokens.end(); ++it) {
+            if (it->key == key) { m_tokens.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ThemeToken* findToken(const std::string& key) {
+        for (auto& t : m_tokens) if (t.key == key) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t    tokenCount() const { return m_tokens.size(); }
+    [[nodiscard]] ThemeMode mode()       const { return m_mode;          }
+    [[nodiscard]] const std::string& name_() const { return name;        }
+
+    void setMode(ThemeMode m) { m_mode = m; }
+    void bumpVersion()        { version++;  }
+
+private:
+    std::vector<ThemeToken> m_tokens;
+};
+
+class ThemeManager {
+public:
+    static constexpr size_t MAX_THEMES = 32;
+
+    bool addTheme(Theme t) {
+        if (m_themes.size() >= MAX_THEMES) return false;
+        for (auto& existing : m_themes) if (existing.name == t.name) return false;
+        m_themes.push_back(std::move(t));
+        return true;
+    }
+
+    bool removeTheme(const std::string& name) {
+        for (auto it = m_themes.begin(); it != m_themes.end(); ++it) {
+            if (it->name == name) {
+                if (m_active == &*it) m_active = nullptr;
+                m_themes.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool setActive(const std::string& name) {
+        for (auto& t : m_themes) {
+            if (t.name == name) { m_active = &t; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Theme* active() { return m_active; }
+
+    [[nodiscard]] Theme* find(const std::string& name) {
+        for (auto& t : m_themes) if (t.name == name) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t themeCount() const { return m_themes.size(); }
+    [[nodiscard]] bool   hasActive()  const { return m_active != nullptr; }
+
+    bool applyMode(ThemeMode m) {
+        if (!m_active) return false;
+        m_active->setMode(m);
+        return true;
+    }
+
+private:
+    std::vector<Theme> m_themes;
+    Theme*             m_active = nullptr;
+};
+
+// ============================================================
+// S28 — Keyframe Animation Editor
+// ============================================================
+
+enum class KeyframeInterpolation : uint8_t { Linear, Step, Bezier, CubicSpline, EaseIn, EaseOut, EaseInOut, Custom };
+
+inline const char* keyframeInterpolationName(KeyframeInterpolation i) {
+    switch (i) {
+        case KeyframeInterpolation::Linear:      return "Linear";
+        case KeyframeInterpolation::Step:        return "Step";
+        case KeyframeInterpolation::Bezier:      return "Bezier";
+        case KeyframeInterpolation::CubicSpline: return "CubicSpline";
+        case KeyframeInterpolation::EaseIn:      return "EaseIn";
+        case KeyframeInterpolation::EaseOut:     return "EaseOut";
+        case KeyframeInterpolation::EaseInOut:   return "EaseInOut";
+        case KeyframeInterpolation::Custom:      return "Custom";
+        default:                                 return "Unknown";
+    }
+}
+
+enum class AnimationTrackType : uint8_t { Position, Rotation, Scale, Opacity, Color, Float, Bool, Event };
+
+inline const char* animationTrackTypeName(AnimationTrackType t) {
+    switch (t) {
+        case AnimationTrackType::Position: return "Position";
+        case AnimationTrackType::Rotation: return "Rotation";
+        case AnimationTrackType::Scale:    return "Scale";
+        case AnimationTrackType::Opacity:  return "Opacity";
+        case AnimationTrackType::Color:    return "Color";
+        case AnimationTrackType::Float:    return "Float";
+        case AnimationTrackType::Bool:     return "Bool";
+        case AnimationTrackType::Event:    return "Event";
+        default:                           return "Unknown";
+    }
+}
+
+struct Keyframe {
+    float                  time         = 0.f;
+    float                  value        = 0.f;
+    KeyframeInterpolation  interpolation = KeyframeInterpolation::Linear;
+    bool                   selected     = false;
+
+    void select()   { selected = true;  }
+    void deselect() { selected = false; }
+    void setTime(float t)  { time  = t; }
+    void setValue(float v) { value = v; }
+};
+
+class AnimationTrack {
+public:
+    explicit AnimationTrack(const std::string& name, AnimationTrackType type = AnimationTrackType::Float)
+        : m_name(name), m_type(type) {}
+
+    bool addKeyframe(Keyframe kf) {
+        for (auto& existing : m_keyframes) if (existing.time == kf.time) return false;
+        m_keyframes.push_back(kf);
+        return true;
+    }
+
+    bool removeKeyframe(float time) {
+        for (auto it = m_keyframes.begin(); it != m_keyframes.end(); ++it) {
+            if (it->time == time) { m_keyframes.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Keyframe* findKeyframe(float time) {
+        for (auto& kf : m_keyframes) if (kf.time == time) return &kf;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t keyframeCount() const { return m_keyframes.size(); }
+
+    [[nodiscard]] size_t selectedCount() const {
+        size_t c = 0;
+        for (auto& kf : m_keyframes) if (kf.selected) c++;
+        return c;
+    }
+
+    void selectAll()   { for (auto& kf : m_keyframes) kf.select();   }
+    void deselectAll() { for (auto& kf : m_keyframes) kf.deselect(); }
+
+    [[nodiscard]] const std::string&    name() const { return m_name; }
+    [[nodiscard]] AnimationTrackType    type() const { return m_type; }
+
+    [[nodiscard]] float duration() const {
+        float d = 0.f;
+        for (auto& kf : m_keyframes) if (kf.time > d) d = kf.time;
+        return d;
+    }
+
+private:
+    std::string            m_name;
+    AnimationTrackType     m_type;
+    std::vector<Keyframe>  m_keyframes;
+};
+
+class KeyframeAnimationEditor {
+public:
+    static constexpr size_t MAX_TRACKS = 64;
+
+    bool addTrack(AnimationTrack track) {
+        if (m_tracks.size() >= MAX_TRACKS) return false;
+        for (auto& existing : m_tracks) if (existing.name() == track.name()) return false;
+        m_tracks.push_back(std::move(track));
+        return true;
+    }
+
+    bool removeTrack(const std::string& name) {
+        for (auto it = m_tracks.begin(); it != m_tracks.end(); ++it) {
+            if (it->name() == name) { m_tracks.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] AnimationTrack* findTrack(const std::string& name) {
+        for (auto& t : m_tracks) if (t.name() == name) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t trackCount() const { return m_tracks.size(); }
+
+    [[nodiscard]] float totalDuration() const {
+        float d = 0.f;
+        for (auto& t : m_tracks) if (t.duration() > d) d = t.duration();
+        return d;
+    }
+
+    void setPlayhead(float time) { m_playhead = time; }
+    [[nodiscard]] float playhead() const { return m_playhead; }
+
+    void play()  { m_playing = true;  }
+    void pause() { m_playing = false; }
+    void stop()  { m_playing = false; m_playhead = 0.f; }
+
+    [[nodiscard]] bool isPlaying() const { return m_playing; }
+
+    void selectAllKeyframes()   { for (auto& t : m_tracks) t.selectAll();   }
+    void deselectAllKeyframes() { for (auto& t : m_tracks) t.deselectAll(); }
+
+private:
+    std::vector<AnimationTrack> m_tracks;
+    float                       m_playhead = 0.f;
+    bool                        m_playing  = false;
+};
+
 } // namespace NF

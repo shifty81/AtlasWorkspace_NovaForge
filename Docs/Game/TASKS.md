@@ -2130,3 +2130,294 @@ Total: 1504 tests, 0 failures (1480 existing + 14 S21 + 10 G40 = 1504).
 ## Build Verification ✅
 
 Total: 1528 tests, 0 failures (1504 existing + 14 S22 + 10 G41 = 1528).
+
+---
+
+## S23 — Shortcut Manager ✅
+
+- [x] ShortcutCategory enum ×8 (File, Edit, View, Navigate, Select, Debug, Tool, Custom)
+  - shortcutCategoryName() for all 8 categories
+- [x] ShortcutState enum ×4 (Inactive, Active, Pressed, Blocked)
+  - shortcutStateName() for all 4 states
+- [x] ShortcutBinding struct (id, name, category, key, modifiers, enabled, state)
+  - enable/disable, trigger (sets Pressed), reset (sets Inactive)
+  - isEnabled, isActive (state==Pressed), hasKey (key non-empty)
+- [x] ShortcutContext — named context with binding list (max uncapped)
+  - addBinding (duplicate id rejected), removeBinding, findBinding
+  - enableAll, disableAll, activeCount (enabled bindings), bindingCount, name
+- [x] ShortcutManager — multi-context registry (max 32)
+  - createContext (duplicate/full rejected), removeContext (clears active if removed), findContext
+  - setActiveContext/activeContext/activeName/hasActive/contextCount
+- [x] 14 new editor tests (test_s23_editor.cpp), all passing
+
+## S23 Complete ✅
+
+---
+
+## G42 — Wildfire System ✅
+
+- [x] WildfireType enum ×8 (Forest, Grassland, Shrub, Peat, Urban, Agricultural, Desert, Tropical)
+  - wildfireTypeName() for all 8 types
+- [x] WildfireSeverity enum ×5 (Minor, Moderate, Significant, Major, Catastrophic)
+  - wildfireSeverityName() for all 5 severities
+- [x] WildfireFront struct (id, widthKm, advanceRateKmh, contained, severity)
+  - contain, spread(rate), isContained, isSpreading (rate > 0 and not contained), isCatastrophic
+- [x] WildfireZone class — per-zone state + front list
+  - setType, setSeverity, addFront (duplicate id rejected), containAll
+  - frontCount, containedFronts, name, type, severity, isActive, tick
+- [x] WildfireSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, activeCount, catastrophicCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G42 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1552 tests, 0 failures (1528 existing + 14 S23 + 10 G42 = 1552).
+
+---
+
+## S24 — Notification System ✅
+
+- [x] NotificationSeverity enum ×8 (Info, Success, Warning, Error, Critical, Debug, Trace, System)
+  - notificationSeverityName() for all 8 severities
+- [x] NotificationState enum ×4 (Pending, Shown, Dismissed, Expired)
+  - notificationStateName() for all 4 states
+- [x] Notification struct (id, title, message, severity, state, durationMs, persistent)
+  - show/dismiss/expire, isDismissed, isExpired, isVisible (state==Shown)
+  - isError (severity >= Error), isCritical (severity == Critical)
+- [x] NotificationChannel — named channel with notification list (max uncapped)
+  - post (duplicate id rejected, marks Shown immediately), dismiss, find
+  - activeCount (Shown), errorCount (isError), clearDismissed (removes Dismissed/Expired)
+  - notificationCount, name
+- [x] NotificationSystem — multi-channel registry (max 16)
+  - createChannel (duplicate/full rejected), removeChannel, findChannel
+  - post (routes to named channel), channelCount, totalActive
+- [x] 14 new editor tests (test_s24_editor.cpp), all passing
+
+## S24 Complete ✅
+
+---
+
+## G43 — Flood System ✅
+
+- [x] FloodType enum ×8 (River, Coastal, Flash, Urban, Groundwater, Dam, Snowmelt, Tropical)
+  - floodTypeName() for all 8 types
+- [x] FloodSeverity enum ×5 (Minor, Moderate, Significant, Major, Catastrophic)
+  - floodSeverityName() for all 5 severities
+- [x] FloodWaterLevel struct (id, depthMeters, riseRateMetersPerHour, receding)
+  - startReceding, rise(rate), isRising (rate > 0 and not receding)
+  - isDangerous (depth >= 1.0m), isCatastrophic (depth >= 5.0m)
+- [x] FloodZone class — per-zone state + water level list
+  - setType, setSeverity, addLevel (duplicate id rejected), recessAll
+  - levelCount, recedingLevels, name, type, severity, isFlooding, tick
+- [x] FloodSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, floodingCount, catastrophicCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G43 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1576 tests, 0 failures (1552 existing + 14 S24 + 10 G43 = 1576).
+
+---
+
+## S25 — Undo/Redo System ✅
+
+- [x] UndoActionType enum ×8 (Create, Delete, Move, Resize, Rename, Modify, Group, Ungroup)
+  - undoActionTypeName() for all 8 types
+- [x] UndoActionState enum ×4 (Pending, Applied, Undone, Invalid)
+  - undoActionStateName() for all 4 states
+- [x] UndoAction struct (id, description, type, state)
+  - apply (sets Applied), undo (sets Undone only if Applied), invalidate (sets Invalid)
+  - isApplied, isUndone, isValid (state != Invalid), canUndo (isApplied), canRedo (isUndone)
+- [x] UndoGroup — named group of UndoActions
+  - addAction (duplicate id rejected), removeAction, find
+  - applyAll, undoAll (only Applied actions), actionCount, appliedCount, name
+- [x] UndoRedoSystem — stack-based undo/redo manager (max 64 groups)
+  - pushGroup (clears redo stack, rejects if full), undo, redo
+  - canUndo, canRedo, undoDepth, redoDepth, clear
+- [x] 14 new editor tests (test_s25_editor.cpp), all passing
+
+## S25 Complete ✅
+
+---
+
+## G44 — Landslide System ✅
+
+- [x] LandslideType enum ×8 (Debris, Rockfall, Mudflow, Slump, Creep, Avalanche, Earthflow, Topple)
+  - landslideTypeName() for all 8 types
+- [x] LandslideSeverity enum ×5 (Minor, Moderate, Significant, Major, Catastrophic)
+  - landslideSeverityName() for all 5 severities
+- [x] LandslideDebrisFlow struct (id, volumeCubicMeters, speedMetersPerSec, halted)
+  - halt, accelerate(speed), isMoving (speed > 0 and not halted)
+  - isDangerous (volume >= 1000m³), isCatastrophic (volume >= 100000m³)
+- [x] LandslideZone class — per-zone state + debris flow list
+  - setType, setSeverity, addFlow (duplicate id rejected), haltAll
+  - flowCount, movingFlows, name, type, severity, isActive, tick
+- [x] LandslideSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, activeCount, catastrophicCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G44 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1600 tests, 0 failures (1576 existing + 14 S25 + 10 G44 = 1600).
+
+---
+
+## S26 — Command Palette ✅
+
+- [x] CommandPaletteCategory enum ×8 (File, Edit, View, Navigate, Debug, Build, Tools, Help)
+  - commandPaletteCategoryName() for all 8 categories
+- [x] CommandPaletteState enum ×4 (Idle, Open, Searching, Executing)
+  - commandPaletteStateName() for all 4 states
+- [x] PaletteCommand struct (id, label, category, enabled, executeCount)
+  - execute (increments executeCount only if enabled), disable, enable
+  - hasBeenExecuted (executeCount > 0), isEnabled, timesExecuted
+- [x] PaletteCommandGroup — named group of PaletteCommands
+  - addCommand (duplicate id rejected), removeCommand, find
+  - enableAll, disableAll, commandCount, enabledCount, name
+- [x] CommandPalette — registry + search (max 128 commands)
+  - registerCommand (duplicate/full rejected), unregisterCommand, find
+  - execute (finds and executes by id), search (case-sensitive substring on label)
+  - commandCount, enabledCount, setState, state, open, close
+- [x] 14 new editor tests (test_s26_editor.cpp), all passing
+
+## S26 Complete ✅
+
+---
+
+## G45 — Drought System ✅
+
+- [x] DroughtType enum ×8 (Agricultural, Hydrological, Meteorological, Socioeconomic, Groundwater, Ecological, Coastal, Urban)
+  - droughtTypeName() for all 8 types
+- [x] DroughtIntensity enum ×5 (Mild, Moderate, Severe, Extreme, Exceptional)
+  - droughtIntensityName() for all 5 intensities
+- [x] DroughtRegion struct (id, waterReservePercent, precipitationMm, active)
+  - deplete (clamps to 0), replenish (clamps to 100), activate, deactivate
+  - isArid (< 25%), isCritical (< 10%), isExhausted (<= 0%)
+- [x] DroughtZone class — per-zone drought state + region list
+  - setType, setIntensity, addRegion (duplicate id rejected)
+  - depleteAll, replenishAll, regionCount, aridCount, exhaustedCount
+  - name, type, intensity, isCritical (any region critical), tick
+- [x] DroughtSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, criticalCount, exhaustedRegionCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G45 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1624 tests, 0 failures (1600 existing + 14 S26 + 10 G45 = 1624).
+
+---
+
+## S27 — Theme Manager ✅
+
+- [x] ThemeMode enum ×4 (Light, Dark, HighContrast, Custom)
+  - themeModeName() for all 4 modes
+- [x] ThemeColor enum ×8 (Background, Foreground, Primary, Secondary, Accent, Border, Error, Warning)
+  - themeColorName() for all 8 colors
+- [x] ThemeToken struct (key, value, mode)
+  - matches(ThemeMode), update(newValue)
+- [x] Theme struct (name, mode, version, tokens)
+  - addToken (duplicate key rejected), removeToken, findToken
+  - tokenCount, mode, bumpVersion
+- [x] ThemeManager class — registry with active theme (max 32)
+  - addTheme (duplicate/full rejected), removeTheme, setActive
+  - active, find, themeCount, hasActive, applyMode
+- [x] 14 new editor tests (test_s27_editor.cpp), all passing
+
+## S27 Complete ✅
+
+---
+
+## G46 — Epidemic System ✅
+
+- [x] EpidemicType enum ×8 (Viral, Bacterial, Fungal, Parasitic, Prion, Zoonotic, Waterborne, Airborne)
+  - epidemicTypeName() for all 8 types
+- [x] EpidemicPhase enum ×5 (Outbreak, Epidemic, Endemic, Pandemic, Resolved)
+  - epidemicPhaseName() for all 5 phases
+- [x] EpidemicVector struct (id, infectedCount, populationSize, active)
+  - infect (clamps to populationSize), recover (clamps to 0), activate, deactivate
+  - infectionRate, isContained (< 5%), isCritical (>= 50%)
+- [x] EpidemicZone class — per-zone epidemic state + vector list
+  - setType, setPhase, addVector (duplicate id rejected)
+  - infectAll, recoverAll, vectorCount, criticalCount
+  - name, type, phase, isContained (all vectors contained), tick
+- [x] EpidemicSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, criticalZoneCount, containedZoneCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G46 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1648 tests, 0 failures (1624 existing + 14 S27 + 10 G46 = 1648).
+
+---
+
+## S28 — Keyframe Animation Editor ✅
+
+- [x] KeyframeInterpolation enum ×8 (Linear, Step, Bezier, CubicSpline, EaseIn, EaseOut, EaseInOut, Custom)
+  - keyframeInterpolationName() for all 8 modes
+- [x] AnimationTrackType enum ×8 (Position, Rotation, Scale, Opacity, Color, Float, Bool, Event)
+  - animationTrackTypeName() for all 8 types
+- [x] Keyframe struct (time, value, interpolation, selected)
+  - select, deselect, setTime, setValue
+- [x] AnimationTrack class — named collection of keyframes
+  - addKeyframe (duplicate time rejected), removeKeyframe, findKeyframe
+  - keyframeCount, selectedCount, selectAll, deselectAll, duration, name, type
+- [x] KeyframeAnimationEditor class — multi-track animation editor (max 64 tracks)
+  - addTrack (duplicate/full rejected), removeTrack, findTrack
+  - trackCount, totalDuration, setPlayhead, playhead
+  - play, pause, stop, isPlaying
+  - selectAllKeyframes, deselectAllKeyframes
+- [x] 14 new editor tests (test_s28_editor.cpp), all passing
+
+## S28 Complete ✅
+
+---
+
+## G47 — Solar Flare System ✅
+
+- [x] SolarFlareClass enum ×8 (A, B, C, M, X, S, N, Z)
+  - solarFlareClassName() for all 8 classes
+- [x] SolarFlareEffect enum ×6 (RadioBlackout, RadiationStorm, GeomagneticStorm, PowerGridDisruption, SatelliteDamage, CommunicationLoss)
+  - solarFlareEffectName() for all 6 effects
+- [x] SolarFlareEvent struct (id, flareClass, intensity, duration, active)
+  - activate, deactivate, isMajor (>= M), isExtreme (>= X), energyOutput
+- [x] SolarFlareRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, majorCount
+  - name, tick, tickCount
+- [x] SolarFlareSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, majorEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G47 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1673 tests, 0 failures (1648 existing + 14 S28 + 11 G47 = 1673).

@@ -71,7 +71,13 @@
 | **G39** — Earthquake System | EarthquakeScale×8, EarthquakeStatus×4, Earthquake, FaultLine, EarthquakeSystem | ✅ Done |
 | **G40** — Volcano System | VolcanoActivity×8, VolcanoStatus×4, VolcanicEvent, Volcano, VolcanoSystem | ✅ Done |
 | **G41** — Tsunami System | TsunamiCause×8, TsunamiStatus×4, TsunamiWave, Tsunami, TsunamiSystem | ✅ Done |
-| **G42** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G42** — Wildfire System | WildfireType×8, WildfireSeverity×5, WildfireFront, WildfireZone, WildfireSystem | ✅ Done |
+| **G43** — Flood System | FloodType×8, FloodSeverity×5, FloodWaterLevel, FloodZone, FloodSystem | ✅ Done |
+| **G44** — Landslide System | LandslideType×8, LandslideSeverity×5, LandslideDebrisFlow, LandslideZone, LandslideSystem | ✅ Done |
+| **G45** — Drought System | DroughtType×8, DroughtIntensity×5, DroughtRegion, DroughtZone, DroughtSystem | ✅ Done |
+| **G46** — Epidemic System | EpidemicType×8, EpidemicPhase×5, EpidemicVector, EpidemicZone, EpidemicSystem | ✅ Done |
+| **G47** — Solar Flare System | SolarFlareClass×8, SolarFlareEffect×6, SolarFlareEvent, SolarFlareRegion, SolarFlareSystem | ✅ Done |
+| **G48** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -124,7 +130,13 @@
 | **S20** — Resource Monitor System | ResourceMonitorMetric×8, ResourceMonitorLevel×4, ResourceMonitorSample, ResourceMonitorChannel, ResourceMonitorSystem | ✅ Done |
 | **S21** — Editor Event Bus System | EditorEventPriority×8, EditorBusState×4, EditorBusEvent, EditorEventSubscription, EditorEventBus | ✅ Done |
 | **S22** — Workspace Layout Manager | LayoutPanelType×8, LayoutDockZone×4, LayoutPanel, LayoutSplit, WorkspaceLayout, WorkspaceLayoutManager | ✅ Done |
-| **S23** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S23** — Shortcut Manager | ShortcutCategory×8, ShortcutState×4, ShortcutBinding, ShortcutContext, ShortcutManager | ✅ Done |
+| **S24** — Notification System | NotificationSeverity×8, NotificationState×4, Notification, NotificationChannel, NotificationSystem | ✅ Done |
+| **S25** — Undo/Redo System | UndoActionType×8, UndoActionState×4, UndoAction, UndoGroup, UndoRedoSystem | ✅ Done |
+| **S26** — Command Palette | CommandPaletteCategory×8, CommandPaletteState×4, PaletteCommand, PaletteCommandGroup, CommandPalette | ✅ Done |
+| **S27** — Theme Manager | ThemeMode×4, ThemeColor×8, ThemeToken, Theme, ThemeManager | ✅ Done |
+| **S28** — Keyframe Animation Editor | KeyframeInterpolation×8, AnimationTrackType×8, Keyframe, AnimationTrack, KeyframeAnimationEditor | ✅ Done |
+| **S29** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
