@@ -5004,4 +5004,199 @@ private:
     std::vector<RigAIAlert> m_alerts;
 };
 
+// ── G22 Weather System ────────────────────────────────────────────
+
+enum class WeatherType : uint8_t {
+    Clear      = 0,
+    Rain       = 1,
+    Storm      = 2,
+    Snow       = 3,
+    Fog        = 4,
+    Sandstorm  = 5,
+    AcidRain   = 6,
+    SolarFlare = 7
+};
+
+inline const char* weatherTypeName(WeatherType t) {
+    switch (t) {
+        case WeatherType::Clear:      return "Clear";
+        case WeatherType::Rain:       return "Rain";
+        case WeatherType::Storm:      return "Storm";
+        case WeatherType::Snow:       return "Snow";
+        case WeatherType::Fog:        return "Fog";
+        case WeatherType::Sandstorm:  return "Sandstorm";
+        case WeatherType::AcidRain:   return "Acid Rain";
+        case WeatherType::SolarFlare: return "Solar Flare";
+    }
+    return "Unknown";
+}
+
+/// Active weather condition with intensity and duration tracking.
+struct WeatherCondition {
+    WeatherType type      = WeatherType::Clear;
+    float intensity       = 0.f;    // 0.0 = calm, 1.0 = extreme
+    float duration        = 0.f;    // total duration in seconds (0 = indefinite)
+    float elapsed         = 0.f;    // time elapsed in this condition
+    float transitionTime  = 2.f;    // fade-in/out period
+
+    [[nodiscard]] bool isExpired() const {
+        return duration > 0.f && elapsed >= duration;
+    }
+
+    [[nodiscard]] float progress() const {
+        return duration > 0.f ? std::min(elapsed / duration, 1.f) : 0.f;
+    }
+
+    /// Effective intensity accounting for fade-in at start and fade-out near end.
+    [[nodiscard]] float effectiveIntensity() const {
+        float t = intensity;
+        // Fade in
+        if (elapsed < transitionTime)
+            t *= (elapsed / transitionTime);
+        // Fade out near end
+        if (duration > 0.f) {
+            float remaining = duration - elapsed;
+            if (remaining < transitionTime)
+                t *= (remaining / transitionTime);
+        }
+        return std::max(t, 0.f);
+    }
+};
+
+/// Environmental effects applied by the weather system to gameplay.
+struct WeatherEffects {
+    float visibilityMultiplier  = 1.f;   // 1.0 = full, 0.0 = zero visibility
+    float movementMultiplier    = 1.f;   // affects player/ship speed
+    float damagePerSecond       = 0.f;   // AcidRain / SolarFlare damage
+    float miningMultiplier      = 1.f;   // affects mining output
+    bool  disablesScanner       = false; // Storm/SolarFlare blocks scans
+    bool  disablesNavigation    = false; // Severe conditions block nav
+
+    static WeatherEffects forCondition(const WeatherCondition& c) {
+        WeatherEffects fx;
+        float i = c.effectiveIntensity();
+        switch (c.type) {
+            case WeatherType::Clear:
+                break;
+            case WeatherType::Rain:
+                fx.visibilityMultiplier = 1.f - 0.3f * i;
+                fx.movementMultiplier   = 1.f - 0.1f * i;
+                break;
+            case WeatherType::Storm:
+                fx.visibilityMultiplier = 1.f - 0.6f * i;
+                fx.movementMultiplier   = 1.f - 0.3f * i;
+                fx.disablesScanner      = i > 0.7f;
+                break;
+            case WeatherType::Snow:
+                fx.visibilityMultiplier = 1.f - 0.4f * i;
+                fx.movementMultiplier   = 1.f - 0.2f * i;
+                fx.miningMultiplier     = 1.f - 0.15f * i;
+                break;
+            case WeatherType::Fog:
+                fx.visibilityMultiplier = 1.f - 0.7f * i;
+                break;
+            case WeatherType::Sandstorm:
+                fx.visibilityMultiplier = 1.f - 0.8f * i;
+                fx.movementMultiplier   = 1.f - 0.4f * i;
+                fx.miningMultiplier     = 1.f - 0.3f * i;
+                fx.damagePerSecond      = 2.f * i;
+                fx.disablesNavigation   = i > 0.8f;
+                break;
+            case WeatherType::AcidRain:
+                fx.visibilityMultiplier = 1.f - 0.3f * i;
+                fx.damagePerSecond      = 5.f * i;
+                break;
+            case WeatherType::SolarFlare:
+                fx.visibilityMultiplier = 1.f - 0.2f * i;
+                fx.damagePerSecond      = 8.f * i;
+                fx.disablesScanner      = true;
+                fx.disablesNavigation   = i > 0.5f;
+                break;
+        }
+        return fx;
+    }
+};
+
+/// Forecast entry — a pending future weather event.
+struct WeatherForecastEntry {
+    WeatherType type      = WeatherType::Clear;
+    float intensity       = 0.5f;
+    float duration        = 60.f;
+    float delayUntilStart = 30.f;  // seconds until this event begins
+};
+
+/// Central weather system managing active weather, transitions, and forecasting.
+class WeatherSystem {
+public:
+    static constexpr int kMaxForecast = 8;
+
+    /// Set the active weather condition directly (immediate change).
+    void setWeather(WeatherType type, float intensity, float duration = 0.f) {
+        m_active.type      = type;
+        m_active.intensity = std::max(0.f, std::min(intensity, 1.f));
+        m_active.duration  = duration;
+        m_active.elapsed   = 0.f;
+    }
+
+    /// Queue a weather event in the forecast.
+    void addForecast(const WeatherForecastEntry& entry) {
+        if (static_cast<int>(m_forecast.size()) >= kMaxForecast) return;
+        m_forecast.push_back(entry);
+    }
+
+    /// Clear all forecast entries.
+    void clearForecast() { m_forecast.clear(); }
+
+    /// Advance the weather system by dt seconds.
+    void tick(float dt) {
+        m_active.elapsed += dt;
+
+        // If the current weather has expired, transition to next forecast or clear.
+        if (m_active.isExpired()) {
+            if (!m_forecast.empty()) {
+                auto next = m_forecast.front();
+                m_forecast.erase(m_forecast.begin());
+                setWeather(next.type, next.intensity, next.duration);
+            } else {
+                setWeather(WeatherType::Clear, 0.f);
+            }
+        }
+
+        // Tick forecast delays
+        for (auto& f : m_forecast)
+            f.delayUntilStart = std::max(0.f, f.delayUntilStart - dt);
+
+        // Check if any forecast entry is ready (delay reached zero and current is clear)
+        if (m_active.type == WeatherType::Clear && !m_forecast.empty()) {
+            if (m_forecast.front().delayUntilStart <= 0.f) {
+                auto next = m_forecast.front();
+                m_forecast.erase(m_forecast.begin());
+                setWeather(next.type, next.intensity, next.duration);
+            }
+        }
+    }
+
+    [[nodiscard]] const WeatherCondition& activeWeather() const { return m_active; }
+    [[nodiscard]] WeatherType currentType() const { return m_active.type; }
+    [[nodiscard]] float currentIntensity() const { return m_active.effectiveIntensity(); }
+    [[nodiscard]] bool isClear() const { return m_active.type == WeatherType::Clear; }
+
+    /// Compute the current gameplay effects of the active weather.
+    [[nodiscard]] WeatherEffects currentEffects() const {
+        return WeatherEffects::forCondition(m_active);
+    }
+
+    [[nodiscard]] const std::vector<WeatherForecastEntry>& forecast() const { return m_forecast; }
+    [[nodiscard]] size_t forecastCount() const { return m_forecast.size(); }
+
+    /// Force clear weather immediately.
+    void clearWeather() {
+        setWeather(WeatherType::Clear, 0.f);
+    }
+
+private:
+    WeatherCondition m_active;
+    std::vector<WeatherForecastEntry> m_forecast;
+};
+
 } // namespace NF

@@ -795,3 +795,77 @@ M2/S1 (Dev World Editing) fully delivered:
 - Fully wired into EditorApp with menu items and commands
 - 25 new tests, all passing
 Total: 909 tests, 0 failures.
+
+## M3/S2 — Play-in-Editor ✅
+
+- [x] M3-1: PlayState enum (Stopped, Running, Paused) with playStateName()
+- [x] M3-2: EditorWorldSnapshot struct — captures world path, placed entities, PCG params, camera state
+  - capture() and invalidate() methods for snapshot lifecycle
+- [x] M3-3: EditorWorldSession class — manages PIE session lifecycle
+  - start/pause/resume/stop state machine with validation
+  - tick(dt) advances elapsed time and frame count only while Running
+  - Snapshot preserved after stop for restoration
+- [x] M3-4: PlayInEditorSystem class — high-level PIE controller
+  - Wires to EntityPlacementTool, PCGTuningPanel, ViewportPanel for snapshot/restore
+  - start() captures pre-play state, stop() restores it
+  - togglePlay() cycles Stopped→Running→Paused→Running
+  - isRunning/isPaused/isStopped convenience queries
+- [x] M3-5: EditorApp integration
+  - Play/Pause/Stop commands: play.start (F5), play.pause (F6), play.stop (Shift+F5)
+  - Enabled checks: pause requires Running, stop requires !Stopped
+  - Toolbar buttons wired to commands (replaced noop lambdas)
+  - Edit menu includes Play/Pause/Stop items
+  - Status bar reflects PIE state (Editor/Playing/Paused)
+  - PIE tick integrated into EditorApp::update()
+- [x] M3-6: test_m3_editor.cpp — 13 new Catch2 test cases
+  - PlayState names, snapshot capture/invalidate
+  - Session lifecycle, pause/resume guards
+  - PlayInEditorSystem standalone + toggle
+  - Snapshot/restore for entities, PCG params, camera
+  - EditorApp integration + enabled checks
+- [x] Build verification: 940/940 tests pass (909 existing + 31 new)
+
+## M3/S2 Complete ✅
+
+M3/S2 (Play-in-Editor) fully delivered:
+- 3 new types: PlayState, EditorWorldSnapshot, EditorWorldSession
+- 1 new system: PlayInEditorSystem with full snapshot/restore
+- Wired into EditorApp: commands, toolbar, menu, status bar, tick
+- 13 new editor tests, all passing
+
+## G22 — Weather System ✅
+
+- [x] G22-1: WeatherType enum (Clear, Rain, Storm, Snow, Fog, Sandstorm, AcidRain, SolarFlare)
+  - weatherTypeName() helper for all 8 types
+- [x] G22-2: WeatherCondition struct — active weather with intensity and duration
+  - isExpired(), progress(), effectiveIntensity() with fade-in/fade-out
+  - Configurable transitionTime for smooth intensity ramps
+- [x] G22-3: WeatherEffects struct — gameplay impact calculations
+  - visibilityMultiplier, movementMultiplier, damagePerSecond, miningMultiplier
+  - disablesScanner (Storm/SolarFlare), disablesNavigation (Sandstorm/SolarFlare)
+  - Static forCondition() factory computes effects from active weather
+- [x] G22-4: WeatherForecastEntry struct — queued future weather events
+  - Type, intensity, duration, delayUntilStart
+- [x] G22-5: WeatherSystem class — central weather manager
+  - setWeather() for immediate weather changes
+  - addForecast()/clearForecast() with kMaxForecast=8 cap
+  - tick(dt) advances weather, auto-transitions on expiry
+  - Forecast queue auto-triggers when delay expires and weather is Clear
+  - currentEffects() returns live WeatherEffects
+  - clearWeather() forces Clear
+- [x] G22-6: 18 new Catch2 test cases in test_game.cpp
+  - Type names, condition defaults, expiration, fade-in/out
+  - Effects for Clear, AcidRain, SolarFlare
+  - System lifecycle, tick, auto-transition, forecast, max cap
+- [x] Build verification: 940/940 tests pass
+
+## G22 Complete ✅
+
+G22 (Weather System) fully delivered:
+- WeatherType×8 with name helper
+- WeatherCondition with intensity fade-in/fade-out
+- WeatherEffects with 6 gameplay impact fields, static factory method
+- WeatherForecastEntry for queued events
+- WeatherSystem with forecast queue, auto-transitions, effects query
+- 18 new game tests, all passing
+Total: 940 tests, 0 failures.

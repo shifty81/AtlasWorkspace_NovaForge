@@ -51,7 +51,8 @@
 | **G19** — Contracts & Bounties | ContractType×6, Contract lifecycle, BountyTarget, ContractBoard | ✅ Done |
 | **G20** — Companion System | CompanionRole×6, CompanionPersonality, CompanionManager (max 4) | ✅ Done |
 | **G21** — Faction System | FactionType×8, Faction, FactionTerritory, FactionRelation, FactionManager | ✅ Done |
-| **G22** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G22** — Weather System | WeatherType×8, WeatherCondition, WeatherForecast, WeatherSystem | ✅ Done |
+| **G23** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -83,7 +84,7 @@
 | **M1** — Usable Editor | Real GLFW/ImGui window, viewport clear, basic panels | ✅ Done |
 | **SP** — Spec Pack | 6 system contracts, 6 schemas, 25 docs, audit + roadmap | ✅ Done |
 | **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | ✅ Done |
-| **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | 📋 Planned |
+| **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | ✅ Done |
 | **M4 / S3** — Asset Pipeline | AssetDatabase (GUID), mesh/texture importers, content browser hot-reload | 📋 Planned |
 | **S4** — Blender Bridge | novaforge_bridge.py add-on (BG-1→5), engine-side auto-import | 📋 Planned |
 | **S5** — Character & Animation Suite | FPSHandRig, TwoJointIK, AnimationBlendGraph, CharacterGroundingSystem | 📋 Planned |

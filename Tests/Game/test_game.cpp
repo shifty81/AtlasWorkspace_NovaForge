@@ -4147,3 +4147,224 @@ TEST_CASE("RigAICore enable/disable features", "[Game][SP6][RigAI]") {
     ai.disableFeature("droneControl");
     REQUIRE(ai.features().enabledCount() == 2);
 }
+
+// ── G22 Weather System Tests ──────────────────────────────────
+
+TEST_CASE("WeatherType names", "[Game][G22][Weather]") {
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Clear))      == "Clear");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Rain))       == "Rain");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Storm))      == "Storm");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Snow))       == "Snow");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Fog))        == "Fog");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Sandstorm))  == "Sandstorm");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::AcidRain))   == "Acid Rain");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::SolarFlare)) == "Solar Flare");
+}
+
+TEST_CASE("WeatherCondition default is Clear", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    REQUIRE(cond.type == NF::WeatherType::Clear);
+    REQUIRE(cond.intensity == 0.f);
+    REQUIRE(cond.duration == 0.f);
+    REQUIRE(cond.elapsed == 0.f);
+    REQUIRE_FALSE(cond.isExpired());
+    REQUIRE(cond.effectiveIntensity() == 0.f);
+}
+
+TEST_CASE("WeatherCondition expiration", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Rain;
+    cond.intensity = 0.8f;
+    cond.duration = 10.f;
+    cond.elapsed = 5.f;
+    REQUIRE_FALSE(cond.isExpired());
+    REQUIRE(cond.progress() == Catch::Approx(0.5f));
+
+    cond.elapsed = 10.f;
+    REQUIRE(cond.isExpired());
+    REQUIRE(cond.progress() == Catch::Approx(1.0f));
+}
+
+TEST_CASE("WeatherCondition fade-in intensity", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Storm;
+    cond.intensity = 1.0f;
+    cond.duration = 100.f;
+    cond.transitionTime = 2.f;
+    cond.elapsed = 1.f;  // halfway through fade-in
+
+    float ei = cond.effectiveIntensity();
+    REQUIRE(ei == Catch::Approx(0.5f));
+}
+
+TEST_CASE("WeatherCondition fade-out intensity", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Fog;
+    cond.intensity = 1.0f;
+    cond.duration = 10.f;
+    cond.transitionTime = 2.f;
+    cond.elapsed = 9.f;  // 1 second remaining, within fade-out
+
+    float ei = cond.effectiveIntensity();
+    REQUIRE(ei == Catch::Approx(0.5f));
+}
+
+TEST_CASE("WeatherEffects for Clear", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Clear;
+    cond.intensity = 0.f;
+
+    auto fx = NF::WeatherEffects::forCondition(cond);
+    REQUIRE(fx.visibilityMultiplier == 1.f);
+    REQUIRE(fx.movementMultiplier == 1.f);
+    REQUIRE(fx.damagePerSecond == 0.f);
+    REQUIRE_FALSE(fx.disablesScanner);
+    REQUIRE_FALSE(fx.disablesNavigation);
+}
+
+TEST_CASE("WeatherEffects for AcidRain causes damage", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::AcidRain;
+    cond.intensity = 1.0f;
+    cond.duration = 100.f;
+    cond.transitionTime = 0.f;  // no fade for clean test
+    cond.elapsed = 50.f;        // mid-duration
+
+    auto fx = NF::WeatherEffects::forCondition(cond);
+    REQUIRE(fx.damagePerSecond == Catch::Approx(5.0f));
+    REQUIRE(fx.visibilityMultiplier < 1.f);
+}
+
+TEST_CASE("WeatherEffects SolarFlare disables scanner", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::SolarFlare;
+    cond.intensity = 0.8f;
+    cond.duration = 100.f;
+    cond.transitionTime = 0.f;
+    cond.elapsed = 50.f;
+
+    auto fx = NF::WeatherEffects::forCondition(cond);
+    REQUIRE(fx.disablesScanner);
+    REQUIRE(fx.disablesNavigation);
+    REQUIRE(fx.damagePerSecond > 0.f);
+}
+
+TEST_CASE("WeatherSystem default is Clear", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    REQUIRE(ws.isClear());
+    REQUIRE(ws.currentType() == NF::WeatherType::Clear);
+    REQUIRE(ws.forecastCount() == 0);
+}
+
+TEST_CASE("WeatherSystem setWeather changes active", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Storm, 0.9f, 30.f);
+
+    REQUIRE(ws.currentType() == NF::WeatherType::Storm);
+    REQUIRE_FALSE(ws.isClear());
+    REQUIRE(ws.activeWeather().intensity == Catch::Approx(0.9f));
+    REQUIRE(ws.activeWeather().duration == Catch::Approx(30.f));
+}
+
+TEST_CASE("WeatherSystem tick advances elapsed", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Rain, 0.5f, 10.f);
+
+    ws.tick(3.f);
+    REQUIRE(ws.activeWeather().elapsed == Catch::Approx(3.f));
+}
+
+TEST_CASE("WeatherSystem auto-transitions to Clear when expired", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Snow, 0.6f, 5.f);
+
+    ws.tick(6.f);  // exceeds duration
+    REQUIRE(ws.isClear());
+}
+
+TEST_CASE("WeatherSystem forecast transitions", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Rain, 0.5f, 5.f);
+
+    NF::WeatherForecastEntry next;
+    next.type = NF::WeatherType::Storm;
+    next.intensity = 0.9f;
+    next.duration = 10.f;
+    next.delayUntilStart = 0.f;
+    ws.addForecast(next);
+    REQUIRE(ws.forecastCount() == 1);
+
+    // Expire current → should pick up forecast
+    ws.tick(6.f);
+    REQUIRE(ws.currentType() == NF::WeatherType::Storm);
+    REQUIRE(ws.forecastCount() == 0);
+}
+
+TEST_CASE("WeatherSystem clearForecast removes entries", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+
+    NF::WeatherForecastEntry e;
+    e.type = NF::WeatherType::Fog;
+    e.intensity = 0.3f;
+    e.duration = 10.f;
+    ws.addForecast(e);
+    ws.addForecast(e);
+    REQUIRE(ws.forecastCount() == 2);
+
+    ws.clearForecast();
+    REQUIRE(ws.forecastCount() == 0);
+}
+
+TEST_CASE("WeatherSystem clearWeather forces Clear", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Sandstorm, 1.0f, 60.f);
+    REQUIRE_FALSE(ws.isClear());
+
+    ws.clearWeather();
+    REQUIRE(ws.isClear());
+}
+
+TEST_CASE("WeatherSystem max forecast cap", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+
+    NF::WeatherForecastEntry e;
+    e.type = NF::WeatherType::Rain;
+    e.intensity = 0.5f;
+    e.duration = 10.f;
+
+    for (int i = 0; i < 12; ++i)
+        ws.addForecast(e);
+
+    REQUIRE(ws.forecastCount() == static_cast<size_t>(NF::WeatherSystem::kMaxForecast));
+}
+
+TEST_CASE("WeatherSystem currentEffects reflects active weather", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Fog, 1.0f);
+    // Advance past transition time
+    ws.tick(5.f);
+
+    auto fx = ws.currentEffects();
+    REQUIRE(fx.visibilityMultiplier < 1.f);
+    REQUIRE(fx.movementMultiplier == 1.f);  // Fog doesn't affect movement
+}
+
+TEST_CASE("WeatherSystem delayed forecast triggers when clear", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    // Start clear
+
+    NF::WeatherForecastEntry e;
+    e.type = NF::WeatherType::Storm;
+    e.intensity = 0.8f;
+    e.duration = 20.f;
+    e.delayUntilStart = 5.f;
+    ws.addForecast(e);
+
+    // Not ready yet
+    ws.tick(3.f);
+    REQUIRE(ws.isClear());
+
+    // Delay elapsed
+    ws.tick(3.f);
+    REQUIRE(ws.currentType() == NF::WeatherType::Storm);
+}

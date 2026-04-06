@@ -111,6 +111,7 @@ catch_discover_tests(NF_AITests)
 add_executable(NF_EditorTests
     Editor/test_editor.cpp
     Editor/test_m2_editor.cpp
+    Editor/test_m3_editor.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE
