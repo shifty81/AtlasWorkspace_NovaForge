@@ -5004,4 +5004,1005 @@ private:
     std::vector<RigAIAlert> m_alerts;
 };
 
+// ── G22 Weather System ────────────────────────────────────────────
+
+enum class WeatherType : uint8_t {
+    Clear      = 0,
+    Rain       = 1,
+    Storm      = 2,
+    Snow       = 3,
+    Fog        = 4,
+    Sandstorm  = 5,
+    AcidRain   = 6,
+    SolarFlare = 7
+};
+
+inline const char* weatherTypeName(WeatherType t) {
+    switch (t) {
+        case WeatherType::Clear:      return "Clear";
+        case WeatherType::Rain:       return "Rain";
+        case WeatherType::Storm:      return "Storm";
+        case WeatherType::Snow:       return "Snow";
+        case WeatherType::Fog:        return "Fog";
+        case WeatherType::Sandstorm:  return "Sandstorm";
+        case WeatherType::AcidRain:   return "Acid Rain";
+        case WeatherType::SolarFlare: return "Solar Flare";
+    }
+    return "Unknown";
+}
+
+/// Active weather condition with intensity and duration tracking.
+struct WeatherCondition {
+    WeatherType type      = WeatherType::Clear;
+    float intensity       = 0.f;    // 0.0 = calm, 1.0 = extreme
+    float duration        = 0.f;    // total duration in seconds (0 = indefinite)
+    float elapsed         = 0.f;    // time elapsed in this condition
+    float transitionTime  = 2.f;    // fade-in/out period
+
+    [[nodiscard]] bool isExpired() const {
+        return duration > 0.f && elapsed >= duration;
+    }
+
+    [[nodiscard]] float progress() const {
+        return duration > 0.f ? std::min(elapsed / duration, 1.f) : 0.f;
+    }
+
+    /// Effective intensity accounting for fade-in at start and fade-out near end.
+    [[nodiscard]] float effectiveIntensity() const {
+        float t = intensity;
+        // Fade in
+        if (elapsed < transitionTime)
+            t *= (elapsed / transitionTime);
+        // Fade out near end
+        if (duration > 0.f) {
+            float remaining = duration - elapsed;
+            if (remaining < transitionTime)
+                t *= (remaining / transitionTime);
+        }
+        return std::max(t, 0.f);
+    }
+};
+
+/// Environmental effects applied by the weather system to gameplay.
+struct WeatherEffects {
+    float visibilityMultiplier  = 1.f;   // 1.0 = full, 0.0 = zero visibility
+    float movementMultiplier    = 1.f;   // affects player/ship speed
+    float damagePerSecond       = 0.f;   // AcidRain / SolarFlare damage
+    float miningMultiplier      = 1.f;   // affects mining output
+    bool  disablesScanner       = false; // Storm/SolarFlare blocks scans
+    bool  disablesNavigation    = false; // Severe conditions block nav
+
+    static WeatherEffects forCondition(const WeatherCondition& c) {
+        WeatherEffects fx;
+        float i = c.effectiveIntensity();
+        switch (c.type) {
+            case WeatherType::Clear:
+                break;
+            case WeatherType::Rain:
+                fx.visibilityMultiplier = 1.f - 0.3f * i;
+                fx.movementMultiplier   = 1.f - 0.1f * i;
+                break;
+            case WeatherType::Storm:
+                fx.visibilityMultiplier = 1.f - 0.6f * i;
+                fx.movementMultiplier   = 1.f - 0.3f * i;
+                fx.disablesScanner      = i > 0.7f;
+                break;
+            case WeatherType::Snow:
+                fx.visibilityMultiplier = 1.f - 0.4f * i;
+                fx.movementMultiplier   = 1.f - 0.2f * i;
+                fx.miningMultiplier     = 1.f - 0.15f * i;
+                break;
+            case WeatherType::Fog:
+                fx.visibilityMultiplier = 1.f - 0.7f * i;
+                break;
+            case WeatherType::Sandstorm:
+                fx.visibilityMultiplier = 1.f - 0.8f * i;
+                fx.movementMultiplier   = 1.f - 0.4f * i;
+                fx.miningMultiplier     = 1.f - 0.3f * i;
+                fx.damagePerSecond      = 2.f * i;
+                fx.disablesNavigation   = i > 0.8f;
+                break;
+            case WeatherType::AcidRain:
+                fx.visibilityMultiplier = 1.f - 0.3f * i;
+                fx.damagePerSecond      = 5.f * i;
+                break;
+            case WeatherType::SolarFlare:
+                fx.visibilityMultiplier = 1.f - 0.2f * i;
+                fx.damagePerSecond      = 8.f * i;
+                fx.disablesScanner      = true;
+                fx.disablesNavigation   = i > 0.5f;
+                break;
+        }
+        return fx;
+    }
+};
+
+/// Forecast entry — a pending future weather event.
+struct WeatherForecastEntry {
+    WeatherType type      = WeatherType::Clear;
+    float intensity       = 0.5f;
+    float duration        = 60.f;
+    float delayUntilStart = 30.f;  // seconds until this event begins
+};
+
+/// Central weather system managing active weather, transitions, and forecasting.
+class WeatherSystem {
+public:
+    static constexpr int kMaxForecast = 8;
+
+    /// Set the active weather condition directly (immediate change).
+    void setWeather(WeatherType type, float intensity, float duration = 0.f) {
+        m_active.type      = type;
+        m_active.intensity = std::max(0.f, std::min(intensity, 1.f));
+        m_active.duration  = duration;
+        m_active.elapsed   = 0.f;
+    }
+
+    /// Queue a weather event in the forecast.
+    void addForecast(const WeatherForecastEntry& entry) {
+        if (static_cast<int>(m_forecast.size()) >= kMaxForecast) return;
+        m_forecast.push_back(entry);
+    }
+
+    /// Clear all forecast entries.
+    void clearForecast() { m_forecast.clear(); }
+
+    /// Advance the weather system by dt seconds.
+    void tick(float dt) {
+        m_active.elapsed += dt;
+
+        // If the current weather has expired, transition to next forecast or clear.
+        if (m_active.isExpired()) {
+            if (!m_forecast.empty()) {
+                auto next = m_forecast.front();
+                m_forecast.erase(m_forecast.begin());
+                setWeather(next.type, next.intensity, next.duration);
+            } else {
+                setWeather(WeatherType::Clear, 0.f);
+            }
+        }
+
+        // Tick forecast delays
+        for (auto& f : m_forecast)
+            f.delayUntilStart = std::max(0.f, f.delayUntilStart - dt);
+
+        // Check if any forecast entry is ready (delay reached zero and current is clear)
+        if (m_active.type == WeatherType::Clear && !m_forecast.empty()) {
+            if (m_forecast.front().delayUntilStart <= 0.f) {
+                auto next = m_forecast.front();
+                m_forecast.erase(m_forecast.begin());
+                setWeather(next.type, next.intensity, next.duration);
+            }
+        }
+    }
+
+    [[nodiscard]] const WeatherCondition& activeWeather() const { return m_active; }
+    [[nodiscard]] WeatherType currentType() const { return m_active.type; }
+    [[nodiscard]] float currentIntensity() const { return m_active.effectiveIntensity(); }
+    [[nodiscard]] bool isClear() const { return m_active.type == WeatherType::Clear; }
+
+    /// Compute the current gameplay effects of the active weather.
+    [[nodiscard]] WeatherEffects currentEffects() const {
+        return WeatherEffects::forCondition(m_active);
+    }
+
+    [[nodiscard]] const std::vector<WeatherForecastEntry>& forecast() const { return m_forecast; }
+    [[nodiscard]] size_t forecastCount() const { return m_forecast.size(); }
+
+    /// Force clear weather immediately.
+    void clearWeather() {
+        setWeather(WeatherType::Clear, 0.f);
+    }
+
+private:
+    WeatherCondition m_active;
+    std::vector<WeatherForecastEntry> m_forecast;
+};
+
+// ── G23 Trading System ────────────────────────────────────────────
+
+enum class TradeGoodCategory : uint8_t {
+    Raw         = 0,
+    Refined     = 1,
+    Component   = 2,
+    Consumable  = 3,
+    Tech        = 4,
+    Luxury      = 5,
+    Contraband  = 6,
+    Data        = 7
+};
+
+inline const char* tradeGoodCategoryName(TradeGoodCategory c) {
+    switch (c) {
+        case TradeGoodCategory::Raw:        return "Raw";
+        case TradeGoodCategory::Refined:    return "Refined";
+        case TradeGoodCategory::Component:  return "Component";
+        case TradeGoodCategory::Consumable: return "Consumable";
+        case TradeGoodCategory::Tech:       return "Tech";
+        case TradeGoodCategory::Luxury:     return "Luxury";
+        case TradeGoodCategory::Contraband: return "Contraband";
+        case TradeGoodCategory::Data:       return "Data";
+    }
+    return "Unknown";
+}
+
+/// Description of a tradeable good.
+struct TradeGood {
+    std::string         id;
+    std::string         name;
+    TradeGoodCategory   category    = TradeGoodCategory::Raw;
+    float               basePrice   = 10.f;    // credits per unit
+    float               weight      = 1.f;     // kg per unit
+    bool                legal       = true;     // false = contraband
+
+    [[nodiscard]] bool isContraband() const { return !legal; }
+};
+
+/// A pending buy or sell offer at a trading post.
+struct TradeOffer {
+    std::string goodId;
+    int         quantity     = 0;
+    float       pricePerUnit = 0.f;
+    bool        isBuyOffer   = true;  // true = the post wants to buy, false = selling
+};
+
+/// A trade route connecting two posts.
+struct TradeRoute {
+    std::string originId;
+    std::string destinationId;
+    std::string goodId;
+    float       profitMargin = 0.f;  // percentage 0-1
+    float       riskLevel    = 0.f;  // 0 = safe, 1 = very dangerous
+    float       distance     = 0.f;  // abstract distance units
+};
+
+/// A single trading post — manages local inventory, pricing, and offers.
+class TradingPost {
+public:
+    TradingPost() = default;
+    TradingPost(const std::string& id, const std::string& name)
+        : m_id(id), m_name(name) {}
+
+    [[nodiscard]] const std::string& postId() const { return m_id; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    /// Add stock of a good.
+    void addStock(const std::string& goodId, int quantity, float pricePerUnit) {
+        for (auto& s : m_stock) {
+            if (s.goodId == goodId) {
+                s.quantity += quantity;
+                s.pricePerUnit = pricePerUnit;
+                return;
+            }
+        }
+        m_stock.push_back({goodId, quantity, pricePerUnit, false});
+    }
+
+    /// Remove stock (e.g. after sale).  Returns actual amount removed.
+    int removeStock(const std::string& goodId, int quantity) {
+        for (auto& s : m_stock) {
+            if (s.goodId == goodId) {
+                int removed = std::min(s.quantity, quantity);
+                s.quantity -= removed;
+                return removed;
+            }
+        }
+        return 0;
+    }
+
+    /// Query current stock for a good.
+    [[nodiscard]] int stockOf(const std::string& goodId) const {
+        for (auto& s : m_stock) if (s.goodId == goodId) return s.quantity;
+        return 0;
+    }
+
+    /// Get the current price for a good.
+    [[nodiscard]] float priceOf(const std::string& goodId) const {
+        for (auto& s : m_stock) if (s.goodId == goodId) return s.pricePerUnit;
+        return 0.f;
+    }
+
+    /// Execute a buy: player buys 'quantity' of goodId from the post.
+    /// Returns total cost (0 if insufficient stock).
+    float buy(const std::string& goodId, int quantity) {
+        for (auto& s : m_stock) {
+            if (s.goodId != goodId) continue;
+            if (s.quantity < quantity) return 0.f;  // insufficient stock
+            float cost = s.pricePerUnit * static_cast<float>(quantity);
+            s.quantity -= quantity;
+            m_totalSales += cost;
+            return cost;
+        }
+        return 0.f;
+    }
+
+    /// Execute a sell: player sells 'quantity' of goodId to the post.
+    /// Returns revenue (buy-back is at 80% of current price).
+    float sell(const std::string& goodId, int quantity, float basePrice) {
+        float sellPrice = basePrice * 0.8f;  // 80% buy-back rate
+        addStock(goodId, quantity, basePrice);
+        float revenue = sellPrice * static_cast<float>(quantity);
+        m_totalPurchases += revenue;
+        return revenue;
+    }
+
+    /// Apply supply/demand price fluctuation per tick.
+    void tickPrices(float dt) {
+        for (auto& s : m_stock) {
+            // Low stock → price rises, high stock → price falls
+            float supplyFactor = 1.f;
+            if (s.quantity < 10)       supplyFactor = 1.05f;
+            else if (s.quantity > 100) supplyFactor = 0.97f;
+            s.pricePerUnit *= std::pow(supplyFactor, dt);
+            s.pricePerUnit = std::max(0.01f, s.pricePerUnit);  // price floor
+        }
+    }
+
+    [[nodiscard]] const std::vector<TradeOffer>& stock() const { return m_stock; }
+    [[nodiscard]] size_t stockCount() const { return m_stock.size(); }
+    [[nodiscard]] float totalSales() const { return m_totalSales; }
+    [[nodiscard]] float totalPurchases() const { return m_totalPurchases; }
+
+    /// Set a tax rate (0-1).
+    void setTaxRate(float rate) { m_taxRate = std::max(0.f, std::min(rate, 1.f)); }
+    [[nodiscard]] float taxRate() const { return m_taxRate; }
+
+private:
+    std::string m_id;
+    std::string m_name;
+    std::vector<TradeOffer> m_stock;
+    float m_totalSales     = 0.f;
+    float m_totalPurchases = 0.f;
+    float m_taxRate        = 0.05f;  // 5% default
+};
+
+/// Central trading system managing all posts, routes, and global economics.
+class TradingSystem {
+public:
+    static constexpr int kMaxPosts  = 32;
+    static constexpr int kMaxRoutes = 64;
+    static constexpr int kMaxGoods  = 128;
+
+    /// Register a trade good definition.
+    void registerGood(const TradeGood& good) {
+        if (static_cast<int>(m_goods.size()) >= kMaxGoods) return;
+        for (auto& g : m_goods) if (g.id == good.id) return;  // no duplicates
+        m_goods.push_back(good);
+    }
+
+    /// Add a trading post.
+    void addPost(TradingPost post) {
+        if (static_cast<int>(m_posts.size()) >= kMaxPosts) return;
+        m_posts.push_back(std::move(post));
+    }
+
+    /// Remove a post by ID.
+    bool removePost(const std::string& id) {
+        for (auto it = m_posts.begin(); it != m_posts.end(); ++it) {
+            if (it->postId() == id) { m_posts.erase(it); return true; }
+        }
+        return false;
+    }
+
+    /// Find a post by ID.
+    [[nodiscard]] TradingPost* findPost(const std::string& id) {
+        for (auto& p : m_posts) if (p.postId() == id) return &p;
+        return nullptr;
+    }
+
+    /// Add a trade route.
+    void addRoute(const TradeRoute& route) {
+        if (static_cast<int>(m_routes.size()) >= kMaxRoutes) return;
+        m_routes.push_back(route);
+    }
+
+    /// Find the trade good definition.
+    [[nodiscard]] const TradeGood* findGood(const std::string& id) const {
+        for (auto& g : m_goods) if (g.id == id) return &g;
+        return nullptr;
+    }
+
+    /// Execute a trade: player buys from a post.
+    float executeBuy(const std::string& postId, const std::string& goodId, int qty) {
+        auto* post = findPost(postId);
+        if (!post) return 0.f;
+        float cost = post->buy(goodId, qty);
+        if (cost > 0.f) m_totalVolume += cost;
+        return cost;
+    }
+
+    /// Execute a trade: player sells to a post.
+    float executeSell(const std::string& postId, const std::string& goodId, int qty) {
+        auto* post = findPost(postId);
+        if (!post) return 0.f;
+        const auto* good = findGood(goodId);
+        float basePrice = good ? good->basePrice : 10.f;
+        float revenue = post->sell(goodId, qty, basePrice);
+        if (revenue > 0.f) m_totalVolume += revenue;
+        return revenue;
+    }
+
+    /// Advance all post prices by dt seconds.
+    void tick(float dt) {
+        for (auto& p : m_posts)
+            p.tickPrices(dt);
+    }
+
+    /// Calculate profit margin for a route (buy at origin, sell at destination).
+    [[nodiscard]] float routeProfitMargin(const TradeRoute& route) const {
+        const TradingPost* origin = nullptr;
+        const TradingPost* dest = nullptr;
+        for (auto& p : m_posts) {
+            if (p.postId() == route.originId) origin = &p;
+            if (p.postId() == route.destinationId) dest = &p;
+        }
+        if (!origin || !dest) return 0.f;
+
+        float buyPrice  = origin->priceOf(route.goodId);
+        float sellPrice = dest->priceOf(route.goodId) * 0.8f;  // sell at 80%
+        if (buyPrice <= 0.f) return 0.f;
+        return (sellPrice - buyPrice) / buyPrice;
+    }
+
+    [[nodiscard]] const std::vector<TradeGood>& goods() const { return m_goods; }
+    [[nodiscard]] const std::vector<TradingPost>& posts() const { return m_posts; }
+    [[nodiscard]] const std::vector<TradeRoute>& routes() const { return m_routes; }
+    [[nodiscard]] size_t postCount() const { return m_posts.size(); }
+    [[nodiscard]] size_t routeCount() const { return m_routes.size(); }
+    [[nodiscard]] size_t goodCount() const { return m_goods.size(); }
+    [[nodiscard]] float totalVolume() const { return m_totalVolume; }
+
+private:
+    std::vector<TradeGood>    m_goods;
+    std::vector<TradingPost>  m_posts;
+    std::vector<TradeRoute>   m_routes;
+    float m_totalVolume = 0.f;
+};
+
+// ── G24 Base Building System ──────────────────────────────────────
+
+enum class BasePartCategory : uint8_t {
+    Foundation = 0,
+    Wall       = 1,
+    Floor      = 2,
+    Ceiling    = 3,
+    Door       = 4,
+    Window     = 5,
+    Utility    = 6,
+    Decoration = 7
+};
+
+inline const char* basePartCategoryName(BasePartCategory c) {
+    switch (c) {
+        case BasePartCategory::Foundation: return "Foundation";
+        case BasePartCategory::Wall:       return "Wall";
+        case BasePartCategory::Floor:      return "Floor";
+        case BasePartCategory::Ceiling:    return "Ceiling";
+        case BasePartCategory::Door:       return "Door";
+        case BasePartCategory::Window:     return "Window";
+        case BasePartCategory::Utility:    return "Utility";
+        case BasePartCategory::Decoration: return "Decoration";
+    }
+    return "Unknown";
+}
+
+/// A single buildable part in a base.
+struct BasePart {
+    std::string       id;
+    std::string       name;
+    BasePartCategory  category   = BasePartCategory::Foundation;
+    float             hitPoints  = 100.f;
+    float             buildCost  = 10.f;   // resource units
+    float             powerDraw  = 0.f;    // watts consumed
+    float             weight     = 1.f;    // kg
+
+    [[nodiscard]] bool requiresPower() const { return powerDraw > 0.f; }
+};
+
+/// Grid coordinates for part placement.
+struct BaseGridPos {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+
+    bool operator==(const BaseGridPos& o) const { return x == o.x && y == o.y && z == o.z; }
+    bool operator!=(const BaseGridPos& o) const { return !(*this == o); }
+};
+
+/// A placed part instance within a base layout.
+struct PlacedBasePart {
+    std::string partId;
+    BaseGridPos position;
+    float       currentHP = 100.f;
+    bool        powered   = true;
+};
+
+/// Grid-based base layout managing part placement and adjacency.
+class BaseLayout {
+public:
+    static constexpr int kMaxParts = 256;
+
+    /// Place a part at the given grid position. Returns false if occupied or at limit.
+    bool placePart(const std::string& partId, BaseGridPos pos, float hp = 100.f) {
+        if (static_cast<int>(m_parts.size()) >= kMaxParts) return false;
+        // Check for collision
+        for (auto& p : m_parts) {
+            if (p.position == pos) return false;
+        }
+        PlacedBasePart pp;
+        pp.partId = partId;
+        pp.position = pos;
+        pp.currentHP = hp;
+        m_parts.push_back(pp);
+        return true;
+    }
+
+    /// Remove a part at the given position.
+    bool removePart(BaseGridPos pos) {
+        for (auto it = m_parts.begin(); it != m_parts.end(); ++it) {
+            if (it->position == pos) { m_parts.erase(it); return true; }
+        }
+        return false;
+    }
+
+    /// Find a part at the given position.
+    [[nodiscard]] PlacedBasePart* partAt(BaseGridPos pos) {
+        for (auto& p : m_parts) if (p.position == pos) return &p;
+        return nullptr;
+    }
+
+    /// Count adjacent parts (Manhattan distance = 1 on same plane or directly above/below).
+    [[nodiscard]] int adjacentCount(BaseGridPos pos) const {
+        int count = 0;
+        for (auto& p : m_parts) {
+            int dx = std::abs(p.position.x - pos.x);
+            int dy = std::abs(p.position.y - pos.y);
+            int dz = std::abs(p.position.z - pos.z);
+            if (dx + dy + dz == 1) ++count;
+        }
+        return count;
+    }
+
+    /// Check structural integrity: every non-foundation part must be adjacent to at least one other part.
+    [[nodiscard]] bool isStructurallySound(
+        const std::vector<BasePart>& partDefs) const {
+        for (auto& placed : m_parts) {
+            // Find the part definition
+            const BasePart* def = nullptr;
+            for (auto& d : partDefs) {
+                if (d.id == placed.partId) { def = &d; break; }
+            }
+            if (!def) continue;
+            // Foundations are always valid
+            if (def->category == BasePartCategory::Foundation) continue;
+            // Other parts need at least one neighbor
+            if (adjacentCount(placed.position) == 0) return false;
+        }
+        return true;
+    }
+
+    /// Calculate total power draw of all parts.
+    [[nodiscard]] float totalPowerDraw(const std::vector<BasePart>& partDefs) const {
+        float total = 0.f;
+        for (auto& placed : m_parts) {
+            for (auto& d : partDefs) {
+                if (d.id == placed.partId) { total += d.powerDraw; break; }
+            }
+        }
+        return total;
+    }
+
+    [[nodiscard]] const std::vector<PlacedBasePart>& parts() const { return m_parts; }
+    [[nodiscard]] size_t partCount() const { return m_parts.size(); }
+    void clear() { m_parts.clear(); }
+
+private:
+    std::vector<PlacedBasePart> m_parts;
+};
+
+/// Defensive capabilities of a base.
+struct BaseDefense {
+    int   turretSlots     = 0;
+    float shieldStrength  = 0.f;    // max shield HP
+    float hullArmor       = 0.f;    // damage reduction percentage 0-1
+    float currentShield   = 0.f;
+
+    /// Take damage — shields absorb first, then hull pass-through.
+    float takeDamage(float damage) {
+        if (currentShield > 0.f) {
+            if (damage <= currentShield) {
+                currentShield -= damage;
+                return 0.f;
+            }
+            damage -= currentShield;
+            currentShield = 0.f;
+        }
+        // Apply armor reduction
+        return damage * (1.f - hullArmor);
+    }
+
+    /// Regenerate shields by amount, capped at max.
+    void regenShield(float amount) {
+        currentShield = std::min(currentShield + amount, shieldStrength);
+    }
+
+    /// Reset shields to full.
+    void resetShields() { currentShield = shieldStrength; }
+};
+
+/// Central base system managing power, life support, storage, and defenses.
+class BaseSystem {
+public:
+    static constexpr int kMaxBases = 8;
+    static constexpr float kDefaultPowerOutput = 100.f;
+
+    /// Register a part definition.
+    void registerPart(const BasePart& part) {
+        for (auto& p : m_partDefs) if (p.id == part.id) return;
+        m_partDefs.push_back(part);
+    }
+
+    /// Create a new base with given name. Returns base index or -1 if at limit.
+    int createBase(const std::string& name) {
+        if (static_cast<int>(m_baseNames.size()) >= kMaxBases) return -1;
+        m_baseNames.push_back(name);
+        m_layouts.emplace_back();
+        m_defenses.emplace_back();
+        m_powerOutputs.push_back(kDefaultPowerOutput);
+        return static_cast<int>(m_baseNames.size()) - 1;
+    }
+
+    /// Remove a base by index.
+    bool removeBase(int index) {
+        if (index < 0 || index >= static_cast<int>(m_baseNames.size())) return false;
+        m_baseNames.erase(m_baseNames.begin() + index);
+        m_layouts.erase(m_layouts.begin() + index);
+        m_defenses.erase(m_defenses.begin() + index);
+        m_powerOutputs.erase(m_powerOutputs.begin() + index);
+        return true;
+    }
+
+    /// Access base layout by index.
+    [[nodiscard]] BaseLayout* layout(int index) {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return nullptr;
+        return &m_layouts[static_cast<size_t>(index)];
+    }
+
+    /// Access base defense by index.
+    [[nodiscard]] BaseDefense* defense(int index) {
+        if (index < 0 || index >= static_cast<int>(m_defenses.size())) return nullptr;
+        return &m_defenses[static_cast<size_t>(index)];
+    }
+
+    /// Get base name.
+    [[nodiscard]] const std::string& baseName(int index) const {
+        static const std::string empty;
+        if (index < 0 || index >= static_cast<int>(m_baseNames.size())) return empty;
+        return m_baseNames[static_cast<size_t>(index)];
+    }
+
+    /// Set power output for a base.
+    void setPowerOutput(int index, float watts) {
+        if (index >= 0 && index < static_cast<int>(m_powerOutputs.size()))
+            m_powerOutputs[static_cast<size_t>(index)] = watts;
+    }
+
+    /// Check if a base has sufficient power (output >= draw).
+    [[nodiscard]] bool hasSufficientPower(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return false;
+        float draw = m_layouts[static_cast<size_t>(index)].totalPowerDraw(m_partDefs);
+        return m_powerOutputs[static_cast<size_t>(index)] >= draw;
+    }
+
+    /// Get available power (output - draw).
+    [[nodiscard]] float availablePower(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_powerOutputs.size())) return 0.f;
+        float draw = m_layouts[static_cast<size_t>(index)].totalPowerDraw(m_partDefs);
+        return m_powerOutputs[static_cast<size_t>(index)] - draw;
+    }
+
+    [[nodiscard]] const std::vector<BasePart>& partDefinitions() const { return m_partDefs; }
+    [[nodiscard]] size_t baseCount() const { return m_baseNames.size(); }
+    [[nodiscard]] size_t partDefCount() const { return m_partDefs.size(); }
+
+    /// Find part definition by ID.
+    [[nodiscard]] const BasePart* findPart(const std::string& id) const {
+        for (auto& p : m_partDefs) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+private:
+    std::vector<BasePart>     m_partDefs;
+    std::vector<std::string>  m_baseNames;
+    std::vector<BaseLayout>   m_layouts;
+    std::vector<BaseDefense>  m_defenses;
+    std::vector<float>        m_powerOutputs;
+};
+
+// ── G25 Habitat System ────────────────────────────────────────────
+
+enum class HabitatZoneType : uint8_t {
+    Living      = 0,
+    Engineering = 1,
+    Medical     = 2,
+    Command     = 3,
+    Cargo       = 4,
+    Recreation  = 5,
+    Hydroponics = 6,
+    Airlock     = 7
+};
+
+inline const char* habitatZoneTypeName(HabitatZoneType t) {
+    switch (t) {
+        case HabitatZoneType::Living:      return "Living";
+        case HabitatZoneType::Engineering: return "Engineering";
+        case HabitatZoneType::Medical:     return "Medical";
+        case HabitatZoneType::Command:     return "Command";
+        case HabitatZoneType::Cargo:       return "Cargo";
+        case HabitatZoneType::Recreation:  return "Recreation";
+        case HabitatZoneType::Hydroponics: return "Hydroponics";
+        case HabitatZoneType::Airlock:     return "Airlock";
+    }
+    return "Unknown";
+}
+
+/// A single zone in a habitat (room/section).
+struct HabitatZone {
+    std::string     id;
+    std::string     name;
+    HabitatZoneType type        = HabitatZoneType::Living;
+    int             capacity    = 4;        // max crew occupancy
+    int             occupants   = 0;
+    float           oxygenLevel = 1.f;      // 0–1 (fraction of normal)
+    float           temperature = 22.f;     // Celsius
+    float           pressure    = 1.f;      // atmospheres
+    bool            sealed      = true;     // false if breached
+
+    [[nodiscard]] bool isHabitable() const {
+        return sealed && oxygenLevel > 0.15f && pressure > 0.5f
+               && temperature > 5.f && temperature < 45.f;
+    }
+
+    [[nodiscard]] bool isBreached() const { return !sealed; }
+
+    [[nodiscard]] float availableCapacity() const {
+        return static_cast<float>(capacity - occupants);
+    }
+};
+
+/// Life support module — maintains atmosphere in connected zones.
+struct LifeSupportModule {
+    std::string id;
+    float oxygenGenRate  = 0.1f;   // O₂ per second
+    float co2ScrubRate   = 0.08f;  // CO₂ removed per second
+    float tempTarget     = 22.f;   // target temperature °C
+    float tempAdjustRate = 0.5f;   // °C per second of convergence
+    float powerDraw      = 15.f;   // watts
+    bool  active         = true;
+
+    [[nodiscard]] bool isOperational() const { return active; }
+};
+
+/// Habitat layout — manages zones and connectivity.
+class HabitatLayout {
+public:
+    static constexpr int kMaxZones = 32;
+
+    /// Add a zone. Returns false if at capacity or duplicate ID.
+    bool addZone(const HabitatZone& zone) {
+        if (static_cast<int>(m_zones.size()) >= kMaxZones) return false;
+        for (auto& z : m_zones) if (z.id == zone.id) return false;
+        m_zones.push_back(zone);
+        return true;
+    }
+
+    /// Remove a zone by ID.
+    bool removeZone(const std::string& id) {
+        for (auto it = m_zones.begin(); it != m_zones.end(); ++it) {
+            if (it->id == id) {
+                // Remove any connections referencing this zone
+                auto cit = m_connections.begin();
+                while (cit != m_connections.end()) {
+                    if (cit->first == id || cit->second == id)
+                        cit = m_connections.erase(cit);
+                    else
+                        ++cit;
+                }
+                m_zones.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Find zone by ID (mutable).
+    [[nodiscard]] HabitatZone* findZone(const std::string& id) {
+        for (auto& z : m_zones) if (z.id == id) return &z;
+        return nullptr;
+    }
+
+    /// Find zone by ID (const).
+    [[nodiscard]] const HabitatZone* findZone(const std::string& id) const {
+        for (auto& z : m_zones) if (z.id == id) return &z;
+        return nullptr;
+    }
+
+    /// Connect two zones (bidirectional passage).
+    bool connect(const std::string& a, const std::string& b) {
+        if (!findZone(a) || !findZone(b)) return false;
+        // Avoid duplicates
+        for (auto& c : m_connections)
+            if ((c.first == a && c.second == b) || (c.first == b && c.second == a))
+                return false;
+        m_connections.emplace_back(a, b);
+        return true;
+    }
+
+    /// Count neighbors of a zone.
+    [[nodiscard]] int neighborCount(const std::string& id) const {
+        int n = 0;
+        for (auto& c : m_connections)
+            if (c.first == id || c.second == id) ++n;
+        return n;
+    }
+
+    /// Get all zones connected to a given zone.
+    [[nodiscard]] std::vector<std::string> neighbors(const std::string& id) const {
+        std::vector<std::string> result;
+        for (auto& c : m_connections) {
+            if (c.first == id) result.push_back(c.second);
+            else if (c.second == id) result.push_back(c.first);
+        }
+        return result;
+    }
+
+    /// Count habitable zones.
+    [[nodiscard]] int habitableCount() const {
+        int n = 0;
+        for (auto& z : m_zones) if (z.isHabitable()) ++n;
+        return n;
+    }
+
+    /// Total crew capacity across habitable zones.
+    [[nodiscard]] int totalCapacity() const {
+        int c = 0;
+        for (auto& z : m_zones)
+            if (z.isHabitable()) c += z.capacity;
+        return c;
+    }
+
+    [[nodiscard]] const std::vector<HabitatZone>& zones() const { return m_zones; }
+    [[nodiscard]] size_t zoneCount() const { return m_zones.size(); }
+    void clear() { m_zones.clear(); m_connections.clear(); }
+
+private:
+    std::vector<HabitatZone> m_zones;
+    std::vector<std::pair<std::string, std::string>> m_connections;
+};
+
+/// Central habitat system — manages habitats, life support, and atmosphere.
+class HabitatSystem {
+public:
+    static constexpr int kMaxHabitats = 4;
+
+    /// Create a new habitat. Returns index or -1 if at limit.
+    int createHabitat(const std::string& name) {
+        if (static_cast<int>(m_names.size()) >= kMaxHabitats) return -1;
+        m_names.push_back(name);
+        m_layouts.emplace_back();
+        m_lifeSupportModules.emplace_back();
+        return static_cast<int>(m_names.size()) - 1;
+    }
+
+    /// Add a life support module to a habitat.
+    bool addLifeSupport(int habIdx, const LifeSupportModule& mod) {
+        if (habIdx < 0 || habIdx >= static_cast<int>(m_lifeSupportModules.size()))
+            return false;
+        m_lifeSupportModules[static_cast<size_t>(habIdx)].push_back(mod);
+        return true;
+    }
+
+    /// Access layout for a habitat.
+    [[nodiscard]] HabitatLayout* layout(int index) {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return nullptr;
+        return &m_layouts[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] const HabitatLayout* layout(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return nullptr;
+        return &m_layouts[static_cast<size_t>(index)];
+    }
+
+    /// Get habitat name.
+    [[nodiscard]] const std::string& habitatName(int index) const {
+        static const std::string empty;
+        if (index < 0 || index >= static_cast<int>(m_names.size())) return empty;
+        return m_names[static_cast<size_t>(index)];
+    }
+
+    /// Simulate atmosphere tick for a habitat.
+    /// Oxygen generation, CO₂ scrubbing, and temperature convergence.
+    void tickAtmosphere(int habIdx, float dt) {
+        if (habIdx < 0 || habIdx >= static_cast<int>(m_layouts.size())) return;
+
+        auto& layout = m_layouts[static_cast<size_t>(habIdx)];
+        auto& modules = m_lifeSupportModules[static_cast<size_t>(habIdx)];
+
+        // Aggregate life support rates
+        float totalO2Gen = 0.f;
+        float totalTempTarget = 0.f;
+        float totalTempRate = 0.f;
+        int activeCount = 0;
+        for (auto& mod : modules) {
+            if (!mod.active) continue;
+            totalO2Gen += mod.oxygenGenRate;
+            totalTempTarget += mod.tempTarget;
+            totalTempRate += mod.tempAdjustRate;
+            ++activeCount;
+        }
+        if (activeCount > 0)
+            totalTempTarget /= static_cast<float>(activeCount);
+
+        // Apply to each sealed zone
+        for (auto& zone : const_cast<std::vector<HabitatZone>&>(layout.zones())) {
+            if (!zone.sealed) continue;
+
+            // Oxygen: generate toward 1.0, reduced by occupants
+            float o2Drain = static_cast<float>(zone.occupants) * 0.02f * dt;
+            zone.oxygenLevel += (totalO2Gen * dt - o2Drain);
+            zone.oxygenLevel = std::clamp(zone.oxygenLevel, 0.f, 1.f);
+
+            // Temperature: converge toward target
+            if (activeCount > 0) {
+                float diff = totalTempTarget - zone.temperature;
+                float adj = totalTempRate * dt;
+                if (std::abs(diff) <= adj)
+                    zone.temperature = totalTempTarget;
+                else
+                    zone.temperature += (diff > 0.f ? adj : -adj);
+            }
+        }
+    }
+
+    /// Breach a zone — sets sealed=false, vents atmosphere.
+    bool breachZone(int habIdx, const std::string& zoneId) {
+        auto* lay = layout(habIdx);
+        if (!lay) return false;
+        auto* zone = lay->findZone(zoneId);
+        if (!zone) return false;
+        zone->sealed = false;
+        zone->oxygenLevel = 0.f;
+        zone->pressure = 0.f;
+        return true;
+    }
+
+    /// Repair a breach — re-seals the zone.
+    bool repairBreach(int habIdx, const std::string& zoneId) {
+        auto* lay = layout(habIdx);
+        if (!lay) return false;
+        auto* zone = lay->findZone(zoneId);
+        if (!zone) return false;
+        zone->sealed = true;
+        zone->pressure = 1.f;
+        return true;
+    }
+
+    /// Total life support power draw for a habitat.
+    [[nodiscard]] float lifeSupportPowerDraw(int habIdx) const {
+        if (habIdx < 0 || habIdx >= static_cast<int>(m_lifeSupportModules.size()))
+            return 0.f;
+        float total = 0.f;
+        for (auto& mod : m_lifeSupportModules[static_cast<size_t>(habIdx)])
+            if (mod.active) total += mod.powerDraw;
+        return total;
+    }
+
+    [[nodiscard]] size_t habitatCount() const { return m_names.size(); }
+
+private:
+    std::vector<std::string>                    m_names;
+    std::vector<HabitatLayout>                  m_layouts;
+    std::vector<std::vector<LifeSupportModule>> m_lifeSupportModules;
+};
+
 } // namespace NF

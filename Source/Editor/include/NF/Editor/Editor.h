@@ -2149,6 +2149,1068 @@ private:
     uint64_t m_updateStart = 0;
 };
 
+// ── M2/S1: Dev World Editing ─────────────────────────────────────
+
+// Integer 3D vector for voxel coordinates.
+struct Vec3i {
+    int x = 0, y = 0, z = 0;
+    bool operator==(const Vec3i& o) const { return x == o.x && y == o.y && z == o.z; }
+    bool operator!=(const Vec3i& o) const { return !(*this == o); }
+};
+
+// ── PCG Tuning ──────────────────────────────────────────────────
+
+struct NoiseParams {
+    float frequency   = 1.0f;
+    float amplitude   = 1.0f;
+    int   octaves     = 4;
+    float lacunarity  = 2.0f;
+    float persistence = 0.5f;
+    int   seed        = 42;
+
+    bool operator==(const NoiseParams& o) const {
+        return frequency == o.frequency && amplitude == o.amplitude &&
+               octaves == o.octaves && lacunarity == o.lacunarity &&
+               persistence == o.persistence && seed == o.seed;
+    }
+    bool operator!=(const NoiseParams& o) const { return !(*this == o); }
+};
+
+struct PCGPreset {
+    std::string name;
+    NoiseParams params;
+};
+
+class PCGTuningPanel : public EditorPanel {
+public:
+    PCGTuningPanel() { m_name = "PCGTuning"; }
+
+    [[nodiscard]] const std::string& name() const override { return m_name; }
+    [[nodiscard]] DockSlot slot() const override { return DockSlot::Right; }
+    void update(float /*dt*/) override {}
+    void render(UIRenderer& /*ui*/, const Rect& /*bounds*/, const EditorTheme& /*theme*/) override {}
+
+    void setNoiseParams(const NoiseParams& p) { m_params = p; m_dirty = true; }
+    [[nodiscard]] const NoiseParams& noiseParams() const { return m_params; }
+
+    void addPreset(const PCGPreset& preset) { m_presets.push_back(preset); }
+
+    bool removePreset(const std::string& presetName) {
+        auto it = std::find_if(m_presets.begin(), m_presets.end(),
+                               [&](const PCGPreset& p) { return p.name == presetName; });
+        if (it == m_presets.end()) return false;
+        m_presets.erase(it);
+        return true;
+    }
+
+    bool applyPreset(const std::string& presetName) {
+        auto it = std::find_if(m_presets.begin(), m_presets.end(),
+                               [&](const PCGPreset& p) { return p.name == presetName; });
+        if (it == m_presets.end()) return false;
+        m_params = it->params;
+        m_dirty = true;
+        return true;
+    }
+
+    [[nodiscard]] size_t presetCount() const { return m_presets.size(); }
+    [[nodiscard]] const std::vector<PCGPreset>& presets() const { return m_presets; }
+
+    void setSeed(int seed) { m_params.seed = seed; m_dirty = true; }
+
+    void randomizeSeed() {
+        m_params.seed = static_cast<int>(std::hash<size_t>{}(
+            static_cast<size_t>(m_params.seed) ^ 0x9E3779B97F4A7C15ULL));
+        m_dirty = true;
+    }
+
+    void markDirty() { m_dirty = true; }
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void clearDirty() { m_dirty = false; }
+
+private:
+    std::string m_name;
+    NoiseParams m_params;
+    std::vector<PCGPreset> m_presets;
+    bool m_dirty = false;
+};
+
+// ── Entity Placement ────────────────────────────────────────────
+
+struct PlacedEntity {
+    EntityID    entityId     = INVALID_ENTITY;
+    std::string templateName;
+    Vec3        position;
+    Vec3        rotation;
+    Vec3        scale{1.f, 1.f, 1.f};
+};
+
+class EntityPlacementTool {
+public:
+    void setActiveTemplate(const std::string& tplName) { m_activeTemplate = tplName; }
+    [[nodiscard]] const std::string& activeTemplate() const { return m_activeTemplate; }
+
+    EntityID placeEntity(const Vec3& pos, const Vec3& rot = {}, const Vec3& scl = {1.f, 1.f, 1.f}) {
+        PlacedEntity e;
+        e.entityId = m_nextId++;
+        e.templateName = m_activeTemplate;
+        e.position = m_gridSnap ? snapToGrid(pos) : pos;
+        e.rotation = rot;
+        e.scale = scl;
+        m_entities.push_back(e);
+        return e.entityId;
+    }
+
+    void addEntity(const PlacedEntity& e) {
+        m_entities.push_back(e);
+        if (e.entityId >= m_nextId) m_nextId = e.entityId + 1;
+    }
+
+    bool removeEntity(EntityID id) {
+        auto it = std::find_if(m_entities.begin(), m_entities.end(),
+                               [id](const PlacedEntity& pe) { return pe.entityId == id; });
+        if (it == m_entities.end()) return false;
+        m_entities.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] const std::vector<PlacedEntity>& placedEntities() const { return m_entities; }
+    [[nodiscard]] size_t placedCount() const { return m_entities.size(); }
+
+    void setGridSnap(bool enabled) { m_gridSnap = enabled; }
+    void setGridSize(float size) { m_gridSize = size; }
+    [[nodiscard]] bool isGridSnapEnabled() const { return m_gridSnap; }
+    [[nodiscard]] float gridSize() const { return m_gridSize; }
+
+    [[nodiscard]] Vec3 snapToGrid(const Vec3& v) const {
+        if (m_gridSize <= 0.f) return v;
+        return {
+            std::round(v.x / m_gridSize) * m_gridSize,
+            std::round(v.y / m_gridSize) * m_gridSize,
+            std::round(v.z / m_gridSize) * m_gridSize
+        };
+    }
+
+    void clear() { m_entities.clear(); }
+
+private:
+    std::vector<PlacedEntity> m_entities;
+    std::string m_activeTemplate;
+    EntityID m_nextId = 1;
+    bool  m_gridSnap = false;
+    float m_gridSize = 1.0f;
+};
+
+// ── Voxel Paint ─────────────────────────────────────────────────
+
+enum class VoxelBrushShape : uint8_t { Sphere, Cube, Cylinder };
+
+struct VoxelBrushSettings {
+    VoxelBrushShape shape = VoxelBrushShape::Sphere;
+    int      radius     = 1;
+    uint32_t materialId = 0;
+    float    strength   = 1.0f;
+};
+
+struct PaintStroke {
+    std::vector<Vec3i> positions;
+    uint32_t materialId = 0;
+    VoxelBrushSettings brush;
+};
+
+class VoxelPaintTool {
+public:
+    void setBrush(const VoxelBrushSettings& b) { m_brush = b; }
+    [[nodiscard]] const VoxelBrushSettings& brush() const { return m_brush; }
+
+    void beginStroke() {
+        m_currentStroke = PaintStroke{};
+        m_currentStroke.materialId = m_brush.materialId;
+        m_currentStroke.brush = m_brush;
+        m_stroking = true;
+    }
+
+    void addToStroke(const Vec3i& pos) {
+        if (m_stroking) m_currentStroke.positions.push_back(pos);
+    }
+
+    void endStroke() {
+        if (m_stroking) {
+            m_strokes.push_back(std::move(m_currentStroke));
+            m_currentStroke = PaintStroke{};
+            m_stroking = false;
+        }
+    }
+
+    void addStroke(const PaintStroke& stroke) { m_strokes.push_back(stroke); }
+
+    bool removeLastStroke() {
+        if (m_strokes.empty()) return false;
+        m_strokes.pop_back();
+        return true;
+    }
+
+    [[nodiscard]] bool isStroking() const { return m_stroking; }
+    [[nodiscard]] const std::vector<PaintStroke>& strokes() const { return m_strokes; }
+    [[nodiscard]] size_t strokeCount() const { return m_strokes.size(); }
+
+    void clear() {
+        m_strokes.clear();
+        m_stroking = false;
+        m_currentStroke = PaintStroke{};
+    }
+
+    static constexpr size_t kMaxPaletteSize = 32;
+
+    void setPaletteSlot(int slot, uint32_t materialId) {
+        if (slot < 0 || static_cast<size_t>(slot) >= kMaxPaletteSize) return;
+        if (static_cast<size_t>(slot) >= m_palette.size())
+            m_palette.resize(static_cast<size_t>(slot) + 1, 0);
+        m_palette[static_cast<size_t>(slot)] = materialId;
+    }
+
+    [[nodiscard]] uint32_t getPaletteSlot(int slot) const {
+        if (slot < 0 || static_cast<size_t>(slot) >= m_palette.size()) return 0;
+        return m_palette[static_cast<size_t>(slot)];
+    }
+
+    [[nodiscard]] size_t paletteSize() const { return m_palette.size(); }
+
+    void setActivePaletteSlot(int slot) {
+        m_activePaletteSlot = slot;
+        if (slot >= 0 && static_cast<size_t>(slot) < m_palette.size())
+            m_brush.materialId = m_palette[static_cast<size_t>(slot)];
+    }
+    [[nodiscard]] int activePaletteSlot() const { return m_activePaletteSlot; }
+
+private:
+    VoxelBrushSettings m_brush;
+    PaintStroke m_currentStroke;
+    bool m_stroking = false;
+    std::vector<PaintStroke> m_strokes;
+    std::vector<uint32_t> m_palette;
+    int m_activePaletteSlot = -1;
+};
+
+// ── Editor Undo System ──────────────────────────────────────────
+
+class PlaceEntityCommand : public ICommand {
+public:
+    PlaceEntityCommand(EntityPlacementTool& tool, PlacedEntity entity)
+        : m_tool(tool), m_entity(std::move(entity)) {}
+
+    void execute() override { m_tool.addEntity(m_entity); }
+    void undo() override    { m_tool.removeEntity(m_entity.entityId); }
+    [[nodiscard]] std::string description() const override {
+        return "Place Entity " + m_entity.templateName;
+    }
+
+private:
+    EntityPlacementTool& m_tool;
+    PlacedEntity m_entity;
+};
+
+class RemoveEntityCommand : public ICommand {
+public:
+    RemoveEntityCommand(EntityPlacementTool& tool, EntityID id)
+        : m_tool(tool), m_id(id) {
+        for (auto& e : m_tool.placedEntities()) {
+            if (e.entityId == id) { m_entity = e; break; }
+        }
+    }
+
+    void execute() override { m_tool.removeEntity(m_id); }
+    void undo() override    { m_tool.addEntity(m_entity); }
+    [[nodiscard]] std::string description() const override {
+        return "Remove Entity " + std::to_string(m_id);
+    }
+
+private:
+    EntityPlacementTool& m_tool;
+    EntityID m_id;
+    PlacedEntity m_entity;
+};
+
+class PaintStrokeCommand : public ICommand {
+public:
+    PaintStrokeCommand(VoxelPaintTool& tool, PaintStroke stroke)
+        : m_tool(tool), m_stroke(std::move(stroke)) {}
+
+    void execute() override { m_tool.addStroke(m_stroke); }
+    void undo() override    { m_tool.removeLastStroke(); }
+    [[nodiscard]] std::string description() const override {
+        return "Paint Stroke (" + std::to_string(m_stroke.positions.size()) + " voxels)";
+    }
+
+private:
+    VoxelPaintTool& m_tool;
+    PaintStroke m_stroke;
+};
+
+class PCGParamChangeCommand : public ICommand {
+public:
+    PCGParamChangeCommand(PCGTuningPanel& panel, NoiseParams oldParams, NoiseParams newParams)
+        : m_panel(panel), m_old(std::move(oldParams)), m_new(std::move(newParams)) {}
+
+    void execute() override { m_panel.setNoiseParams(m_new); }
+    void undo() override    { m_panel.setNoiseParams(m_old); }
+    [[nodiscard]] std::string description() const override { return "Change PCG Parameters"; }
+
+private:
+    PCGTuningPanel& m_panel;
+    NoiseParams m_old;
+    NoiseParams m_new;
+};
+
+class EditorUndoSystem {
+public:
+    explicit EditorUndoSystem(CommandStack& stack) : m_stack(stack) {}
+
+    void executePlaceEntity(EntityPlacementTool& tool, const PlacedEntity& entity) {
+        m_stack.execute(std::make_unique<PlaceEntityCommand>(tool, entity));
+    }
+
+    void executeRemoveEntity(EntityPlacementTool& tool, EntityID id) {
+        m_stack.execute(std::make_unique<RemoveEntityCommand>(tool, id));
+    }
+
+    void executePaintStroke(VoxelPaintTool& tool, const PaintStroke& stroke) {
+        m_stack.execute(std::make_unique<PaintStrokeCommand>(tool, stroke));
+    }
+
+    void executePCGChange(PCGTuningPanel& panel, const NoiseParams& oldP, const NoiseParams& newP) {
+        m_stack.execute(std::make_unique<PCGParamChangeCommand>(panel, oldP, newP));
+    }
+
+    bool undo()  { return m_stack.undo(); }
+    bool redo()  { return m_stack.redo(); }
+    [[nodiscard]] bool canUndo() const { return m_stack.canUndo(); }
+    [[nodiscard]] bool canRedo() const { return m_stack.canRedo(); }
+    [[nodiscard]] size_t undoCount() const { return m_stack.undoCount(); }
+    [[nodiscard]] size_t redoCount() const { return m_stack.redoCount(); }
+
+private:
+    CommandStack& m_stack;
+};
+
+// ── World Preview Service ───────────────────────────────────────
+
+enum class PreviewState : uint8_t { Idle, Loading, Ready, Error };
+
+class WorldPreviewService {
+public:
+    void loadPreview(const std::string& path) {
+        m_worldPath = path;
+        if (path.empty()) {
+            m_state = PreviewState::Error;
+            m_lastError = "Empty path";
+            return;
+        }
+        m_state = PreviewState::Loading;
+        m_state = PreviewState::Ready;
+        m_dirty = false;
+    }
+
+    void unloadPreview() {
+        m_worldPath.clear();
+        m_state = PreviewState::Idle;
+        m_dirty = false;
+        m_lastError.clear();
+    }
+
+    [[nodiscard]] PreviewState state() const { return m_state; }
+    [[nodiscard]] const std::string& worldPath() const { return m_worldPath; }
+
+    void setViewCenter(const Vec3& center) { m_viewCenter = center; }
+    [[nodiscard]] const Vec3& viewCenter() const { return m_viewCenter; }
+
+    void setViewRadius(float r) { m_viewRadius = r; }
+    [[nodiscard]] float viewRadius() const { return m_viewRadius; }
+
+    void setDirty() { m_dirty = true; }
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void clearDirty() { m_dirty = false; }
+
+    [[nodiscard]] const std::string& lastError() const { return m_lastError; }
+
+private:
+    PreviewState m_state = PreviewState::Idle;
+    std::string m_worldPath;
+    Vec3 m_viewCenter;
+    float m_viewRadius = 100.0f;
+    bool m_dirty = false;
+    std::string m_lastError;
+};
+
+// ── M3/S2 Play-in-Editor ──────────────────────────────────────────
+
+enum class PlayState : uint8_t {
+    Stopped = 0,
+    Running,
+    Paused
+};
+
+inline const char* playStateName(PlayState s) {
+    switch (s) {
+        case PlayState::Stopped: return "Stopped";
+        case PlayState::Running: return "Running";
+        case PlayState::Paused:  return "Paused";
+    }
+    return "Unknown";
+}
+
+/// Snapshot of the world state captured before Play-in-Editor starts,
+/// so that stop restores everything.
+struct EditorWorldSnapshot {
+    std::string worldPath;
+    std::vector<PlacedEntity> placedEntities;
+    NoiseParams pcgParams;
+    Vec3 cameraPosition;
+    float cameraYaw   = 0.f;
+    float cameraPitch  = 0.f;
+    bool valid = false;
+
+    void capture(const std::string& path,
+                 const std::vector<PlacedEntity>& entities,
+                 const NoiseParams& params,
+                 const Vec3& camPos, float yaw, float pitch) {
+        worldPath       = path;
+        placedEntities  = entities;
+        pcgParams       = params;
+        cameraPosition  = camPos;
+        cameraYaw       = yaw;
+        cameraPitch     = pitch;
+        valid           = true;
+    }
+
+    void invalidate() { valid = false; }
+};
+
+/// Manages an in-editor play session (PIE).
+///
+/// Lifecycle:
+///   1. User presses Play → snapshot captured, state → Running
+///   2. User presses Pause → state → Paused (time frozen)
+///   3. User presses Stop → state → Stopped, world restored from snapshot
+class EditorWorldSession {
+public:
+    [[nodiscard]] PlayState state() const { return m_state; }
+    [[nodiscard]] float elapsedTime() const { return m_elapsed; }
+    [[nodiscard]] uint64_t frameCount() const { return m_frames; }
+    [[nodiscard]] const EditorWorldSnapshot& snapshot() const { return m_snapshot; }
+    [[nodiscard]] bool hasSnapshot() const { return m_snapshot.valid; }
+
+    /// Begin a play session — captures the current snapshot.
+    bool start(const std::string& worldPath,
+               const std::vector<PlacedEntity>& entities,
+               const NoiseParams& params,
+               const Vec3& camPos, float yaw, float pitch) {
+        if (m_state != PlayState::Stopped) return false;
+        m_snapshot.capture(worldPath, entities, params, camPos, yaw, pitch);
+        m_state   = PlayState::Running;
+        m_elapsed = 0.f;
+        m_frames  = 0;
+        return true;
+    }
+
+    bool pause() {
+        if (m_state != PlayState::Running) return false;
+        m_state = PlayState::Paused;
+        return true;
+    }
+
+    bool resume() {
+        if (m_state != PlayState::Paused) return false;
+        m_state = PlayState::Running;
+        return true;
+    }
+
+    bool stop() {
+        if (m_state == PlayState::Stopped) return false;
+        m_state = PlayState::Stopped;
+        // Snapshot remains valid for restoration
+        return true;
+    }
+
+    void tick(float dt) {
+        if (m_state == PlayState::Running) {
+            m_elapsed += dt;
+            ++m_frames;
+        }
+    }
+
+private:
+    PlayState m_state = PlayState::Stopped;
+    float m_elapsed   = 0.f;
+    uint64_t m_frames = 0;
+    EditorWorldSnapshot m_snapshot;
+};
+
+/// High-level Play-in-Editor controller that integrates with the rest of
+/// the editor — captures/restores entity placement, PCG params, camera.
+class PlayInEditorSystem {
+public:
+    PlayInEditorSystem() = default;
+
+    explicit PlayInEditorSystem(EntityPlacementTool* placement,
+                                PCGTuningPanel* pcg,
+                                ViewportPanel* viewport)
+        : m_placement(placement), m_pcg(pcg), m_viewport(viewport) {}
+
+    void setPlacementTool(EntityPlacementTool* t) { m_placement = t; }
+    void setPCGTuningPanel(PCGTuningPanel* p) { m_pcg = p; }
+    void setViewportPanel(ViewportPanel* v) { m_viewport = v; }
+
+    [[nodiscard]] PlayState state() const { return m_session.state(); }
+    [[nodiscard]] float elapsedTime() const { return m_session.elapsedTime(); }
+    [[nodiscard]] uint64_t frameCount() const { return m_session.frameCount(); }
+    [[nodiscard]] const EditorWorldSession& session() const { return m_session; }
+
+    [[nodiscard]] bool isRunning() const { return m_session.state() == PlayState::Running; }
+    [[nodiscard]] bool isPaused()  const { return m_session.state() == PlayState::Paused; }
+    [[nodiscard]] bool isStopped() const { return m_session.state() == PlayState::Stopped; }
+
+    /// Start play — snapshots the current editor state.
+    bool start(const std::string& worldPath = "") {
+        // Gather current state
+        std::vector<PlacedEntity> entities;
+        NoiseParams params;
+        Vec3 camPos{};
+        float yaw = 0.f, pitch = 0.f;
+
+        if (m_placement)
+            entities = m_placement->placedEntities();
+        if (m_pcg)
+            params = m_pcg->noiseParams();
+        if (m_viewport) {
+            camPos = m_viewport->cameraPosition();
+            yaw    = m_viewport->cameraYaw();
+            pitch  = m_viewport->cameraPitch();
+        }
+
+        bool ok = m_session.start(worldPath, entities, params, camPos, yaw, pitch);
+        if (ok) {
+            NF_LOG_INFO("PIE", "Play-in-Editor started");
+        }
+        return ok;
+    }
+
+    bool pause() {
+        bool ok = m_session.pause();
+        if (ok) NF_LOG_INFO("PIE", "Play-in-Editor paused");
+        return ok;
+    }
+
+    bool resume() {
+        bool ok = m_session.resume();
+        if (ok) NF_LOG_INFO("PIE", "Play-in-Editor resumed");
+        return ok;
+    }
+
+    /// Stop play — restores the pre-play snapshot to the editor state.
+    bool stop() {
+        bool ok = m_session.stop();
+        if (!ok) return false;
+
+        // Restore from snapshot
+        const auto& snap = m_session.snapshot();
+        if (snap.valid) {
+            if (m_placement) {
+                m_placement->clear();
+                for (auto& e : snap.placedEntities)
+                    m_placement->addEntity(e);
+            }
+            if (m_pcg)
+                m_pcg->setNoiseParams(snap.pcgParams);
+            if (m_viewport) {
+                m_viewport->setCameraPosition(snap.cameraPosition);
+                m_viewport->setCameraYaw(snap.cameraYaw);
+                m_viewport->setCameraPitch(snap.cameraPitch);
+            }
+        }
+        NF_LOG_INFO("PIE", "Play-in-Editor stopped — world restored");
+        return true;
+    }
+
+    /// Toggle: Start/Resume if stopped/paused, Pause if running.
+    void togglePlay() {
+        switch (m_session.state()) {
+            case PlayState::Stopped: start(); break;
+            case PlayState::Running: pause(); break;
+            case PlayState::Paused:  resume(); break;
+        }
+    }
+
+    void tick(float dt) { m_session.tick(dt); }
+
+private:
+    EditorWorldSession m_session;
+    EntityPlacementTool* m_placement = nullptr;
+    PCGTuningPanel*      m_pcg       = nullptr;
+    ViewportPanel*       m_viewport  = nullptr;
+};
+
+// ── M4/S3 Asset Pipeline ──────────────────────────────────────────
+
+/// 128-bit asset GUID for stable references across renames and moves.
+struct AssetGuid {
+    uint64_t hi = 0;
+    uint64_t lo = 0;
+
+    [[nodiscard]] bool isNull() const { return hi == 0 && lo == 0; }
+
+    bool operator==(const AssetGuid& o) const { return hi == o.hi && lo == o.lo; }
+    bool operator!=(const AssetGuid& o) const { return !(*this == o); }
+    bool operator<(const AssetGuid& o) const {
+        return hi < o.hi || (hi == o.hi && lo < o.lo);
+    }
+
+    /// Generate a deterministic GUID from a path string (FNV-1a based).
+    static AssetGuid fromPath(const std::string& path) {
+        AssetGuid g;
+        // FNV-1a 64-bit for hi
+        uint64_t h = 14695981039346656037ULL;
+        for (char c : path) {
+            h ^= static_cast<uint64_t>(static_cast<unsigned char>(c));
+            h *= 1099511628211ULL;
+        }
+        g.hi = h;
+        // Second pass with different seed for lo
+        h = 17316040143175676883ULL;
+        for (auto it = path.rbegin(); it != path.rend(); ++it) {
+            h ^= static_cast<uint64_t>(static_cast<unsigned char>(*it));
+            h *= 1099511628211ULL;
+        }
+        g.lo = h;
+        return g;
+    }
+
+    /// Generate a unique GUID from a counter (for testing / new assets).
+    static AssetGuid generate(uint64_t counter) {
+        AssetGuid g;
+        g.hi = 0x4F00FACE00000000ULL | (counter >> 32);
+        g.lo = (counter & 0xFFFFFFFFULL) | 0xA55E700000000000ULL;
+        return g;
+    }
+
+    [[nodiscard]] std::string toString() const {
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), "%016llx-%016llx",
+                      static_cast<unsigned long long>(hi),
+                      static_cast<unsigned long long>(lo));
+        return buf;
+    }
+};
+
+enum class AssetType : uint8_t {
+    Unknown  = 0,
+    Mesh     = 1,
+    Texture  = 2,
+    Material = 3,
+    Sound    = 4,
+    Script   = 5,
+    Graph    = 6,
+    World    = 7
+};
+
+inline const char* assetTypeName(AssetType t) {
+    switch (t) {
+        case AssetType::Mesh:     return "Mesh";
+        case AssetType::Texture:  return "Texture";
+        case AssetType::Material: return "Material";
+        case AssetType::Sound:    return "Sound";
+        case AssetType::Script:   return "Script";
+        case AssetType::Graph:    return "Graph";
+        case AssetType::World:    return "World";
+        default:                  return "Unknown";
+    }
+}
+
+inline AssetType classifyAssetExtension(const std::string& ext) {
+    if (ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb") return AssetType::Mesh;
+    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") return AssetType::Texture;
+    if (ext == ".mat" || ext == ".nfmat") return AssetType::Material;
+    if (ext == ".wav" || ext == ".ogg" || ext == ".mp3") return AssetType::Sound;
+    if (ext == ".lua" || ext == ".nfs") return AssetType::Script;
+    if (ext == ".nfg") return AssetType::Graph;
+    if (ext == ".nfw") return AssetType::World;
+    return AssetType::Unknown;
+}
+
+/// An entry in the asset database.
+struct AssetEntry {
+    AssetGuid   guid;
+    std::string path;          // relative to content root
+    std::string name;          // filename without extension
+    AssetType   type       = AssetType::Unknown;
+    uint64_t    lastModified = 0;  // epoch seconds
+    size_t      sizeBytes  = 0;
+    bool        imported   = false;
+};
+
+/// Central GUID-based asset registry.  Maps paths↔GUIDs and tracks import state.
+class AssetDatabase {
+public:
+    /// Register an asset.  If the path already exists the existing entry is updated.
+    AssetGuid registerAsset(const std::string& relativePath, AssetType type,
+                            size_t sizeBytes = 0, uint64_t lastMod = 0) {
+        // Check if path already registered
+        for (auto& e : m_entries) {
+            if (e.path == relativePath) {
+                e.type = type;
+                e.sizeBytes = sizeBytes;
+                e.lastModified = lastMod;
+                return e.guid;
+            }
+        }
+        AssetEntry entry;
+        entry.guid = AssetGuid::fromPath(relativePath);
+        entry.path = relativePath;
+        entry.type = type;
+        entry.sizeBytes = sizeBytes;
+        entry.lastModified = lastMod;
+
+        // Extract name from path
+        auto pos = relativePath.find_last_of("/\\");
+        std::string filename = (pos != std::string::npos) ? relativePath.substr(pos + 1) : relativePath;
+        auto dotPos = filename.find_last_of('.');
+        entry.name = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
+
+        m_entries.push_back(entry);
+        return entry.guid;
+    }
+
+    /// Remove an asset by GUID.
+    bool removeAsset(const AssetGuid& guid) {
+        for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
+            if (it->guid == guid) { m_entries.erase(it); return true; }
+        }
+        return false;
+    }
+
+    /// Find by GUID.
+    [[nodiscard]] AssetEntry* findByGuid(const AssetGuid& guid) {
+        for (auto& e : m_entries) if (e.guid == guid) return &e;
+        return nullptr;
+    }
+    [[nodiscard]] const AssetEntry* findByGuid(const AssetGuid& guid) const {
+        for (auto& e : m_entries) if (e.guid == guid) return &e;
+        return nullptr;
+    }
+
+    /// Find by relative path.
+    [[nodiscard]] AssetEntry* findByPath(const std::string& path) {
+        for (auto& e : m_entries) if (e.path == path) return &e;
+        return nullptr;
+    }
+
+    /// Mark an asset as imported.
+    bool markImported(const AssetGuid& guid) {
+        if (auto* e = findByGuid(guid)) { e->imported = true; return true; }
+        return false;
+    }
+
+    /// Scan a directory tree and register all recognised asset files.
+    size_t scanDirectory(const std::string& rootPath) {
+        size_t count = 0;
+        if (!std::filesystem::exists(rootPath)) return 0;
+        for (auto& entry : std::filesystem::recursive_directory_iterator(rootPath)) {
+            if (!entry.is_regular_file()) continue;
+            auto ext = entry.path().extension().string();
+            AssetType type = classifyAssetExtension(ext);
+            if (type == AssetType::Unknown) continue;
+
+            std::string relPath = entry.path().string();
+            // Normalise to forward slashes
+            for (char& c : relPath) if (c == '\\') c = '/';
+
+            uint64_t lastMod = 0;
+            auto ftime = std::filesystem::last_write_time(entry);
+            lastMod = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    ftime.time_since_epoch()).count());
+
+            registerAsset(relPath, type, static_cast<size_t>(entry.file_size()), lastMod);
+            ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] const std::vector<AssetEntry>& entries() const { return m_entries; }
+    [[nodiscard]] size_t assetCount() const { return m_entries.size(); }
+
+    /// Return all assets of a given type.
+    [[nodiscard]] std::vector<const AssetEntry*> assetsOfType(AssetType type) const {
+        std::vector<const AssetEntry*> result;
+        for (auto& e : m_entries) if (e.type == type) result.push_back(&e);
+        return result;
+    }
+
+    [[nodiscard]] size_t importedCount() const {
+        size_t n = 0;
+        for (auto& e : m_entries) if (e.imported) ++n;
+        return n;
+    }
+
+    void clear() { m_entries.clear(); }
+
+private:
+    std::vector<AssetEntry> m_entries;
+};
+
+/// Import settings for mesh assets.
+struct MeshImportSettings {
+    float scaleFactor       = 1.0f;
+    bool  generateNormals   = true;
+    bool  generateTangents  = false;
+    bool  flipWindingOrder  = false;
+    bool  mergeMeshes       = false;
+    int   maxVertices       = 0;  // 0 = no limit
+};
+
+/// Import settings for texture assets.
+struct TextureImportSettings {
+    bool  generateMipmaps    = true;
+    bool  sRGB               = true;
+    int   maxResolution      = 0;   // 0 = no limit
+    bool  premultiplyAlpha   = false;
+    bool  flipVertically     = true;
+    float compressionQuality = 0.8f; // 0-1
+};
+
+/// Mesh importer — validates and "imports" mesh files into the asset database.
+class MeshImporter {
+public:
+    void setSettings(const MeshImportSettings& s) { m_settings = s; }
+    [[nodiscard]] const MeshImportSettings& settings() const { return m_settings; }
+
+    /// Validate that the given path is a supported mesh format.
+    [[nodiscard]] bool canImport(const std::string& path) const {
+        auto ext = std::filesystem::path(path).extension().string();
+        return ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb";
+    }
+
+    /// Import a mesh into the asset database.  Returns the GUID.
+    AssetGuid import(AssetDatabase& db, const std::string& relativePath) {
+        if (!canImport(relativePath)) return {};
+        AssetGuid guid = db.registerAsset(relativePath, AssetType::Mesh);
+        db.markImported(guid);
+        ++m_importCount;
+        NF_LOG_INFO("MeshImporter", "Imported mesh: " + relativePath);
+        return guid;
+    }
+
+    [[nodiscard]] size_t importCount() const { return m_importCount; }
+
+private:
+    MeshImportSettings m_settings;
+    size_t m_importCount = 0;
+};
+
+/// Texture importer — validates and "imports" texture files into the asset database.
+class TextureImporter {
+public:
+    void setSettings(const TextureImportSettings& s) { m_settings = s; }
+    [[nodiscard]] const TextureImportSettings& settings() const { return m_settings; }
+
+    /// Validate that the given path is a supported texture format.
+    [[nodiscard]] bool canImport(const std::string& path) const {
+        auto ext = std::filesystem::path(path).extension().string();
+        return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+               ext == ".tga" || ext == ".bmp";
+    }
+
+    /// Import a texture into the asset database.  Returns the GUID.
+    AssetGuid import(AssetDatabase& db, const std::string& relativePath) {
+        if (!canImport(relativePath)) return {};
+        AssetGuid guid = db.registerAsset(relativePath, AssetType::Texture);
+        db.markImported(guid);
+        ++m_importCount;
+        NF_LOG_INFO("TextureImporter", "Imported texture: " + relativePath);
+        return guid;
+    }
+
+    [[nodiscard]] size_t importCount() const { return m_importCount; }
+
+private:
+    TextureImportSettings m_settings;
+    size_t m_importCount = 0;
+};
+
+/// Watches for asset changes and tracks which GUIDs need re-import (hot-reload).
+class AssetWatcher {
+public:
+    /// Poll the asset database for changes.  Returns number of dirty assets detected.
+    size_t pollChanges(AssetDatabase& db) {
+        size_t detected = 0;
+        for (auto& entry : db.entries()) {
+            if (!std::filesystem::exists(entry.path)) continue;
+            auto ftime = std::filesystem::last_write_time(entry.path);
+            uint64_t modTime = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    ftime.time_since_epoch()).count());
+            if (modTime > entry.lastModified) {
+                m_dirtyAssets.insert(entry.guid);
+                ++detected;
+            }
+        }
+        return detected;
+    }
+
+    /// Mark a GUID as dirty (needs re-import).
+    void markDirty(const AssetGuid& guid) { m_dirtyAssets.insert(guid); }
+
+    /// Clear a GUID from dirty set after re-import.
+    void clearDirty(const AssetGuid& guid) { m_dirtyAssets.erase(guid); }
+
+    /// Check if an asset is dirty.
+    [[nodiscard]] bool isDirty(const AssetGuid& guid) const {
+        return m_dirtyAssets.count(guid) > 0;
+    }
+
+    [[nodiscard]] size_t dirtyCount() const { return m_dirtyAssets.size(); }
+
+    void clearAll() { m_dirtyAssets.clear(); }
+
+    [[nodiscard]] const std::set<AssetGuid>& dirtyAssets() const { return m_dirtyAssets; }
+
+private:
+    std::set<AssetGuid> m_dirtyAssets;
+};
+
+// ── S4 Blender Bridge ────────────────────────────────────────────
+
+/// Supported Blender export formats.
+enum class BlenderExportFormat : uint8_t {
+    FBX  = 0,
+    GLTF = 1,
+    OBJ  = 2,
+    GLB  = 3
+};
+
+inline const char* blenderExportFormatName(BlenderExportFormat f) {
+    switch (f) {
+        case BlenderExportFormat::FBX:  return "FBX";
+        case BlenderExportFormat::GLTF: return "GLTF";
+        case BlenderExportFormat::OBJ:  return "OBJ";
+        case BlenderExportFormat::GLB:  return "GLB";
+    }
+    return "Unknown";
+}
+
+inline const char* blenderExportFormatExtension(BlenderExportFormat f) {
+    switch (f) {
+        case BlenderExportFormat::FBX:  return ".fbx";
+        case BlenderExportFormat::GLTF: return ".gltf";
+        case BlenderExportFormat::OBJ:  return ".obj";
+        case BlenderExportFormat::GLB:  return ".glb";
+    }
+    return "";
+}
+
+/// Record of a single Blender export that arrived in the watched directory.
+struct BlenderExportEntry {
+    std::string sourcePath;                      // path inside export dir
+    BlenderExportFormat format = BlenderExportFormat::FBX;
+    uint64_t exportedAt        = 0;              // epoch seconds
+    bool autoImported          = false;          // true once auto-imported
+    AssetGuid importedGuid;                      // GUID after import (null if not yet)
+};
+
+/// Watches a Blender export directory and auto-imports new/changed assets
+/// into the editor's AssetDatabase via MeshImporter.
+class BlenderAutoImporter {
+public:
+    /// Set the directory to watch for Blender exports.
+    void setExportDirectory(const std::string& dir) { m_exportDir = dir; }
+    [[nodiscard]] const std::string& exportDirectory() const { return m_exportDir; }
+
+    /// Enable or disable auto-import.
+    void setAutoImportEnabled(bool enabled) { m_autoImport = enabled; }
+    [[nodiscard]] bool isAutoImportEnabled() const { return m_autoImport; }
+
+    /// Scan the export directory for new or changed files.
+    /// Returns number of new exports detected.
+    size_t scanExports() {
+        if (m_exportDir.empty() || !std::filesystem::exists(m_exportDir)) return 0;
+
+        size_t detected = 0;
+        for (auto& entry : std::filesystem::directory_iterator(m_exportDir)) {
+            if (!entry.is_regular_file()) continue;
+            auto ext = entry.path().extension().string();
+            BlenderExportFormat fmt;
+            if      (ext == ".fbx")  fmt = BlenderExportFormat::FBX;
+            else if (ext == ".gltf") fmt = BlenderExportFormat::GLTF;
+            else if (ext == ".obj")  fmt = BlenderExportFormat::OBJ;
+            else if (ext == ".glb")  fmt = BlenderExportFormat::GLB;
+            else continue;
+
+            std::string relPath = entry.path().string();
+            // Skip already-known files
+            bool found = false;
+            for (auto& e : m_exports) {
+                if (e.sourcePath == relPath) { found = true; break; }
+            }
+            if (found) continue;
+
+            BlenderExportEntry be;
+            be.sourcePath = relPath;
+            be.format = fmt;
+            auto ftime = std::filesystem::last_write_time(entry);
+            be.exportedAt = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    ftime.time_since_epoch()).count());
+            m_exports.push_back(be);
+            ++detected;
+        }
+        return detected;
+    }
+
+    /// Auto-import all pending exports into the given asset database.
+    /// Returns number of assets imported.
+    size_t importPending(AssetDatabase& db, MeshImporter& meshImporter) {
+        size_t imported = 0;
+        for (auto& ex : m_exports) {
+            if (ex.autoImported) continue;
+            if (!meshImporter.canImport(ex.sourcePath)) continue;
+            AssetGuid guid = meshImporter.import(db, ex.sourcePath);
+            if (!guid.isNull()) {
+                ex.autoImported = true;
+                ex.importedGuid = guid;
+                ++imported;
+                NF_LOG_INFO("BlenderBridge", "Auto-imported: " + ex.sourcePath);
+            }
+        }
+        return imported;
+    }
+
+    /// Poll: scan + auto-import in one call (convenience for editor tick).
+    size_t poll(AssetDatabase& db, MeshImporter& meshImporter) {
+        scanExports();
+        if (!m_autoImport) return 0;
+        return importPending(db, meshImporter);
+    }
+
+    [[nodiscard]] const std::vector<BlenderExportEntry>& exports() const { return m_exports; }
+    [[nodiscard]] size_t exportCount() const { return m_exports.size(); }
+
+    [[nodiscard]] size_t importedCount() const {
+        size_t n = 0;
+        for (auto& e : m_exports) if (e.autoImported) ++n;
+        return n;
+    }
+
+    [[nodiscard]] size_t pendingCount() const {
+        return m_exports.size() - importedCount();
+    }
+
+    void clearHistory() { m_exports.clear(); }
+
+private:
+    std::string m_exportDir;
+    bool m_autoImport = true;
+    std::vector<BlenderExportEntry> m_exports;
+};
+
 // ── Editor application ───────────────────────────────────────────
 
 class EditorApp {
@@ -2405,6 +3467,127 @@ public:
             m_dockLayout.setPanelVisible(graphEd->name(), false);  // hidden by default
             m_editorPanels.push_back(std::move(graphEd));
         }
+        {
+            auto pcg = std::make_unique<PCGTuningPanel>();
+            m_dockLayout.addPanel(pcg->name(), pcg->slot());
+            m_dockLayout.setPanelVisible(pcg->name(), false);  // hidden by default
+            m_editorPanels.push_back(std::move(pcg));
+        }
+
+        // M2/S1 undo system
+        m_editorUndo = std::make_unique<EditorUndoSystem>(m_commandStack);
+
+        // M3/S2 Play-in-Editor
+        m_playInEditor = std::make_unique<PlayInEditorSystem>(
+            &m_entityPlacement, pcgTuningPanel(), viewportPanel());
+
+        // M3/S2 PIE commands
+        m_commands.registerCommand("play.start", [this]() {
+            if (m_playInEditor->isStopped())
+                m_playInEditor->start(m_currentWorldPath);
+            else if (m_playInEditor->isPaused())
+                m_playInEditor->resume();
+            m_notifications.push(NotificationType::Success, "Play");
+        }, "Play", "F5");
+
+        m_commands.registerCommand("play.pause", [this]() {
+            if (m_playInEditor->isRunning()) {
+                m_playInEditor->pause();
+                m_notifications.push(NotificationType::Info, "Paused");
+            }
+        }, "Pause", "F6");
+        m_commands.setEnabledCheck("play.pause", [this]() { return m_playInEditor->isRunning(); });
+
+        m_commands.registerCommand("play.stop", [this]() {
+            if (!m_playInEditor->isStopped()) {
+                m_playInEditor->stop();
+                m_notifications.push(NotificationType::Info, "Stopped — world restored");
+            }
+        }, "Stop", "Shift+F5");
+        m_commands.setEnabledCheck("play.stop", [this]() { return !m_playInEditor->isStopped(); });
+
+        // M2/S1 tool commands
+        m_commands.registerCommand("view.toggle_pcg_tuning", [this]() {
+            togglePanelVisibility("PCGTuning");
+        }, "Toggle PCG Tuning", "");
+
+        m_commands.registerCommand("tools.entity_placement", [this]() {
+            NF_LOG_INFO("Editor", "Entity Placement tool activated");
+        }, "Entity Placement Tool", "");
+
+        m_commands.registerCommand("tools.voxel_paint", [this]() {
+            NF_LOG_INFO("Editor", "Voxel Paint tool activated");
+        }, "Voxel Paint Tool", "");
+
+        // M4/S3 Asset Pipeline commands
+        m_commands.registerCommand("assets.scan", [this]() {
+            if (!m_projectPaths.contentPath().empty()) {
+                size_t n = m_assetDatabase.scanDirectory(m_projectPaths.contentPath());
+                NF_LOG_INFO("Assets", "Scanned " + std::to_string(n) + " assets");
+                m_notifications.push(NotificationType::Success,
+                    "Asset scan: " + std::to_string(n) + " files found");
+            }
+        }, "Scan Assets", "");
+
+        m_commands.registerCommand("assets.reimport", [this]() {
+            size_t reimported = 0;
+            for (auto& guid : m_assetWatcher.dirtyAssets()) {
+                auto* entry = m_assetDatabase.findByGuid(guid);
+                if (!entry) continue;
+                if (m_meshImporter.canImport(entry->path))
+                    m_meshImporter.import(m_assetDatabase, entry->path);
+                else if (m_textureImporter.canImport(entry->path))
+                    m_textureImporter.import(m_assetDatabase, entry->path);
+                ++reimported;
+            }
+            m_assetWatcher.clearAll();
+            if (reimported > 0) {
+                NF_LOG_INFO("Assets", "Re-imported " + std::to_string(reimported) + " assets");
+                m_notifications.push(NotificationType::Success,
+                    "Re-imported " + std::to_string(reimported) + " assets");
+            }
+        }, "Reimport Changed Assets", "");
+        m_commands.setEnabledCheck("assets.reimport",
+            [this]() { return m_assetWatcher.dirtyCount() > 0; });
+
+        // S4 Blender Bridge commands
+        m_commands.registerCommand("blender.set_export_dir", [this]() {
+            // In a real editor, this would open a folder picker.
+            // For now, default to Content/BlenderExports/
+            std::string dir = m_projectPaths.contentPath() + "/BlenderExports";
+            std::filesystem::create_directories(dir);
+            m_blenderImporter.setExportDirectory(dir);
+            NF_LOG_INFO("BlenderBridge", "Export dir: " + dir);
+            m_notifications.push(NotificationType::Success,
+                "Blender export dir set: " + dir);
+        }, "Set Blender Export Dir", "");
+
+        m_commands.registerCommand("blender.scan_exports", [this]() {
+            size_t n = m_blenderImporter.scanExports();
+            NF_LOG_INFO("BlenderBridge", "Scanned: " + std::to_string(n) + " new exports");
+            if (n > 0) {
+                m_notifications.push(NotificationType::Info,
+                    std::to_string(n) + " new Blender exports found");
+            }
+        }, "Scan Blender Exports", "");
+
+        m_commands.registerCommand("blender.import_pending", [this]() {
+            size_t n = m_blenderImporter.importPending(m_assetDatabase, m_meshImporter);
+            if (n > 0) {
+                NF_LOG_INFO("BlenderBridge", "Imported " + std::to_string(n) + " assets");
+                m_notifications.push(NotificationType::Success,
+                    "Imported " + std::to_string(n) + " Blender assets");
+            }
+        }, "Import Pending Blender Assets", "");
+        m_commands.setEnabledCheck("blender.import_pending",
+            [this]() { return m_blenderImporter.pendingCount() > 0; });
+
+        m_commands.registerCommand("blender.toggle_auto_import", [this]() {
+            bool enabled = !m_blenderImporter.isAutoImportEnabled();
+            m_blenderImporter.setAutoImportEnabled(enabled);
+            NF_LOG_INFO("BlenderBridge", std::string("Auto-import: ") +
+                (enabled ? "ON" : "OFF"));
+        }, "Toggle Blender Auto-Import", "");
 
         // Create default toolbar items
         m_toolbar.addItem("Select", "select", "Select tool", [this]() {
@@ -2420,9 +3603,15 @@ public:
             m_gizmo.setMode(GizmoMode::Scale);
         });
         m_toolbar.addSeparator();
-        m_toolbar.addItem("Play", "play", "Play", []() {});
-        m_toolbar.addItem("Pause", "pause", "Pause", []() {});
-        m_toolbar.addItem("Stop", "stop", "Stop", []() {});
+        m_toolbar.addItem("Play", "play", "Play (F5)", [this]() {
+            m_commands.executeCommand("play.start");
+        });
+        m_toolbar.addItem("Pause", "pause", "Pause (F6)", [this]() {
+            m_commands.executeCommand("play.pause");
+        });
+        m_toolbar.addItem("Stop", "stop", "Stop (Shift+F5)", [this]() {
+            m_commands.executeCommand("play.stop");
+        });
 
         // Build menu bar
         initMenuBar();
@@ -2572,8 +3761,17 @@ public:
         m_notifications.tick(dt);
         m_frameStats.beginFrame(dt);
 
+        // M3/S2: tick Play-in-Editor
+        if (m_playInEditor)
+            m_playInEditor->tick(dt);
+
+        // Update status bar mode to reflect PIE state
+        std::string mode = "Editor";
+        if (m_playInEditor && m_playInEditor->isRunning()) mode = "Playing";
+        else if (m_playInEditor && m_playInEditor->isPaused()) mode = "Paused";
+
         m_statusBar.update(
-            "Editor",
+            mode,
             m_currentWorldPath,
             m_commandStack.isDirty(),
             static_cast<int>(m_selection.selectionCount()),
@@ -2655,6 +3853,34 @@ public:
 
     IDEService& ideService() { return m_ideService; }
 
+    // M2/S1 accessors
+    EntityPlacementTool& entityPlacementTool() { return m_entityPlacement; }
+    VoxelPaintTool& voxelPaintTool() { return m_voxelPaint; }
+    EditorUndoSystem& editorUndoSystem() { return *m_editorUndo; }
+    WorldPreviewService& worldPreview() { return m_worldPreview; }
+
+    // M3/S2 accessors
+    PlayInEditorSystem& playInEditor() { return *m_playInEditor; }
+    const PlayInEditorSystem& playInEditor() const { return *m_playInEditor; }
+
+    // M4/S3 accessors
+    AssetDatabase& assetDatabase() { return m_assetDatabase; }
+    const AssetDatabase& assetDatabase() const { return m_assetDatabase; }
+    MeshImporter& meshImporter() { return m_meshImporter; }
+    TextureImporter& textureImporter() { return m_textureImporter; }
+    AssetWatcher& assetWatcher() { return m_assetWatcher; }
+
+    // S4 accessors
+    BlenderAutoImporter& blenderAutoImporter() { return m_blenderImporter; }
+    const BlenderAutoImporter& blenderAutoImporter() const { return m_blenderImporter; }
+
+    [[nodiscard]] PCGTuningPanel* pcgTuningPanel() {
+        for (auto& p : m_editorPanels) {
+            if (auto* pcg = dynamic_cast<PCGTuningPanel*>(p.get())) return pcg;
+        }
+        return nullptr;
+    }
+
 private:
     void togglePanelVisibility(const std::string& name) {
         if (auto* p = m_dockLayout.findPanel(name)) {
@@ -2685,6 +3911,12 @@ private:
         edit.addItem("Create Entity",   "entity.create",    "Ctrl+Shift+N");
         edit.addItem("Delete Entity",   "entity.delete",    "Delete");
         edit.addItem("Duplicate Entity","entity.duplicate", "Ctrl+D");
+        edit.addSeparator();
+        edit.addItem("PCG Tuning",      "view.toggle_pcg_tuning", "");
+        edit.addSeparator();
+        edit.addItem("Play",            "play.start",            "F5");
+        edit.addItem("Pause",           "play.pause",            "F6");
+        edit.addItem("Stop",            "play.stop",             "Shift+F5");
 
         // View menu
         auto& view = m_menuBar.addCategory("View");
@@ -2722,6 +3954,17 @@ private:
         tools.addItem("Atlas AI",           "tools.launch_atlas_ai");
         tools.addSeparator();
         tools.addItem("Pipeline Monitor",   "tools.pipeline_monitor");
+        tools.addSeparator();
+        tools.addItem("Entity Placement",   "tools.entity_placement");
+        tools.addItem("Voxel Paint",        "tools.voxel_paint");
+        tools.addSeparator();
+        tools.addItem("Scan Assets",        "assets.scan");
+        tools.addItem("Reimport Changed",   "assets.reimport");
+        tools.addSeparator();
+        tools.addItem("Set Blender Export Dir",  "blender.set_export_dir");
+        tools.addItem("Scan Blender Exports",    "blender.scan_exports");
+        tools.addItem("Import Pending",          "blender.import_pending");
+        tools.addItem("Toggle Auto-Import",      "blender.toggle_auto_import");
     }
 
     Renderer m_renderer;
@@ -2755,6 +3998,24 @@ private:
     size_t m_logSinkId = 0;
     std::ofstream m_logFile;
     std::mutex m_logFileMutex;
+
+    // M2/S1 world-editing systems
+    EntityPlacementTool m_entityPlacement;
+    VoxelPaintTool m_voxelPaint;
+    std::unique_ptr<EditorUndoSystem> m_editorUndo;
+    WorldPreviewService m_worldPreview;
+
+    // M3/S2 Play-in-Editor
+    std::unique_ptr<PlayInEditorSystem> m_playInEditor;
+
+    // M4/S3 Asset Pipeline
+    AssetDatabase m_assetDatabase;
+    MeshImporter m_meshImporter;
+    TextureImporter m_textureImporter;
+    AssetWatcher m_assetWatcher;
+
+    // S4 Blender Bridge
+    BlenderAutoImporter m_blenderImporter;
 
     // ── State persistence ───────────────────────────────────────
 

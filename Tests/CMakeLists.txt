@@ -86,6 +86,7 @@ catch_discover_tests(NF_AudioTests)
 # Animation tests
 add_executable(NF_AnimationTests
     Animation/test_animation.cpp
+    Animation/test_s5_animation.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_AnimationTests PRIVATE NF::Animation NF::Core Catch2::Catch2)
@@ -110,6 +111,10 @@ catch_discover_tests(NF_AITests)
 # Editor tests
 add_executable(NF_EditorTests
     Editor/test_editor.cpp
+    Editor/test_m2_editor.cpp
+    Editor/test_m3_editor.cpp
+    Editor/test_m4_editor.cpp
+    Editor/test_s4_editor.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE

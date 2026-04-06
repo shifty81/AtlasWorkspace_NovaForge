@@ -4147,3 +4147,853 @@ TEST_CASE("RigAICore enable/disable features", "[Game][SP6][RigAI]") {
     ai.disableFeature("droneControl");
     REQUIRE(ai.features().enabledCount() == 2);
 }
+
+// ── G22 Weather System Tests ──────────────────────────────────
+
+TEST_CASE("WeatherType names", "[Game][G22][Weather]") {
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Clear))      == "Clear");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Rain))       == "Rain");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Storm))      == "Storm");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Snow))       == "Snow");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Fog))        == "Fog");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::Sandstorm))  == "Sandstorm");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::AcidRain))   == "Acid Rain");
+    REQUIRE(std::string(NF::weatherTypeName(NF::WeatherType::SolarFlare)) == "Solar Flare");
+}
+
+TEST_CASE("WeatherCondition default is Clear", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    REQUIRE(cond.type == NF::WeatherType::Clear);
+    REQUIRE(cond.intensity == 0.f);
+    REQUIRE(cond.duration == 0.f);
+    REQUIRE(cond.elapsed == 0.f);
+    REQUIRE_FALSE(cond.isExpired());
+    REQUIRE(cond.effectiveIntensity() == 0.f);
+}
+
+TEST_CASE("WeatherCondition expiration", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Rain;
+    cond.intensity = 0.8f;
+    cond.duration = 10.f;
+    cond.elapsed = 5.f;
+    REQUIRE_FALSE(cond.isExpired());
+    REQUIRE(cond.progress() == Catch::Approx(0.5f));
+
+    cond.elapsed = 10.f;
+    REQUIRE(cond.isExpired());
+    REQUIRE(cond.progress() == Catch::Approx(1.0f));
+}
+
+TEST_CASE("WeatherCondition fade-in intensity", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Storm;
+    cond.intensity = 1.0f;
+    cond.duration = 100.f;
+    cond.transitionTime = 2.f;
+    cond.elapsed = 1.f;  // halfway through fade-in
+
+    float ei = cond.effectiveIntensity();
+    REQUIRE(ei == Catch::Approx(0.5f));
+}
+
+TEST_CASE("WeatherCondition fade-out intensity", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Fog;
+    cond.intensity = 1.0f;
+    cond.duration = 10.f;
+    cond.transitionTime = 2.f;
+    cond.elapsed = 9.f;  // 1 second remaining, within fade-out
+
+    float ei = cond.effectiveIntensity();
+    REQUIRE(ei == Catch::Approx(0.5f));
+}
+
+TEST_CASE("WeatherEffects for Clear", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::Clear;
+    cond.intensity = 0.f;
+
+    auto fx = NF::WeatherEffects::forCondition(cond);
+    REQUIRE(fx.visibilityMultiplier == 1.f);
+    REQUIRE(fx.movementMultiplier == 1.f);
+    REQUIRE(fx.damagePerSecond == 0.f);
+    REQUIRE_FALSE(fx.disablesScanner);
+    REQUIRE_FALSE(fx.disablesNavigation);
+}
+
+TEST_CASE("WeatherEffects for AcidRain causes damage", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::AcidRain;
+    cond.intensity = 1.0f;
+    cond.duration = 100.f;
+    cond.transitionTime = 0.f;  // no fade for clean test
+    cond.elapsed = 50.f;        // mid-duration
+
+    auto fx = NF::WeatherEffects::forCondition(cond);
+    REQUIRE(fx.damagePerSecond == Catch::Approx(5.0f));
+    REQUIRE(fx.visibilityMultiplier < 1.f);
+}
+
+TEST_CASE("WeatherEffects SolarFlare disables scanner", "[Game][G22][Weather]") {
+    NF::WeatherCondition cond;
+    cond.type = NF::WeatherType::SolarFlare;
+    cond.intensity = 0.8f;
+    cond.duration = 100.f;
+    cond.transitionTime = 0.f;
+    cond.elapsed = 50.f;
+
+    auto fx = NF::WeatherEffects::forCondition(cond);
+    REQUIRE(fx.disablesScanner);
+    REQUIRE(fx.disablesNavigation);
+    REQUIRE(fx.damagePerSecond > 0.f);
+}
+
+TEST_CASE("WeatherSystem default is Clear", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    REQUIRE(ws.isClear());
+    REQUIRE(ws.currentType() == NF::WeatherType::Clear);
+    REQUIRE(ws.forecastCount() == 0);
+}
+
+TEST_CASE("WeatherSystem setWeather changes active", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Storm, 0.9f, 30.f);
+
+    REQUIRE(ws.currentType() == NF::WeatherType::Storm);
+    REQUIRE_FALSE(ws.isClear());
+    REQUIRE(ws.activeWeather().intensity == Catch::Approx(0.9f));
+    REQUIRE(ws.activeWeather().duration == Catch::Approx(30.f));
+}
+
+TEST_CASE("WeatherSystem tick advances elapsed", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Rain, 0.5f, 10.f);
+
+    ws.tick(3.f);
+    REQUIRE(ws.activeWeather().elapsed == Catch::Approx(3.f));
+}
+
+TEST_CASE("WeatherSystem auto-transitions to Clear when expired", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Snow, 0.6f, 5.f);
+
+    ws.tick(6.f);  // exceeds duration
+    REQUIRE(ws.isClear());
+}
+
+TEST_CASE("WeatherSystem forecast transitions", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Rain, 0.5f, 5.f);
+
+    NF::WeatherForecastEntry next;
+    next.type = NF::WeatherType::Storm;
+    next.intensity = 0.9f;
+    next.duration = 10.f;
+    next.delayUntilStart = 0.f;
+    ws.addForecast(next);
+    REQUIRE(ws.forecastCount() == 1);
+
+    // Expire current → should pick up forecast
+    ws.tick(6.f);
+    REQUIRE(ws.currentType() == NF::WeatherType::Storm);
+    REQUIRE(ws.forecastCount() == 0);
+}
+
+TEST_CASE("WeatherSystem clearForecast removes entries", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+
+    NF::WeatherForecastEntry e;
+    e.type = NF::WeatherType::Fog;
+    e.intensity = 0.3f;
+    e.duration = 10.f;
+    ws.addForecast(e);
+    ws.addForecast(e);
+    REQUIRE(ws.forecastCount() == 2);
+
+    ws.clearForecast();
+    REQUIRE(ws.forecastCount() == 0);
+}
+
+TEST_CASE("WeatherSystem clearWeather forces Clear", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Sandstorm, 1.0f, 60.f);
+    REQUIRE_FALSE(ws.isClear());
+
+    ws.clearWeather();
+    REQUIRE(ws.isClear());
+}
+
+TEST_CASE("WeatherSystem max forecast cap", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+
+    NF::WeatherForecastEntry e;
+    e.type = NF::WeatherType::Rain;
+    e.intensity = 0.5f;
+    e.duration = 10.f;
+
+    for (int i = 0; i < 12; ++i)
+        ws.addForecast(e);
+
+    REQUIRE(ws.forecastCount() == static_cast<size_t>(NF::WeatherSystem::kMaxForecast));
+}
+
+TEST_CASE("WeatherSystem currentEffects reflects active weather", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    ws.setWeather(NF::WeatherType::Fog, 1.0f);
+    // Advance past transition time
+    ws.tick(5.f);
+
+    auto fx = ws.currentEffects();
+    REQUIRE(fx.visibilityMultiplier < 1.f);
+    REQUIRE(fx.movementMultiplier == 1.f);  // Fog doesn't affect movement
+}
+
+TEST_CASE("WeatherSystem delayed forecast triggers when clear", "[Game][G22][Weather]") {
+    NF::WeatherSystem ws;
+    // Start clear
+
+    NF::WeatherForecastEntry e;
+    e.type = NF::WeatherType::Storm;
+    e.intensity = 0.8f;
+    e.duration = 20.f;
+    e.delayUntilStart = 5.f;
+    ws.addForecast(e);
+
+    // Not ready yet
+    ws.tick(3.f);
+    REQUIRE(ws.isClear());
+
+    // Delay elapsed
+    ws.tick(3.f);
+    REQUIRE(ws.currentType() == NF::WeatherType::Storm);
+}
+
+// ── G23 Trading System Tests ──────────────────────────────────
+
+TEST_CASE("TradeGoodCategory names", "[Game][G23][Trading]") {
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Raw))        == "Raw");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Refined))    == "Refined");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Component))  == "Component");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Consumable)) == "Consumable");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Tech))       == "Tech");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Luxury))     == "Luxury");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Contraband)) == "Contraband");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Data))       == "Data");
+}
+
+TEST_CASE("TradeGood contraband flag", "[Game][G23][Trading]") {
+    NF::TradeGood g;
+    g.id = "spice";
+    g.legal = false;
+    REQUIRE(g.isContraband());
+    g.legal = true;
+    REQUIRE_FALSE(g.isContraband());
+}
+
+TEST_CASE("TradingPost add and query stock", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Station Alpha");
+    REQUIRE(post.postId() == "hub1");
+    REQUIRE(post.name() == "Station Alpha");
+
+    post.addStock("iron", 50, 10.f);
+    REQUIRE(post.stockOf("iron") == 50);
+    REQUIRE(post.priceOf("iron") == 10.f);
+    REQUIRE(post.stockCount() == 1);
+
+    // Add more of same good updates quantity
+    post.addStock("iron", 30, 12.f);
+    REQUIRE(post.stockOf("iron") == 80);
+    REQUIRE(post.priceOf("iron") == 12.f);  // price updated
+}
+
+TEST_CASE("TradingPost remove stock", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("copper", 100, 5.f);
+
+    int removed = post.removeStock("copper", 40);
+    REQUIRE(removed == 40);
+    REQUIRE(post.stockOf("copper") == 60);
+
+    // Can't remove more than available
+    removed = post.removeStock("copper", 200);
+    REQUIRE(removed == 60);
+    REQUIRE(post.stockOf("copper") == 0);
+
+    // Non-existent good returns 0
+    removed = post.removeStock("gold", 10);
+    REQUIRE(removed == 0);
+}
+
+TEST_CASE("TradingPost buy transaction", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("fuel", 100, 20.f);
+
+    float cost = post.buy("fuel", 5);
+    REQUIRE(cost == Catch::Approx(100.f));  // 5 × 20
+    REQUIRE(post.stockOf("fuel") == 95);
+    REQUIRE(post.totalSales() == Catch::Approx(100.f));
+}
+
+TEST_CASE("TradingPost buy insufficient stock", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("fuel", 3, 20.f);
+
+    float cost = post.buy("fuel", 10);  // not enough
+    REQUIRE(cost == 0.f);
+    REQUIRE(post.stockOf("fuel") == 3);  // unchanged
+}
+
+TEST_CASE("TradingPost sell transaction", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+
+    float revenue = post.sell("iron", 10, 50.f);
+    REQUIRE(revenue == Catch::Approx(400.f));  // 10 × 50 × 0.8
+    REQUIRE(post.stockOf("iron") == 10);  // added to stock
+    REQUIRE(post.totalPurchases() == Catch::Approx(400.f));
+}
+
+TEST_CASE("TradingPost tax rate", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    REQUIRE(post.taxRate() == Catch::Approx(0.05f));  // default 5%
+
+    post.setTaxRate(0.1f);
+    REQUIRE(post.taxRate() == Catch::Approx(0.1f));
+
+    // Clamped to [0, 1]
+    post.setTaxRate(-0.5f);
+    REQUIRE(post.taxRate() == 0.f);
+    post.setTaxRate(2.f);
+    REQUIRE(post.taxRate() == 1.f);
+}
+
+TEST_CASE("TradingPost tick prices supply/demand", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("rare_gem", 5, 100.f);  // low stock → price rises
+
+    float priceBefore = post.priceOf("rare_gem");
+    post.tickPrices(1.f);
+    float priceAfter = post.priceOf("rare_gem");
+    REQUIRE(priceAfter > priceBefore);  // low stock drives price up
+}
+
+TEST_CASE("TradingSystem register goods", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradeGood g;
+    g.id = "iron_ore";
+    g.name = "Iron Ore";
+    g.category = NF::TradeGoodCategory::Raw;
+    g.basePrice = 15.f;
+    ts.registerGood(g);
+    REQUIRE(ts.goodCount() == 1);
+
+    // No duplicate
+    ts.registerGood(g);
+    REQUIRE(ts.goodCount() == 1);
+
+    auto* found = ts.findGood("iron_ore");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->name == "Iron Ore");
+}
+
+TEST_CASE("TradingSystem add/remove posts", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    ts.addPost(NF::TradingPost("alpha", "Alpha Station"));
+    ts.addPost(NF::TradingPost("beta", "Beta Station"));
+    REQUIRE(ts.postCount() == 2);
+
+    REQUIRE(ts.findPost("alpha") != nullptr);
+    REQUIRE(ts.removePost("beta"));
+    REQUIRE(ts.postCount() == 1);
+    REQUIRE_FALSE(ts.removePost("beta"));  // already removed
+}
+
+TEST_CASE("TradingSystem add routes", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradeRoute r;
+    r.originId = "alpha";
+    r.destinationId = "beta";
+    r.goodId = "iron";
+    r.distance = 50.f;
+    ts.addRoute(r);
+    REQUIRE(ts.routeCount() == 1);
+}
+
+TEST_CASE("TradingSystem executeBuy", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradingPost post("alpha", "Alpha");
+    post.addStock("fuel", 100, 25.f);
+    ts.addPost(std::move(post));
+
+    float cost = ts.executeBuy("alpha", "fuel", 4);
+    REQUIRE(cost == Catch::Approx(100.f));  // 4 × 25
+    REQUIRE(ts.totalVolume() == Catch::Approx(100.f));
+}
+
+TEST_CASE("TradingSystem executeSell", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradeGood g;
+    g.id = "copper";
+    g.basePrice = 30.f;
+    ts.registerGood(g);
+    ts.addPost(NF::TradingPost("alpha", "Alpha"));
+
+    float revenue = ts.executeSell("alpha", "copper", 10);
+    REQUIRE(revenue == Catch::Approx(240.f));  // 10 × 30 × 0.8
+}
+
+TEST_CASE("TradingSystem executeBuy nonexistent post", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    float cost = ts.executeBuy("nowhere", "fuel", 1);
+    REQUIRE(cost == 0.f);
+}
+
+TEST_CASE("TradingSystem tick advances prices", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradingPost post("alpha", "Alpha");
+    post.addStock("rare", 3, 100.f);  // low stock
+    ts.addPost(std::move(post));
+
+    ts.tick(1.f);
+    REQUIRE(ts.findPost("alpha")->priceOf("rare") > 100.f);
+}
+
+TEST_CASE("TradingSystem route profit margin", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradingPost origin("a", "Origin");
+    origin.addStock("fuel", 50, 10.f);
+    NF::TradingPost dest("b", "Dest");
+    dest.addStock("fuel", 50, 20.f);
+    ts.addPost(std::move(origin));
+    ts.addPost(std::move(dest));
+
+    NF::TradeRoute route;
+    route.originId = "a";
+    route.destinationId = "b";
+    route.goodId = "fuel";
+
+    float margin = ts.routeProfitMargin(route);
+    // Buy at 10, sell at 20 × 0.8 = 16, margin = (16-10)/10 = 0.6
+    REQUIRE(margin == Catch::Approx(0.6f));
+}
+
+TEST_CASE("TradingSystem max caps", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    REQUIRE(NF::TradingSystem::kMaxPosts == 32);
+    REQUIRE(NF::TradingSystem::kMaxRoutes == 64);
+    REQUIRE(NF::TradingSystem::kMaxGoods == 128);
+}
+
+// ── G24 Base Building System Tests ────────────────────────────
+
+TEST_CASE("BasePartCategory names", "[Game][G24][Base]") {
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Foundation)) == "Foundation");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Wall))       == "Wall");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Floor))      == "Floor");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Ceiling))    == "Ceiling");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Door))       == "Door");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Window))     == "Window");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Utility))    == "Utility");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Decoration)) == "Decoration");
+}
+
+TEST_CASE("BasePart requiresPower", "[Game][G24][Base]") {
+    NF::BasePart p;
+    p.powerDraw = 0.f;
+    REQUIRE_FALSE(p.requiresPower());
+    p.powerDraw = 5.f;
+    REQUIRE(p.requiresPower());
+}
+
+TEST_CASE("BaseGridPos equality", "[Game][G24][Base]") {
+    NF::BaseGridPos a{1, 2, 3};
+    NF::BaseGridPos b{1, 2, 3};
+    NF::BaseGridPos c{0, 2, 3};
+    REQUIRE(a == b);
+    REQUIRE(a != c);
+}
+
+TEST_CASE("BaseLayout place and remove", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    REQUIRE(layout.partCount() == 0);
+
+    REQUIRE(layout.placePart("foundation_1", {0, 0, 0}));
+    REQUIRE(layout.partCount() == 1);
+
+    // Can't place on occupied cell
+    REQUIRE_FALSE(layout.placePart("wall_1", {0, 0, 0}));
+
+    // Place adjacent
+    REQUIRE(layout.placePart("wall_1", {1, 0, 0}));
+    REQUIRE(layout.partCount() == 2);
+
+    // Remove
+    REQUIRE(layout.removePart({0, 0, 0}));
+    REQUIRE(layout.partCount() == 1);
+
+    // Can't remove non-existent
+    REQUIRE_FALSE(layout.removePart({5, 5, 5}));
+}
+
+TEST_CASE("BaseLayout partAt", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    layout.placePart("floor_1", {3, 0, 2});
+
+    auto* p = layout.partAt({3, 0, 2});
+    REQUIRE(p != nullptr);
+    REQUIRE(p->partId == "floor_1");
+
+    REQUIRE(layout.partAt({9, 9, 9}) == nullptr);
+}
+
+TEST_CASE("BaseLayout adjacency", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    layout.placePart("center", {5, 5, 5});
+    layout.placePart("left",   {4, 5, 5});
+    layout.placePart("right",  {6, 5, 5});
+    layout.placePart("above",  {5, 6, 5});
+
+    REQUIRE(layout.adjacentCount({5, 5, 5}) == 3);
+    REQUIRE(layout.adjacentCount({4, 5, 5}) == 1);  // only "center"
+    REQUIRE(layout.adjacentCount({0, 0, 0}) == 0);  // no neighbors
+}
+
+TEST_CASE("BaseLayout structural integrity", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    std::vector<NF::BasePart> defs;
+
+    NF::BasePart found;
+    found.id = "foundation";
+    found.category = NF::BasePartCategory::Foundation;
+    defs.push_back(found);
+
+    NF::BasePart wall;
+    wall.id = "wall";
+    wall.category = NF::BasePartCategory::Wall;
+    defs.push_back(wall);
+
+    // Foundation alone is always valid
+    layout.placePart("foundation", {0, 0, 0});
+    REQUIRE(layout.isStructurallySound(defs));
+
+    // Wall adjacent to foundation — valid
+    layout.placePart("wall", {1, 0, 0});
+    REQUIRE(layout.isStructurallySound(defs));
+
+    // Floating wall (no neighbors) — invalid
+    layout.placePart("wall", {10, 10, 10});
+    REQUIRE_FALSE(layout.isStructurallySound(defs));
+}
+
+TEST_CASE("BaseLayout totalPowerDraw", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    std::vector<NF::BasePart> defs;
+
+    NF::BasePart generator;
+    generator.id = "generator";
+    generator.powerDraw = 0.f;
+    defs.push_back(generator);
+
+    NF::BasePart light;
+    light.id = "light";
+    light.powerDraw = 5.f;
+    defs.push_back(light);
+
+    layout.placePart("generator", {0, 0, 0});
+    layout.placePart("light", {1, 0, 0});
+    layout.placePart("light", {2, 0, 0});
+
+    REQUIRE(layout.totalPowerDraw(defs) == Catch::Approx(10.f));
+}
+
+TEST_CASE("BaseDefense shield absorb", "[Game][G24][Base]") {
+    NF::BaseDefense def;
+    def.shieldStrength = 100.f;
+    def.hullArmor = 0.25f;
+    def.currentShield = 80.f;
+
+    // Damage fully absorbed by shield
+    float passthrough = def.takeDamage(30.f);
+    REQUIRE(passthrough == 0.f);
+    REQUIRE(def.currentShield == Catch::Approx(50.f));
+
+    // Damage partially absorbed — remainder reduced by armor
+    passthrough = def.takeDamage(70.f);
+    // 50 absorbed by shield, 20 remaining, 25% armor → 15 pass-through
+    REQUIRE(passthrough == Catch::Approx(15.f));
+    REQUIRE(def.currentShield == 0.f);
+}
+
+TEST_CASE("BaseDefense shield regen", "[Game][G24][Base]") {
+    NF::BaseDefense def;
+    def.shieldStrength = 100.f;
+    def.currentShield = 50.f;
+
+    def.regenShield(30.f);
+    REQUIRE(def.currentShield == Catch::Approx(80.f));
+
+    // Capped at max
+    def.regenShield(50.f);
+    REQUIRE(def.currentShield == Catch::Approx(100.f));
+}
+
+TEST_CASE("BaseDefense reset shields", "[Game][G24][Base]") {
+    NF::BaseDefense def;
+    def.shieldStrength = 200.f;
+    def.currentShield = 0.f;
+    def.resetShields();
+    REQUIRE(def.currentShield == Catch::Approx(200.f));
+}
+
+TEST_CASE("BaseSystem create and manage bases", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    REQUIRE(sys.baseCount() == 0);
+
+    int idx = sys.createBase("Alpha Outpost");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.baseCount() == 1);
+    REQUIRE(sys.baseName(0) == "Alpha Outpost");
+
+    int idx2 = sys.createBase("Beta Station");
+    REQUIRE(idx2 == 1);
+
+    REQUIRE(sys.removeBase(0));
+    REQUIRE(sys.baseCount() == 1);
+    REQUIRE(sys.baseName(0) == "Beta Station");
+}
+
+TEST_CASE("BaseSystem register parts", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    NF::BasePart p;
+    p.id = "metal_wall";
+    p.name = "Metal Wall";
+    p.category = NF::BasePartCategory::Wall;
+    sys.registerPart(p);
+    REQUIRE(sys.partDefCount() == 1);
+
+    // No duplicates
+    sys.registerPart(p);
+    REQUIRE(sys.partDefCount() == 1);
+
+    auto* found = sys.findPart("metal_wall");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->name == "Metal Wall");
+}
+
+TEST_CASE("BaseSystem power management", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    NF::BasePart light;
+    light.id = "light";
+    light.powerDraw = 10.f;
+    sys.registerPart(light);
+
+    int base = sys.createBase("Test Base");
+    sys.layout(base)->placePart("light", {0, 0, 0});
+    sys.layout(base)->placePart("light", {1, 0, 0});
+
+    // Default power = 100, draw = 20
+    REQUIRE(sys.hasSufficientPower(base));
+    REQUIRE(sys.availablePower(base) == Catch::Approx(80.f));
+
+    // Reduce power output below draw
+    sys.setPowerOutput(base, 15.f);
+    REQUIRE_FALSE(sys.hasSufficientPower(base));
+    REQUIRE(sys.availablePower(base) == Catch::Approx(-5.f));
+}
+
+TEST_CASE("BaseSystem max bases", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    REQUIRE(NF::BaseSystem::kMaxBases == 8);
+
+    for (int i = 0; i < 8; ++i)
+        REQUIRE(sys.createBase("base" + std::to_string(i)) >= 0);
+
+    // 9th should fail
+    REQUIRE(sys.createBase("overflow") == -1);
+}
+
+TEST_CASE("BaseLayout max parts", "[Game][G24][Base]") {
+    REQUIRE(NF::BaseLayout::kMaxParts == 256);
+}
+
+// ── G25 Habitat System Tests ──────────────────────────────────────
+
+TEST_CASE("HabitatZoneType names", "[Game][G25][Habitat]") {
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Living))      == "Living");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Engineering)) == "Engineering");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Medical))     == "Medical");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Command))     == "Command");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Cargo))       == "Cargo");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Recreation))  == "Recreation");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Hydroponics)) == "Hydroponics");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Airlock))     == "Airlock");
+}
+
+TEST_CASE("HabitatZone habitability", "[Game][G25][Habitat]") {
+    NF::HabitatZone zone;
+    zone.id = "quarters";
+    zone.name = "Crew Quarters";
+    zone.sealed = true;
+    zone.oxygenLevel = 0.95f;
+    zone.pressure = 1.0f;
+    zone.temperature = 22.f;
+    REQUIRE(zone.isHabitable());
+
+    // Breached → not habitable
+    zone.sealed = false;
+    REQUIRE_FALSE(zone.isHabitable());
+    REQUIRE(zone.isBreached());
+
+    // Low oxygen → not habitable
+    zone.sealed = true;
+    zone.oxygenLevel = 0.1f;
+    REQUIRE_FALSE(zone.isHabitable());
+}
+
+TEST_CASE("HabitatZone capacity", "[Game][G25][Habitat]") {
+    NF::HabitatZone zone;
+    zone.capacity = 6;
+    zone.occupants = 4;
+    REQUIRE(zone.availableCapacity() == 2.f);
+}
+
+TEST_CASE("LifeSupportModule defaults", "[Game][G25][Habitat]") {
+    NF::LifeSupportModule mod;
+    REQUIRE(mod.isOperational());
+    REQUIRE(mod.oxygenGenRate > 0.f);
+    REQUIRE(mod.powerDraw > 0.f);
+
+    mod.active = false;
+    REQUIRE_FALSE(mod.isOperational());
+}
+
+TEST_CASE("HabitatLayout add and remove zones", "[Game][G25][Habitat]") {
+    NF::HabitatLayout layout;
+    NF::HabitatZone z1;
+    z1.id = "bridge"; z1.name = "Bridge"; z1.type = NF::HabitatZoneType::Command;
+    NF::HabitatZone z2;
+    z2.id = "medbay"; z2.name = "Med Bay"; z2.type = NF::HabitatZoneType::Medical;
+
+    REQUIRE(layout.addZone(z1));
+    REQUIRE(layout.addZone(z2));
+    REQUIRE(layout.zoneCount() == 2);
+
+    // No duplicate
+    REQUIRE_FALSE(layout.addZone(z1));
+
+    REQUIRE(layout.findZone("bridge") != nullptr);
+    REQUIRE(layout.removeZone("bridge"));
+    REQUIRE(layout.zoneCount() == 1);
+    REQUIRE(layout.findZone("bridge") == nullptr);
+}
+
+TEST_CASE("HabitatLayout connections", "[Game][G25][Habitat]") {
+    NF::HabitatLayout layout;
+    NF::HabitatZone z1, z2, z3;
+    z1.id = "a"; z2.id = "b"; z3.id = "c";
+    layout.addZone(z1);
+    layout.addZone(z2);
+    layout.addZone(z3);
+
+    REQUIRE(layout.connect("a", "b"));
+    REQUIRE(layout.connect("b", "c"));
+
+    // No duplicate connection
+    REQUIRE_FALSE(layout.connect("a", "b"));
+
+    REQUIRE(layout.neighborCount("b") == 2);
+    REQUIRE(layout.neighborCount("a") == 1);
+
+    auto nbrs = layout.neighbors("b");
+    REQUIRE(nbrs.size() == 2);
+}
+
+TEST_CASE("HabitatLayout habitable count and capacity", "[Game][G25][Habitat]") {
+    NF::HabitatLayout layout;
+    NF::HabitatZone h1, h2;
+    h1.id = "x"; h1.capacity = 4; h1.sealed = true; h1.oxygenLevel = 0.9f;
+    h2.id = "y"; h2.capacity = 6; h2.sealed = false; // breached
+    layout.addZone(h1);
+    layout.addZone(h2);
+
+    REQUIRE(layout.habitableCount() == 1);
+    REQUIRE(layout.totalCapacity() == 4);
+}
+
+TEST_CASE("HabitatSystem create habitat", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int idx = sys.createHabitat("Station Alpha");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.habitatCount() == 1);
+    REQUIRE(sys.habitatName(0) == "Station Alpha");
+}
+
+TEST_CASE("HabitatSystem max habitats", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    REQUIRE(NF::HabitatSystem::kMaxHabitats == 4);
+    for (int i = 0; i < 4; ++i)
+        REQUIRE(sys.createHabitat("h" + std::to_string(i)) >= 0);
+    REQUIRE(sys.createHabitat("overflow") == -1);
+}
+
+TEST_CASE("HabitatSystem life support power draw", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int h = sys.createHabitat("TestHab");
+
+    NF::LifeSupportModule mod;
+    mod.id = "ls1";
+    mod.powerDraw = 20.f;
+    sys.addLifeSupport(h, mod);
+    mod.id = "ls2";
+    mod.powerDraw = 10.f;
+    sys.addLifeSupport(h, mod);
+
+    REQUIRE(sys.lifeSupportPowerDraw(h) == Catch::Approx(30.f));
+}
+
+TEST_CASE("HabitatSystem breach and repair", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int h = sys.createHabitat("OutpostBeta");
+    NF::HabitatZone zone;
+    zone.id = "cargo";
+    zone.name = "Cargo Bay";
+    zone.type = NF::HabitatZoneType::Cargo;
+    sys.layout(h)->addZone(zone);
+
+    REQUIRE(sys.breachZone(h, "cargo"));
+    auto* z = sys.layout(h)->findZone("cargo");
+    REQUIRE_FALSE(z->sealed);
+    REQUIRE(z->oxygenLevel == 0.f);
+    REQUIRE(z->pressure == 0.f);
+
+    REQUIRE(sys.repairBreach(h, "cargo"));
+    REQUIRE(z->sealed);
+    REQUIRE(z->pressure == 1.f);
+}
+
+TEST_CASE("HabitatSystem tickAtmosphere oxygen generation", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int h = sys.createHabitat("AtmoTest");
+
+    NF::HabitatZone zone;
+    zone.id = "living";
+    zone.name = "Living";
+    zone.oxygenLevel = 0.5f;
+    zone.sealed = true;
+    zone.occupants = 0;
+    sys.layout(h)->addZone(zone);
+
+    NF::LifeSupportModule mod;
+    mod.id = "ls";
+    mod.oxygenGenRate = 0.1f;
+    sys.addLifeSupport(h, mod);
+
+    sys.tickAtmosphere(h, 1.f);
+
+    auto* z = sys.layout(h)->findZone("living");
+    REQUIRE(z->oxygenLevel > 0.5f);  // oxygen should increase
+}
+
+TEST_CASE("HabitatLayout max zones", "[Game][G25][Habitat]") {
+    REQUIRE(NF::HabitatLayout::kMaxZones == 32);
+}

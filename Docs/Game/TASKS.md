@@ -763,3 +763,309 @@ Spec Pack delivered:
 - 25 documentation files (game design, system specs, audit reports, roadmap)
 - 24 new tests, all passing
 Total: 884 tests, 0 failures.
+
+## M2/S1 — Dev World Editing ✅
+
+- [x] M2-1: Vec3i integer vector type for voxel coordinates
+- [x] M2-2: NoiseParams struct (frequency, amplitude, octaves, lacunarity, persistence, seed)
+- [x] M2-3: PCGPreset struct and PCGTuningPanel (EditorPanel subclass, DockSlot::Right)
+  - Noise parameter editing, preset management, seed control, dirty tracking
+- [x] M2-4: PlacedEntity struct and EntityPlacementTool
+  - Template-based entity placement, grid snap, auto-incrementing IDs
+- [x] M2-5: VoxelBrushShape enum, VoxelBrushSettings, PaintStroke, VoxelPaintTool
+  - Brush editing (sphere/cube/cylinder), stroke recording, material palette (8 slots)
+- [x] M2-6: PlaceEntityCommand, RemoveEntityCommand, PaintStrokeCommand, PCGParamChangeCommand
+  - All implement ICommand for full undo/redo through CommandStack
+- [x] M2-7: EditorUndoSystem — composite undo manager wrapping CommandStack
+  - executePlaceEntity, executeRemoveEntity, executePaintStroke, executePCGChange
+- [x] M2-8: WorldPreviewService — live world preview state management
+  - PreviewState enum (Idle/Loading/Ready/Error), view center/radius, dirty tracking
+- [x] M2-9: EditorApp integration — member variables, accessors, menu items, commands
+  - PCG Tuning panel added to Edit menu, Entity Placement and Voxel Paint to Tools menu
+- [x] M2-10: test_m2_editor.cpp — 25 new Catch2 test cases
+- [x] Build verification: 909/909 tests pass (884 existing + 25 new)
+- [x] Update Docs/Game/ROADMAP.md — M2/S1 marked Done
+
+## M2/S1 Complete ✅
+
+M2/S1 (Dev World Editing) fully delivered:
+- 5 new systems: PCGTuningPanel, EntityPlacementTool, VoxelPaintTool, EditorUndoSystem, WorldPreviewService
+- 4 undo commands: PlaceEntityCommand, RemoveEntityCommand, PaintStrokeCommand, PCGParamChangeCommand
+- Supporting types: Vec3i, NoiseParams, PCGPreset, PlacedEntity, VoxelBrushShape, VoxelBrushSettings, PaintStroke, PreviewState
+- Fully wired into EditorApp with menu items and commands
+- 25 new tests, all passing
+Total: 909 tests, 0 failures.
+
+## M3/S2 — Play-in-Editor ✅
+
+- [x] M3-1: PlayState enum (Stopped, Running, Paused) with playStateName()
+- [x] M3-2: EditorWorldSnapshot struct — captures world path, placed entities, PCG params, camera state
+  - capture() and invalidate() methods for snapshot lifecycle
+- [x] M3-3: EditorWorldSession class — manages PIE session lifecycle
+  - start/pause/resume/stop state machine with validation
+  - tick(dt) advances elapsed time and frame count only while Running
+  - Snapshot preserved after stop for restoration
+- [x] M3-4: PlayInEditorSystem class — high-level PIE controller
+  - Wires to EntityPlacementTool, PCGTuningPanel, ViewportPanel for snapshot/restore
+  - start() captures pre-play state, stop() restores it
+  - togglePlay() cycles Stopped→Running→Paused→Running
+  - isRunning/isPaused/isStopped convenience queries
+- [x] M3-5: EditorApp integration
+  - Play/Pause/Stop commands: play.start (F5), play.pause (F6), play.stop (Shift+F5)
+  - Enabled checks: pause requires Running, stop requires !Stopped
+  - Toolbar buttons wired to commands (replaced noop lambdas)
+  - Edit menu includes Play/Pause/Stop items
+  - Status bar reflects PIE state (Editor/Playing/Paused)
+  - PIE tick integrated into EditorApp::update()
+- [x] M3-6: test_m3_editor.cpp — 13 new Catch2 test cases
+  - PlayState names, snapshot capture/invalidate
+  - Session lifecycle, pause/resume guards
+  - PlayInEditorSystem standalone + toggle
+  - Snapshot/restore for entities, PCG params, camera
+  - EditorApp integration + enabled checks
+- [x] Build verification: 940/940 tests pass (909 existing + 31 new)
+
+## M3/S2 Complete ✅
+
+M3/S2 (Play-in-Editor) fully delivered:
+- 3 new types: PlayState, EditorWorldSnapshot, EditorWorldSession
+- 1 new system: PlayInEditorSystem with full snapshot/restore
+- Wired into EditorApp: commands, toolbar, menu, status bar, tick
+- 13 new editor tests, all passing
+
+## G22 — Weather System ✅
+
+- [x] G22-1: WeatherType enum (Clear, Rain, Storm, Snow, Fog, Sandstorm, AcidRain, SolarFlare)
+  - weatherTypeName() helper for all 8 types
+- [x] G22-2: WeatherCondition struct — active weather with intensity and duration
+  - isExpired(), progress(), effectiveIntensity() with fade-in/fade-out
+  - Configurable transitionTime for smooth intensity ramps
+- [x] G22-3: WeatherEffects struct — gameplay impact calculations
+  - visibilityMultiplier, movementMultiplier, damagePerSecond, miningMultiplier
+  - disablesScanner (Storm/SolarFlare), disablesNavigation (Sandstorm/SolarFlare)
+  - Static forCondition() factory computes effects from active weather
+- [x] G22-4: WeatherForecastEntry struct — queued future weather events
+  - Type, intensity, duration, delayUntilStart
+- [x] G22-5: WeatherSystem class — central weather manager
+  - setWeather() for immediate weather changes
+  - addForecast()/clearForecast() with kMaxForecast=8 cap
+  - tick(dt) advances weather, auto-transitions on expiry
+  - Forecast queue auto-triggers when delay expires and weather is Clear
+  - currentEffects() returns live WeatherEffects
+  - clearWeather() forces Clear
+- [x] G22-6: 18 new Catch2 test cases in test_game.cpp
+  - Type names, condition defaults, expiration, fade-in/out
+  - Effects for Clear, AcidRain, SolarFlare
+  - System lifecycle, tick, auto-transition, forecast, max cap
+- [x] Build verification: 940/940 tests pass
+
+## G22 Complete ✅
+
+G22 (Weather System) fully delivered:
+- WeatherType×8 with name helper
+- WeatherCondition with intensity fade-in/fade-out
+- WeatherEffects with 6 gameplay impact fields, static factory method
+- WeatherForecastEntry for queued events
+- WeatherSystem with forecast queue, auto-transitions, effects query
+- 18 new game tests, all passing
+Total: 940 tests, 0 failures.
+
+## M4/S3 — Asset Pipeline ✅
+
+- [x] M4-1: AssetGuid 128-bit UUID type (FNV-1a from path, generate from counter)
+  - Null check, deterministic fromPath, toString (hex-dash format)
+- [x] M4-2: AssetType enum (Mesh, Texture, Material, Sound, Script, Graph, World, Unknown)
+  - assetTypeName() helper, classifyAssetExtension() for 15+ extensions
+- [x] M4-3: AssetEntry struct (guid, path, name, type, lastModified, sizeBytes, imported)
+- [x] M4-4: AssetDatabase class — GUID-based asset registry
+  - registerAsset (auto-dedup by path), removeAsset, findByGuid/findByPath
+  - markImported, assetsOfType, importedCount, scanDirectory (recursive fs walk)
+  - clear, entries, assetCount
+- [x] M4-5: MeshImportSettings / TextureImportSettings structs
+  - Mesh: scaleFactor, generateNormals, generateTangents, flipWindingOrder, mergeMeshes
+  - Texture: generateMipmaps, sRGB, maxResolution, premultiplyAlpha, flipVertically, compressionQuality
+- [x] M4-6: MeshImporter class — validate (.obj/.fbx/.gltf/.glb), import, settings
+- [x] M4-7: TextureImporter class — validate (.png/.jpg/.tga/.bmp), import, settings
+- [x] M4-8: AssetWatcher class — hot-reload detection via dirty GUID set
+  - markDirty, clearDirty, isDirty, clearAll, pollChanges (timestamp comparison)
+- [x] M4-9: EditorApp integration
+  - Member variables: m_assetDatabase, m_meshImporter, m_textureImporter, m_assetWatcher
+  - Accessors: assetDatabase(), meshImporter(), textureImporter(), assetWatcher()
+  - Commands: assets.scan (scan content dir), assets.reimport (re-import dirty)
+  - Menu: Tools → Scan Assets, Reimport Changed
+- [x] M4-10: test_m4_editor.cpp — 24 new Catch2 test cases
+- [x] Build verification: 983/983 tests pass (940 existing + 43 new)
+
+## M4/S3 Complete ✅
+
+M4/S3 (Asset Pipeline) fully delivered:
+- AssetGuid 128-bit UUID with deterministic path-based generation
+- AssetDatabase with GUID↔path registry, import tracking, directory scanning
+- MeshImporter + TextureImporter with settings and validation
+- AssetWatcher for hot-reload detection
+- Fully wired into EditorApp with commands and menu items
+- 24 new editor tests, all passing
+
+## G23 — Trading System ✅
+
+- [x] G23-1: TradeGoodCategory enum (Raw, Refined, Component, Consumable, Tech, Luxury, Contraband, Data)
+  - tradeGoodCategoryName() for all 8 categories
+- [x] G23-2: TradeGood struct (id, name, category, basePrice, weight, legal flag)
+  - isContraband() convenience query
+- [x] G23-3: TradeOffer struct (goodId, quantity, pricePerUnit, isBuyOffer)
+- [x] G23-4: TradeRoute struct (originId, destinationId, goodId, profitMargin, riskLevel, distance)
+- [x] G23-5: TradingPost class — local inventory, pricing, and transactions
+  - addStock, removeStock, stockOf, priceOf
+  - buy() (deducts stock, returns cost), sell() (adds stock, returns revenue at 80%)
+  - tickPrices() (supply/demand fluctuation), taxRate management
+  - totalSales, totalPurchases tracking
+- [x] G23-6: TradingSystem class — global trade management
+  - registerGood (no duplicates), addPost, removePost, findPost, findGood
+  - executeBuy, executeSell (through posts), tick price updates
+  - routeProfitMargin (buy-at-origin, sell-at-destination calculation)
+  - Max caps: 32 posts, 64 routes, 128 goods, total volume tracking
+- [x] G23-7: 19 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 983/983 tests pass
+
+## G23 Complete ✅
+
+G23 (Trading System) fully delivered:
+- TradeGoodCategory×8 with name helper
+- TradeGood, TradeOffer, TradeRoute data types
+- TradingPost with buy/sell transactions, supply/demand pricing
+- TradingSystem with global trade management, route profit analysis
+- 19 new game tests, all passing
+Total: 983 tests, 0 failures.
+
+## S4 — Blender Bridge ✅
+
+- [x] S4-1: BlenderExportFormat enum (FBX, GLTF, OBJ, GLB)
+  - blenderExportFormatName() and blenderExportFormatExtension() helpers
+- [x] S4-2: BlenderExportEntry struct (sourcePath, format, exportedAt, autoImported, importedGuid)
+- [x] S4-3: BlenderAutoImporter class — watches export dir, auto-imports
+  - setExportDirectory, scanExports (detects .fbx/.gltf/.obj/.glb)
+  - importPending (imports via MeshImporter → AssetDatabase)
+  - poll() convenience (scan + auto-import in one call)
+  - exportCount, importedCount, pendingCount tracking
+  - Auto-import toggle, clearHistory
+- [x] S4-4: novaforge_bridge.py Blender add-on
+  - NovaForgePreferences (export dir, default format, auto-export on save)
+  - NOVAFORGE_OT_export operator (FBX/GLTF/OBJ/GLB export)
+  - NOVAFORGE_PT_panel sidebar panel (Export Selected/All, settings)
+  - Menu entry in File → Export → NovaForge Export
+  - Auto-export on save handler
+  - register/unregister lifecycle
+- [x] S4-5: EditorApp integration
+  - Member: m_blenderImporter (BlenderAutoImporter)
+  - Accessor: blenderAutoImporter() (const + non-const)
+  - Commands: blender.set_export_dir, blender.scan_exports, blender.import_pending, blender.toggle_auto_import
+  - Menu: Tools → Set Blender Export Dir, Scan Blender Exports, Import Pending, Toggle Auto-Import
+- [x] S4-6: test_s4_editor.cpp — 14 new Catch2 test cases
+- [x] Build verification: 1012/1012 tests pass
+
+## S4 Complete ✅
+
+S4 (Blender Bridge) fully delivered:
+- BlenderExportFormat enum with name + extension helpers
+- BlenderAutoImporter with directory watch, auto-import, and pending tracking
+- novaforge_bridge.py Blender add-on with export operator, sidebar panel, and auto-export
+- Fully wired into EditorApp with 4 commands and menu items
+- 14 new editor tests, all passing
+
+## G24 — Base Building System ✅
+
+- [x] G24-1: BasePartCategory enum (Foundation, Wall, Floor, Ceiling, Door, Window, Utility, Decoration)
+  - basePartCategoryName() for all 8 categories
+- [x] G24-2: BasePart struct (id, name, category, hitPoints, buildCost, powerDraw, weight)
+  - requiresPower() convenience query
+- [x] G24-3: BaseGridPos struct (x, y, z with equality operators)
+- [x] G24-4: PlacedBasePart struct (partId, position, currentHP, powered)
+- [x] G24-5: BaseLayout class — grid-based part placement
+  - placePart (collision check, max 256 parts), removePart, partAt
+  - adjacentCount (Manhattan distance = 1), isStructurallySound (non-foundation needs neighbor)
+  - totalPowerDraw calculation from part definitions
+- [x] G24-6: BaseDefense struct — shield and armor system
+  - takeDamage (shields absorb first, armor reduces remainder)
+  - regenShield (capped at max), resetShields
+- [x] G24-7: BaseSystem class — central base management
+  - registerPart (no duplicates), findPart
+  - createBase/removeBase (max 8 bases), baseName
+  - Power management: setPowerOutput, hasSufficientPower, availablePower
+  - Per-base layout and defense access
+- [x] G24-8: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1012/1012 tests pass
+
+## G24 Complete ✅
+
+G24 (Base Building System) fully delivered:
+- BasePartCategory×8 with name helper
+- BasePart, BaseGridPos, PlacedBasePart data types
+- BaseLayout with grid placement, adjacency, structural integrity
+- BaseDefense with shield/armor damage model
+- BaseSystem with multi-base management and power budgeting
+- 15 new game tests, all passing
+Total: 1012 tests, 0 failures.
+
+## S5 — Character & Animation Suite ✅
+
+- [x] S5-1: BoneChain struct (root/mid/end bone indices, isValid())
+- [x] S5-2: TwoJointIK solver
+  - Analytical 2-bone IK with law of cosines
+  - Pole vector for bend plane orientation
+  - Clamped reach range, solve statistics
+- [x] S5-3: FPSHandRig class
+  - Left/right arm chains with HandSide enum
+  - Per-hand IK target and pole target
+  - applyIK() drives both arms via TwoJointIK
+  - Weapon sway offset with applySwayToTargets()
+- [x] S5-4: AnimationBlendGraph
+  - BlendNode struct (clip, weight, timeScale, localTime, looping)
+  - addNode/setWeight/findNode, max 16 nodes
+  - update() advances localTime with looping wrap
+  - sample() normalized weighted pose blending
+- [x] S5-5: CharacterGroundingSystem
+  - Ground height + max adjustment, foot bone indices
+  - apply() adjusts foot bone Y positions, clamped to maxAdjustment
+  - needsGrounding() threshold check
+- [x] S5-6: test_s5_animation.cpp — 17 new Catch2 test cases
+- [x] Build verification: 1042/1042 tests pass
+
+## S5 Complete ✅
+
+S5 (Character & Animation Suite) fully delivered:
+- BoneChain + TwoJointIK analytical solver with pole vector
+- FPSHandRig with dual-arm IK and weapon sway
+- AnimationBlendGraph with weighted multi-clip blending
+- CharacterGroundingSystem with foot bone adjustment
+- 17 new animation tests, all passing
+
+## G25 — Habitat System ✅
+
+- [x] G25-1: HabitatZoneType enum (Living, Engineering, Medical, Command, Cargo, Recreation, Hydroponics, Airlock)
+  - habitatZoneTypeName() for all 8 types
+- [x] G25-2: HabitatZone struct (id, name, type, capacity, occupants, oxygenLevel, temperature, pressure, sealed)
+  - isHabitable() (sealed, O₂ > 0.15, pressure > 0.5, temp 5–45°C)
+  - isBreached(), availableCapacity()
+- [x] G25-3: LifeSupportModule struct (oxygenGenRate, co2ScrubRate, tempTarget, tempAdjustRate, powerDraw)
+  - isOperational() active check
+- [x] G25-4: HabitatLayout class — zone management with connections
+  - addZone/removeZone (max 32 zones), findZone, connect (bidirectional)
+  - neighborCount, neighbors, habitableCount, totalCapacity
+- [x] G25-5: HabitatSystem class — central habitat management
+  - createHabitat (max 4), addLifeSupport, layout access
+  - tickAtmosphere (oxygen generation, occupant drain, temperature convergence)
+  - breachZone/repairBreach (seal/unseal with atmosphere venting)
+  - lifeSupportPowerDraw calculation
+- [x] G25-6: 13 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1042/1042 tests pass
+
+## G25 Complete ✅
+
+G25 (Habitat System) fully delivered:
+- HabitatZoneType×8 with name helper
+- HabitatZone with habitability checks and atmosphere properties
+- LifeSupportModule for oxygen generation and temperature control
+- HabitatLayout with zone connectivity and capacity tracking
+- HabitatSystem with atmosphere simulation, breach/repair mechanics
+- 13 new game tests, all passing
+Total: 1042 tests, 0 failures.
