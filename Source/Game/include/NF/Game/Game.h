@@ -8784,4 +8784,160 @@ private:
     size_t                   m_tickCount = 0;
 };
 
+// ============================================================
+// G38 — Storm System
+// ============================================================
+
+enum class StormType : uint8_t {
+    Thunderstorm  = 0,
+    Hurricane     = 1,
+    Blizzard      = 2,
+    Sandstorm     = 3,
+    Firestorm     = 4,
+    Hailstorm     = 5,
+    Tornado       = 6,
+    ElectricStorm = 7,
+};
+
+inline const char* stormTypeName(StormType t) {
+    switch (t) {
+        case StormType::Thunderstorm:  return "Thunderstorm";
+        case StormType::Hurricane:     return "Hurricane";
+        case StormType::Blizzard:      return "Blizzard";
+        case StormType::Sandstorm:     return "Sandstorm";
+        case StormType::Firestorm:     return "Firestorm";
+        case StormType::Hailstorm:     return "Hailstorm";
+        case StormType::Tornado:       return "Tornado";
+        case StormType::ElectricStorm: return "ElectricStorm";
+        default:                       return "Unknown";
+    }
+}
+
+enum class StormSeverity : uint8_t {
+    None         = 0,
+    Mild         = 1,
+    Moderate     = 2,
+    Severe       = 3,
+    Catastrophic = 4,
+};
+
+struct Storm {
+    std::string   id;
+    std::string   region;
+    StormType     type     = StormType::Thunderstorm;
+    StormSeverity severity = StormSeverity::Mild;
+    uint32_t      duration = 0;    // ticks remaining
+    bool          active   = true;
+
+    [[nodiscard]] bool isActive()   const { return active && duration > 0; }
+    [[nodiscard]] bool isCritical() const { return severity >= StormSeverity::Severe; }
+
+    void dissipate() { active = false; duration = 0; }
+
+    void advanceDuration() {
+        if (!active) return;
+        if (duration > 0) duration--;
+        if (duration == 0) active = false;
+    }
+};
+
+class StormRegion {
+public:
+    explicit StormRegion(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()  const { return m_name; }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+
+    [[nodiscard]] StormSeverity currentSeverity() const {
+        StormSeverity worst = StormSeverity::None;
+        for (auto& s : m_storms) {
+            if (s.isActive() && s.severity > worst)
+                worst = s.severity;
+        }
+        return worst;
+    }
+
+    bool addStorm(const Storm& s) {
+        for (auto& existing : m_storms) if (existing.id == s.id) return false;
+        m_storms.push_back(s);
+        return true;
+    }
+
+    [[nodiscard]] Storm* findStorm(const std::string& id) {
+        for (auto& s : m_storms) if (s.id == id) return &s;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t stormCount()  const { return m_storms.size(); }
+
+    [[nodiscard]] size_t activeStormCount() const {
+        size_t c = 0;
+        for (auto& s : m_storms) if (s.isActive()) c++;
+        return c;
+    }
+
+    void tick() {
+        for (auto& s : m_storms) s.advanceDuration();
+        m_tickCount++;
+    }
+
+private:
+    std::string        m_name;
+    std::vector<Storm> m_storms;
+    size_t             m_tickCount = 0;
+};
+
+class StormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+    static constexpr size_t MAX_STORMS  = 128;
+
+    StormRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] StormRegion* regionByName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    bool addStorm(const Storm& s) {
+        if (m_stormCount >= MAX_STORMS) return false;
+        auto* region = regionByName(s.region);
+        if (!region) return false;
+        if (region->addStorm(s)) { m_stormCount++; return true; }
+        return false;
+    }
+
+    void tick() {
+        for (auto& r : m_regions) r.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount()      const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t totalStormCount()  const { return m_stormCount; }
+
+    [[nodiscard]] size_t activeStormCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeStormCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t criticalRegionCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions)
+            if (r.currentSeverity() >= StormSeverity::Severe) c++;
+        return c;
+    }
+
+private:
+    std::vector<StormRegion> m_regions;
+    size_t                   m_tickCount  = 0;
+    size_t                   m_stormCount = 0;
+};
+
 } // namespace NF

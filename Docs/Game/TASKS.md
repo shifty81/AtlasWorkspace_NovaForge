@@ -1920,3 +1920,73 @@ G37 (Refugee System) fully delivered:
 ## Build Verification ✅
 
 Total: 1427 tests, 0 failures (1400 existing + 14 S18 + 13 G37 = 1427).
+
+---
+
+## S19 — Scene Snapshot System ✅
+
+- [x] SceneSnapshotType enum ×8 (Full, Delta, Lighting, Physics, AI, Audio, Visual, Meta)
+  - sceneSnapshotTypeName() for all 8 types
+- [x] SceneSnapshotState enum ×4 (Valid, Outdated, Corrupted, Partial)
+- [x] SceneSnapshotFrame struct (id, label, type, state, timestamp, dataSize)
+  - isValid/isOutdated/isCorrupted/isPartial predicates
+  - markOutdated (only from Valid), markCorrupted (always)
+- [x] SceneSnapshotHistory class — ring-style history of frames
+  - push (max 128, no duplicates), remove, find
+  - latest returns last pushed frame
+  - markAllOutdated propagates to all frames
+  - validCount, corruptedCount, totalDataSize aggregations
+- [x] SceneSnapshotSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - capture/discard/find delegation
+  - invalidateAll propagation
+  - frameCount, validCount, corruptedCount, totalDataSize
+- [x] 14 new editor tests (test_s19_editor.cpp), all passing
+
+## S19 Complete ✅
+
+S19 (Scene Snapshot System) fully delivered:
+- SceneSnapshotType×8 with name helpers
+- SceneSnapshotState×4 for full frame state tracking
+- SceneSnapshotFrame with guarded state transitions
+- SceneSnapshotHistory with duplicate protection and aggregate stats
+- SceneSnapshotSystem as top-level coordinator
+- 14 new editor tests, all passing
+
+---
+
+## G38 — Storm System ✅
+
+- [x] StormType enum ×8 (Thunderstorm, Hurricane, Blizzard, Sandstorm, Firestorm, Hailstorm, Tornado, ElectricStorm)
+  - stormTypeName() for all 8 types
+- [x] StormSeverity enum ×5 (None, Mild, Moderate, Severe, Catastrophic)
+- [x] Storm struct (id, region, type, severity, duration, active)
+  - isActive (active && duration > 0), isCritical (Severe or worse)
+  - dissipate clears active and duration
+  - advanceDuration counts down, auto-dissipates at 0
+- [x] StormRegion class — per-region storm tracker
+  - addStorm (no duplicates), findStorm
+  - activeStormCount, currentSeverity (worst active severity)
+  - tick propagates advanceDuration to all storms
+- [x] StormSystem class — multi-region coordinator
+  - createRegion (max 32, unique names), regionByName
+  - addStorm (max 128, routes to correct region)
+  - tick propagates to all regions
+  - totalStormCount, activeStormCount, criticalRegionCount
+- [x] 13 new game tests (in test_game.cpp), all passing
+
+## G38 Complete ✅
+
+G38 (Storm System) fully delivered:
+- StormType×8 with name helpers
+- StormSeverity×5 for severity classification
+- Storm with countdown lifecycle and severity criticality
+- StormRegion with active-storm tracking and worst-severity aggregation
+- StormSystem as multi-region coordinator
+- 13 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1454 tests, 0 failures (1427 existing + 14 S19 + 13 G38 = 1454).

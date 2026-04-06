@@ -6915,3 +6915,132 @@ TEST_CASE("RefugeeSystem tick propagates to camps", "[Game][G37][Refugee]") {
     REQUIRE(sys.tickCount() == 2);
     REQUIRE(sys.campByName("Delta")->tickCount() == 2);
 }
+
+// ============================================================
+// G38 — Storm System tests
+// ============================================================
+
+TEST_CASE("StormType names cover all 8 values", "[Game][G38][Storm]") {
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Thunderstorm))  == "Thunderstorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Hurricane))     == "Hurricane");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Blizzard))      == "Blizzard");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Sandstorm))     == "Sandstorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Firestorm))     == "Firestorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Hailstorm))     == "Hailstorm");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::Tornado))       == "Tornado");
+    REQUIRE(std::string(NF::stormTypeName(NF::StormType::ElectricStorm)) == "ElectricStorm");
+}
+
+TEST_CASE("Storm isActive and isCritical predicates", "[Game][G38][Storm]") {
+    NF::Storm s;
+    s.id = "s1"; s.active = true; s.duration = 5; s.severity = NF::StormSeverity::Mild;
+    REQUIRE(s.isActive());
+    REQUIRE_FALSE(s.isCritical());
+
+    s.severity = NF::StormSeverity::Severe;
+    REQUIRE(s.isCritical());
+
+    s.duration = 0;
+    REQUIRE_FALSE(s.isActive());
+}
+
+TEST_CASE("Storm dissipate clears active and duration", "[Game][G38][Storm]") {
+    NF::Storm s;
+    s.id = "s1"; s.active = true; s.duration = 10;
+    s.dissipate();
+    REQUIRE_FALSE(s.active);
+    REQUIRE(s.duration == 0);
+    REQUIRE_FALSE(s.isActive());
+}
+
+TEST_CASE("Storm advanceDuration counts down and auto-dissipates", "[Game][G38][Storm]") {
+    NF::Storm s;
+    s.id = "s1"; s.active = true; s.duration = 2;
+    s.advanceDuration();
+    REQUIRE(s.duration == 1);
+    REQUIRE(s.isActive());
+    s.advanceDuration();
+    REQUIRE(s.duration == 0);
+    REQUIRE_FALSE(s.isActive());
+}
+
+TEST_CASE("StormRegion addStorm + duplicate rejection", "[Game][G38][Storm]") {
+    NF::StormRegion region("Coast");
+    NF::Storm s1; s1.id = "s1"; s1.active = true; s1.duration = 3;
+    NF::Storm s1dup; s1dup.id = "s1";
+
+    REQUIRE(region.addStorm(s1));
+    REQUIRE_FALSE(region.addStorm(s1dup));
+    REQUIRE(region.stormCount() == 1);
+}
+
+TEST_CASE("StormRegion activeStormCount + currentSeverity", "[Game][G38][Storm]") {
+    NF::StormRegion region("Plains");
+    NF::Storm s1; s1.id = "s1"; s1.active = true;  s1.duration = 5; s1.severity = NF::StormSeverity::Moderate;
+    NF::Storm s2; s2.id = "s2"; s2.active = false; s2.duration = 0; s2.severity = NF::StormSeverity::Catastrophic;
+    region.addStorm(s1);
+    region.addStorm(s2);
+
+    REQUIRE(region.activeStormCount() == 1);
+    REQUIRE(region.currentSeverity() == NF::StormSeverity::Moderate); // s2 inactive
+}
+
+TEST_CASE("StormRegion tick advances storms and region tickCount", "[Game][G38][Storm]") {
+    NF::StormRegion region("Valley");
+    NF::Storm s; s.id = "s1"; s.active = true; s.duration = 3;
+    region.addStorm(s);
+
+    region.tick();
+    region.tick();
+    REQUIRE(region.tickCount() == 2);
+    REQUIRE(region.findStorm("s1")->duration == 1);
+}
+
+TEST_CASE("StormSystem createRegion + duplicate rejection", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    REQUIRE(sys.createRegion("North") != nullptr);
+    REQUIRE(sys.createRegion("South") != nullptr);
+    REQUIRE(sys.createRegion("North") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("StormSystem addStorm + activeStormCount", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    sys.createRegion("East");
+
+    NF::Storm s; s.id = "st1"; s.region = "East"; s.active = true; s.duration = 5;
+    REQUIRE(sys.addStorm(s));
+    REQUIRE(sys.totalStormCount() == 1);
+    REQUIRE(sys.activeStormCount() == 1);
+
+    // bad region returns false
+    NF::Storm bad; bad.id = "st2"; bad.region = "Nowhere"; bad.active = true; bad.duration = 1;
+    REQUIRE_FALSE(sys.addStorm(bad));
+}
+
+TEST_CASE("StormSystem criticalRegionCount", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    sys.createRegion("R1");
+    sys.createRegion("R2");
+
+    NF::Storm severe; severe.id = "st1"; severe.region = "R1";
+    severe.active = true; severe.duration = 10; severe.severity = NF::StormSeverity::Severe;
+    sys.addStorm(severe);
+
+    NF::Storm mild; mild.id = "st2"; mild.region = "R2";
+    mild.active = true; mild.duration = 5; mild.severity = NF::StormSeverity::Mild;
+    sys.addStorm(mild);
+
+    REQUIRE(sys.criticalRegionCount() == 1);
+}
+
+TEST_CASE("StormSystem tick propagates to all regions", "[Game][G38][Storm]") {
+    NF::StormSystem sys;
+    sys.createRegion("Alpha");
+    sys.createRegion("Beta");
+    sys.tick();
+    sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.regionByName("Alpha")->tickCount() == 2);
+    REQUIRE(sys.regionByName("Beta")->tickCount() == 2);
+}
