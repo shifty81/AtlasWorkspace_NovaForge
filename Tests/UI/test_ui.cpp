@@ -18,14 +18,18 @@ TEST_CASE("UIRenderer drawRect emits 4 vertices and 6 indices", "[UI][Renderer]"
     r.shutdown();
 }
 
-TEST_CASE("UIRenderer drawText emits quads per visible char", "[UI][Renderer]") {
+TEST_CASE("UIRenderer drawText stores text command, not character quads", "[UI][Renderer]") {
     NF::UIRenderer r;
     r.init();
     r.beginFrame(800.f, 600.f);
     r.drawText(0.f, 0.f, "Hi", 0xFFFFFFFF);
-    // 2 chars => 2 quads => 8 vertices, 12 indices
-    REQUIRE(r.vertices().size() == 8);
-    REQUIRE(r.indices().size() == 12);
+    // Text is now stored as a UITextCmd, not as per-character geometry.
+    // The vertex buffer should be empty; the text-command list should have 1 entry.
+    REQUIRE(r.vertices().empty());
+    REQUIRE(r.indices().empty());
+    REQUIRE(r.textCmds().size() == 1);
+    REQUIRE(r.textCmds()[0].text == "Hi");
+    REQUIRE(r.textCmds()[0].color == 0xFFFFFFFF);
     r.endFrame();
     REQUIRE(r.textDrawCount() == 1);
     r.shutdown();

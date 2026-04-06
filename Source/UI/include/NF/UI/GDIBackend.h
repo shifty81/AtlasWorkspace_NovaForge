@@ -131,8 +131,10 @@ public:
         return UIBackend::measureText(text, fontSize);
     }
 
-    // Convenience: draw native GDI text at a position (used during flush for annotated text)
-    void drawTextGDI(float x, float y, std::string_view text, uint32_t color) {
+    // UIBackend override: render a text string using native GDI TextOutA.
+    // Called by UIRenderer::endFrame() after geometry is flushed so that text
+    // always appears on top of background rectangles.
+    void drawText(float x, float y, std::string_view text, uint32_t color) override {
         if (!m_memDC) return;
         uint8_t r = static_cast<uint8_t>((color >> 24) & 0xFF);
         uint8_t g = static_cast<uint8_t>((color >> 16) & 0xFF);
@@ -140,6 +142,14 @@ public:
         SetTextColor(m_memDC, RGB(r, g, b));
         TextOutA(m_memDC, static_cast<int>(x), static_cast<int>(y),
                  text.data(), static_cast<int>(text.size()));
+    }
+
+    // Convenience alias kept for backward compatibility with any call sites that
+    // used the old drawTextGDI() name.
+    // TODO: remove once all callers have been updated to use drawText().
+    [[deprecated("Use drawText() instead")]]
+    void drawTextGDI(float x, float y, std::string_view text, uint32_t color) {
+        drawText(x, y, text, color);
     }
 
     // Direct access to the memory DC for advanced rendering

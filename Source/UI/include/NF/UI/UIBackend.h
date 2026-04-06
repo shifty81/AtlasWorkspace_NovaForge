@@ -32,6 +32,13 @@ public:
         (void)fontName; (void)fontSize;
     }
 
+    // Draw a text string at (x, y) with the given RGBA colour.
+    // Called by UIRenderer::endFrame() after geometry is flushed.
+    // Backends that can render native text (e.g. GDIBackend) should override
+    // this.  The default implementation is a no-op.
+    virtual void drawText(float /*x*/, float /*y*/,
+                          std::string_view /*text*/, uint32_t /*color*/) {}
+
     // Measure text extents (for layout calculations).
     [[nodiscard]] virtual Vec2 measureText(std::string_view text, float fontSize) const {
         (void)fontSize;

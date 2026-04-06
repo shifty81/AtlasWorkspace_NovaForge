@@ -3950,13 +3950,20 @@ public:
             }
         }
 
-        // Panels
+        // Panels — begin UIContext so renderUI() calls are wired to mouse input.
+        m_uiContext.begin(m_ui, m_mouseState, m_uiTheme, m_lastDt);
         for (auto& panel : m_editorPanels) {
             if (!panel->isVisible()) continue;
             auto* dp = m_dockLayout.findPanel(panel->name());
             if (!dp || !dp->visible) continue;
+            // render() provides the visual (grid overlays, camera info, etc.).
+            // renderUI() draws the interactive widget layer on top.  For panels
+            // whose renderUI re-draws the full panel background via beginPanel(),
+            // it will naturally replace the static render() output.
             panel->render(m_ui, dp->bounds, m_theme);
+            panel->renderUI(m_uiContext, dp->bounds);
         }
+        m_uiContext.end();
 
         // Splitter dividers
         for (auto& dp : m_dockLayout.panels()) {
@@ -4016,6 +4023,17 @@ public:
             m_commandStack.isDirty(),
             static_cast<int>(m_selection.selectionCount()),
             m_frameStats.stats().fps);
+
+        // Sync mouse state for UIContext interactive widgets.
+        bool curLeftDown          = input.isKeyDown(KeyCode::Mouse1);
+        m_mouseState.x            = input.state().mouse.x;
+        m_mouseState.y            = input.state().mouse.y;
+        m_mouseState.leftDown     = curLeftDown;
+        m_mouseState.leftPressed  = curLeftDown && !m_prevLeftDown;
+        m_mouseState.leftReleased = !curLeftDown && m_prevLeftDown;
+        m_mouseState.scrollDelta  = input.state().mouse.scrollDelta;
+        m_prevLeftDown = curLeftDown;
+        m_lastDt = dt;
     }
 
     // Process a hotkey string and dispatch matching commands.
@@ -4244,6 +4262,10 @@ private:
     FrameStatsTracker m_frameStats;
     EditorTheme m_theme;
     UIContext m_uiContext;
+    UITheme m_uiTheme;          // UITheme counterpart used by UIContext (kept in sync with m_theme)
+    UIMouseState m_mouseState;  // Mouse state fed into UIContext each frame
+    bool m_prevLeftDown = false; // Tracks previous-frame left-button state for leftPressed/leftReleased
+    float m_lastDt = 0.016f;    // Last delta-time forwarded to UIContext::begin()
     ToolWindowManager m_toolManager;
     size_t m_logSinkId = 0;
     std::ofstream m_logFile;
