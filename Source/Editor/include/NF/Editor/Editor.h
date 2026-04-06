@@ -4280,4 +4280,988 @@ public:
     }
 };
 
+// ── S6 — PCG World Tuning ────────────────────────────────────────
+
+enum class BiomeBrushType : uint8_t {
+    Paint, Erase, Smooth, Raise, Lower, Flatten, Noise, Fill
+};
+
+inline const char* biomeBrushTypeName(BiomeBrushType t) {
+    switch (t) {
+        case BiomeBrushType::Paint:   return "Paint";
+        case BiomeBrushType::Erase:   return "Erase";
+        case BiomeBrushType::Smooth:  return "Smooth";
+        case BiomeBrushType::Raise:   return "Raise";
+        case BiomeBrushType::Lower:   return "Lower";
+        case BiomeBrushType::Flatten: return "Flatten";
+        case BiomeBrushType::Noise:   return "Noise";
+        case BiomeBrushType::Fill:    return "Fill";
+    }
+    return "Unknown";
+}
+
+struct BiomePaintCell {
+    int x = 0;
+    int y = 0;
+    int biomeIndex = 0;
+    float intensity = 1.f;
+};
+
+class BiomePainter {
+public:
+    explicit BiomePainter(int gridSize = 64)
+        : m_gridSize(gridSize > 256 ? 256 : (gridSize < 1 ? 1 : gridSize)) {}
+
+    void paint(int x, int y) {
+        if (x < 0 || x >= m_gridSize || y < 0 || y >= m_gridSize) return;
+        auto* existing = cellAtMut(x, y);
+        if (existing) {
+            existing->biomeIndex = m_activeBiome;
+            existing->intensity = m_brushIntensity;
+            m_dirty = true;
+            return;
+        }
+        if (m_cells.size() >= kMaxCells) return; // at capacity
+        {
+            BiomePaintCell c;
+            c.x = x;
+            c.y = y;
+            c.biomeIndex = m_activeBiome;
+            c.intensity = m_brushIntensity;
+            m_cells.push_back(c);
+        }
+        m_dirty = true;
+    }
+
+    void erase(int x, int y) {
+        if (x < 0 || x >= m_gridSize || y < 0 || y >= m_gridSize) return;
+        auto* existing = cellAtMut(x, y);
+        if (existing) {
+            existing->biomeIndex = 0;
+            m_dirty = true;
+        }
+    }
+
+    void fill(int biomeIdx) {
+        m_cells.clear();
+        m_cells.reserve(static_cast<size_t>(m_gridSize) * static_cast<size_t>(m_gridSize));
+        for (int cy = 0; cy < m_gridSize; ++cy) {
+            for (int cx = 0; cx < m_gridSize; ++cx) {
+                BiomePaintCell c;
+                c.x = cx;
+                c.y = cy;
+                c.biomeIndex = biomeIdx;
+                c.intensity = m_brushIntensity;
+                m_cells.push_back(c);
+            }
+        }
+        m_dirty = true;
+    }
+
+    [[nodiscard]] const BiomePaintCell* cellAt(int x, int y) const {
+        for (auto& c : m_cells) {
+            if (c.x == x && c.y == y) return &c;
+        }
+        return nullptr;
+    }
+
+    void clear() { m_cells.clear(); m_dirty = true; }
+
+    [[nodiscard]] size_t cellCount() const { return m_cells.size(); }
+    [[nodiscard]] int gridSize() const { return m_gridSize; }
+
+    void setActiveBrush(BiomeBrushType b) { m_activeBrush = b; }
+    [[nodiscard]] BiomeBrushType activeBrush() const { return m_activeBrush; }
+
+    void setBrushRadius(float r) { m_brushRadius = (r < 0.f ? 0.f : (r > 16.f ? 16.f : r)); }
+    [[nodiscard]] float brushRadius() const { return m_brushRadius; }
+
+    void setBrushIntensity(float i) { m_brushIntensity = (i < 0.f ? 0.f : (i > 1.f ? 1.f : i)); }
+    [[nodiscard]] float brushIntensity() const { return m_brushIntensity; }
+
+    void setActiveBiome(int idx) { m_activeBiome = idx; }
+    [[nodiscard]] int activeBiome() const { return m_activeBiome; }
+
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
+    void clearDirty() { m_dirty = false; }
+    void markDirty() { m_dirty = true; }
+
+    static constexpr size_t kMaxCells = 256 * 256;
+
+private:
+    BiomePaintCell* cellAtMut(int x, int y) {
+        for (auto& c : m_cells) {
+            if (c.x == x && c.y == y) return &c;
+        }
+        return nullptr;
+    }
+
+    int m_gridSize = 64;
+    BiomeBrushType m_activeBrush = BiomeBrushType::Paint;
+    float m_brushRadius = 1.f;
+    float m_brushIntensity = 1.f;
+    int m_activeBiome = 0;
+    bool m_dirty = false;
+    std::vector<BiomePaintCell> m_cells;
+};
+
+// ── StructureSeedBank ────────────────────────────────────────────
+
+struct StructureSeedOverride {
+    std::string structureId;
+    uint64_t    overrideSeed = 0;
+    bool        locked = false;
+    std::string notes;
+};
+
+class StructureSeedBank {
+public:
+    static constexpr size_t kMaxOverrides = 128;
+
+    bool addOverride(StructureSeedOverride ov) {
+        if (m_overrides.size() >= kMaxOverrides) return false;
+        for (auto& o : m_overrides) {
+            if (o.structureId == ov.structureId) return false;
+        }
+        m_overrides.push_back(std::move(ov));
+        return true;
+    }
+
+    bool removeOverride(const std::string& structureId) {
+        auto it = std::find_if(m_overrides.begin(), m_overrides.end(),
+                               [&](const StructureSeedOverride& o) { return o.structureId == structureId; });
+        if (it == m_overrides.end()) return false;
+        m_overrides.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] const StructureSeedOverride* findOverride(const std::string& structureId) const {
+        for (auto& o : m_overrides) {
+            if (o.structureId == structureId) return &o;
+        }
+        return nullptr;
+    }
+
+    StructureSeedOverride* findOverride(const std::string& structureId) {
+        for (auto& o : m_overrides) {
+            if (o.structureId == structureId) return &o;
+        }
+        return nullptr;
+    }
+
+    bool lockOverride(const std::string& structureId) {
+        auto* ov = findOverride(structureId);
+        if (!ov) return false;
+        ov->locked = true;
+        return true;
+    }
+
+    bool unlockOverride(const std::string& structureId) {
+        auto* ov = findOverride(structureId);
+        if (!ov) return false;
+        ov->locked = false;
+        return true;
+    }
+
+    [[nodiscard]] size_t overrideCount() const { return m_overrides.size(); }
+    [[nodiscard]] const std::vector<StructureSeedOverride>& overrides() const { return m_overrides; }
+    void clear() { m_overrides.clear(); }
+
+    [[nodiscard]] size_t lockedCount() const {
+        size_t n = 0;
+        for (auto& o : m_overrides) { if (o.locked) ++n; }
+        return n;
+    }
+
+private:
+    std::vector<StructureSeedOverride> m_overrides;
+};
+
+// ── OreSeamEditor ────────────────────────────────────────────────
+
+enum class OreSeamType : uint8_t {
+    Iron, Copper, Gold, Silver, Titanium, Uranium, Crystal, Exotic
+};
+
+inline const char* oreSeamTypeName(OreSeamType t) {
+    switch (t) {
+        case OreSeamType::Iron:     return "Iron";
+        case OreSeamType::Copper:   return "Copper";
+        case OreSeamType::Gold:     return "Gold";
+        case OreSeamType::Silver:   return "Silver";
+        case OreSeamType::Titanium: return "Titanium";
+        case OreSeamType::Uranium:  return "Uranium";
+        case OreSeamType::Crystal:  return "Crystal";
+        case OreSeamType::Exotic:   return "Exotic";
+    }
+    return "Unknown";
+}
+
+struct OreSeamDef {
+    std::string id;
+    OreSeamType type = OreSeamType::Iron;
+    Vec3 position;
+    float radius = 5.f;
+    float density = 0.5f;
+    float depth = 10.f;
+    uint64_t seed = 0;
+
+    [[nodiscard]] float volume() const { return 4.f / 3.f * 3.14159265f * radius * radius * radius * density; }
+};
+
+class OreSeamEditor {
+public:
+    static constexpr size_t kMaxSeams = 64;
+
+    bool addSeam(OreSeamDef seam) {
+        if (m_seams.size() >= kMaxSeams) return false;
+        for (auto& s : m_seams) {
+            if (s.id == seam.id) return false;
+        }
+        m_seams.push_back(std::move(seam));
+        return true;
+    }
+
+    bool removeSeam(const std::string& id) {
+        auto it = std::find_if(m_seams.begin(), m_seams.end(),
+                               [&](const OreSeamDef& s) { return s.id == id; });
+        if (it == m_seams.end()) return false;
+        m_seams.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] const OreSeamDef* findSeam(const std::string& id) const {
+        for (auto& s : m_seams) {
+            if (s.id == id) return &s;
+        }
+        return nullptr;
+    }
+
+    OreSeamDef* findSeam(const std::string& id) {
+        for (auto& s : m_seams) {
+            if (s.id == id) return &s;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] std::vector<const OreSeamDef*> seamsOfType(OreSeamType type) const {
+        std::vector<const OreSeamDef*> result;
+        for (auto& s : m_seams) {
+            if (s.type == type) result.push_back(&s);
+        }
+        return result;
+    }
+
+    [[nodiscard]] float totalVolume() const {
+        float v = 0.f;
+        for (auto& s : m_seams) v += s.volume();
+        return v;
+    }
+
+    [[nodiscard]] size_t seamCount() const { return m_seams.size(); }
+    [[nodiscard]] const std::vector<OreSeamDef>& seams() const { return m_seams; }
+    void clear() { m_seams.clear(); }
+
+private:
+    std::vector<OreSeamDef> m_seams;
+};
+
+// ── PCGPreviewRenderer ──────────────────────────────────────────
+
+enum class PCGPreviewMode : uint8_t {
+    Heightmap, Biome, Moisture, OreDeposits, Structures, Combined, Wireframe, Heatmap
+};
+
+inline const char* pcgPreviewModeName(PCGPreviewMode m) {
+    switch (m) {
+        case PCGPreviewMode::Heightmap:   return "Heightmap";
+        case PCGPreviewMode::Biome:       return "Biome";
+        case PCGPreviewMode::Moisture:    return "Moisture";
+        case PCGPreviewMode::OreDeposits: return "OreDeposits";
+        case PCGPreviewMode::Structures:  return "Structures";
+        case PCGPreviewMode::Combined:    return "Combined";
+        case PCGPreviewMode::Wireframe:   return "Wireframe";
+        case PCGPreviewMode::Heatmap:     return "Heatmap";
+    }
+    return "Unknown";
+}
+
+struct PCGPreviewSettings {
+    PCGPreviewMode mode = PCGPreviewMode::Combined;
+    int resolution = 128;
+    float zoom = 1.f;
+    bool autoRefresh = true;
+    bool showGrid = true;
+    bool showLabels = false;
+    uint64_t seed = 0;
+};
+
+class PCGPreviewRenderer {
+public:
+    void setSettings(const PCGPreviewSettings& s) {
+        m_settings = s;
+        clampSettings();
+    }
+    [[nodiscard]] const PCGPreviewSettings& settings() const { return m_settings; }
+
+    void setResolution(int r) {
+        m_settings.resolution = (r < 32 ? 32 : (r > 512 ? 512 : r));
+    }
+
+    void setZoom(float z) {
+        m_settings.zoom = (z < 0.1f ? 0.1f : (z > 10.f ? 10.f : z));
+    }
+
+    void setMode(PCGPreviewMode mode) { m_settings.mode = mode; }
+
+    void refresh() { m_stale = true; ++m_refreshCount; }
+    [[nodiscard]] size_t refreshCount() const { return m_refreshCount; }
+    [[nodiscard]] bool isStale() const { return m_stale; }
+    void markFresh() { m_stale = false; }
+
+    void setPreviewData(std::vector<float> data) { m_previewData = std::move(data); }
+    [[nodiscard]] const std::vector<float>& previewData() const { return m_previewData; }
+    [[nodiscard]] size_t previewPixelCount() const {
+        return static_cast<size_t>(m_settings.resolution) * static_cast<size_t>(m_settings.resolution);
+    }
+
+    void clear() {
+        m_settings = PCGPreviewSettings{};
+        m_previewData.clear();
+        m_stale = false;
+        m_refreshCount = 0;
+    }
+
+private:
+    void clampSettings() {
+        if (m_settings.resolution < 32) m_settings.resolution = 32;
+        if (m_settings.resolution > 512) m_settings.resolution = 512;
+        if (m_settings.zoom < 0.1f) m_settings.zoom = 0.1f;
+        if (m_settings.zoom > 10.f) m_settings.zoom = 10.f;
+    }
+
+    PCGPreviewSettings m_settings;
+    std::vector<float> m_previewData;
+    bool m_stale = false;
+    size_t m_refreshCount = 0;
+};
+
+// ---------------------------------------------------------------------------
+// S7 — Logic Wiring UI
+// ---------------------------------------------------------------------------
+
+enum class LogicPinType : uint8_t {
+    Flow, Bool, Int, Float, String, Vector, Event, Object
+};
+
+inline const char* logicPinTypeName(LogicPinType t) {
+    switch (t) {
+        case LogicPinType::Flow:   return "Flow";
+        case LogicPinType::Bool:   return "Bool";
+        case LogicPinType::Int:    return "Int";
+        case LogicPinType::Float:  return "Float";
+        case LogicPinType::String: return "String";
+        case LogicPinType::Vector: return "Vector";
+        case LogicPinType::Event:  return "Event";
+        case LogicPinType::Object: return "Object";
+    }
+    return "Unknown";
+}
+
+struct LogicPin {
+    std::string   id;
+    std::string   name;
+    LogicPinType  type      = LogicPinType::Flow;
+    bool          isOutput  = false;
+    bool          connected = false;
+    float         value     = 0.f;
+};
+
+enum class LogicNodeType : uint8_t {
+    AndGate, OrGate, NotGate, Latch, Delay, Switch, Compare, MathOp
+};
+
+inline const char* logicNodeTypeName(LogicNodeType t) {
+    switch (t) {
+        case LogicNodeType::AndGate: return "AND Gate";
+        case LogicNodeType::OrGate:  return "OR Gate";
+        case LogicNodeType::NotGate: return "NOT Gate";
+        case LogicNodeType::Latch:   return "Latch";
+        case LogicNodeType::Delay:   return "Delay";
+        case LogicNodeType::Switch:  return "Switch";
+        case LogicNodeType::Compare: return "Compare";
+        case LogicNodeType::MathOp:  return "Math Op";
+    }
+    return "Unknown";
+}
+
+struct LogicNodeDef {
+    std::string   name;
+    LogicNodeType nodeType = LogicNodeType::AndGate;
+    std::vector<LogicPin> inputs;
+    std::vector<LogicPin> outputs;
+    std::string   description;
+};
+
+class LogicWireNode {
+public:
+    void setId(int id) { m_id = id; }
+    [[nodiscard]] int id() const { return m_id; }
+
+    void setName(const std::string& name) { m_name = name; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void setNodeType(LogicNodeType type) { m_nodeType = type; }
+    [[nodiscard]] LogicNodeType nodeType() const { return m_nodeType; }
+
+    bool addInput(const LogicPin& pin) {
+        if (m_inputs.size() >= kMaxPins) return false;
+        m_inputs.push_back(pin);
+        return true;
+    }
+
+    bool addOutput(const LogicPin& pin) {
+        if (m_outputs.size() >= kMaxPins) return false;
+        m_outputs.push_back(pin);
+        return true;
+    }
+
+    [[nodiscard]] const std::vector<LogicPin>& inputs() const { return m_inputs; }
+    [[nodiscard]] const std::vector<LogicPin>& outputs() const { return m_outputs; }
+
+    inline LogicPin* findInput(const std::string& pinId) {
+        for (auto& p : m_inputs) { if (p.id == pinId) return &p; }
+        return nullptr;
+    }
+    inline LogicPin* findOutput(const std::string& pinId) {
+        for (auto& p : m_outputs) { if (p.id == pinId) return &p; }
+        return nullptr;
+    }
+    inline const LogicPin* findInput(const std::string& pinId) const {
+        for (const auto& p : m_inputs) { if (p.id == pinId) return &p; }
+        return nullptr;
+    }
+    inline const LogicPin* findOutput(const std::string& pinId) const {
+        for (const auto& p : m_outputs) { if (p.id == pinId) return &p; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t inputCount() const { return m_inputs.size(); }
+    [[nodiscard]] size_t outputCount() const { return m_outputs.size(); }
+
+    inline void evaluate() {
+        float result = 0.f;
+        switch (m_nodeType) {
+            case LogicNodeType::AndGate: {
+                result = 1.f;
+                for (const auto& in : m_inputs) {
+                    if (in.value <= 0.5f) { result = 0.f; break; }
+                }
+                if (m_inputs.empty()) result = 0.f;
+                for (auto& out : m_outputs) out.value = result;
+                break;
+            }
+            case LogicNodeType::OrGate: {
+                result = 0.f;
+                for (const auto& in : m_inputs) {
+                    if (in.value > 0.5f) { result = 1.f; break; }
+                }
+                for (auto& out : m_outputs) out.value = result;
+                break;
+            }
+            case LogicNodeType::NotGate: {
+                if (m_inputs.empty()) {
+                    result = 1.f;
+                } else {
+                    result = (m_inputs[0].value <= 0.5f) ? 1.f : 0.f;
+                }
+                for (auto& out : m_outputs) out.value = result;
+                break;
+            }
+            case LogicNodeType::Latch: {
+                if (!m_inputs.empty()) {
+                    result = m_inputs[0].value;
+                    for (auto& out : m_outputs) out.value = result;
+                }
+                break;
+            }
+            case LogicNodeType::Compare: {
+                if (m_inputs.size() >= 2) {
+                    result = (m_inputs[0].value == m_inputs[1].value) ? 1.f : 0.f;
+                } else {
+                    result = 0.f;
+                }
+                for (auto& out : m_outputs) out.value = result;
+                break;
+            }
+            case LogicNodeType::MathOp: {
+                result = 0.f;
+                for (const auto& in : m_inputs) result += in.value;
+                for (auto& out : m_outputs) out.value = result;
+                break;
+            }
+            case LogicNodeType::Delay:
+            case LogicNodeType::Switch:
+            default: {
+                result = m_inputs.empty() ? 0.f : m_inputs[0].value;
+                for (auto& out : m_outputs) out.value = result;
+                break;
+            }
+        }
+    }
+
+    static constexpr size_t kMaxPins = 16;
+
+private:
+    int m_id = 0;
+    std::string m_name;
+    LogicNodeType m_nodeType = LogicNodeType::AndGate;
+    std::vector<LogicPin> m_inputs;
+    std::vector<LogicPin> m_outputs;
+};
+
+struct LogicWire {
+    int sourceNodeId = -1;
+    std::string sourcePin;
+    int targetNodeId = -1;
+    std::string targetPin;
+};
+
+class LogicWireGraph {
+public:
+    inline int addNode(LogicWireNode node) {
+        if (m_nodes.size() >= kMaxNodes) return -1;
+        int nid = m_nextId++;
+        node.setId(nid);
+        m_nodes.push_back(std::move(node));
+        return nid;
+    }
+
+    inline bool removeNode(int id) {
+        auto it = std::find_if(m_nodes.begin(), m_nodes.end(),
+            [id](const LogicWireNode& n) { return n.id() == id; });
+        if (it == m_nodes.end()) return false;
+        // Remove wires referencing this node
+        m_wires.erase(
+            std::remove_if(m_wires.begin(), m_wires.end(),
+                [id](const LogicWire& w) {
+                    return w.sourceNodeId == id || w.targetNodeId == id;
+                }),
+            m_wires.end());
+        m_nodes.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] inline const LogicWireNode* findNode(int id) const {
+        for (const auto& n : m_nodes) { if (n.id() == id) return &n; }
+        return nullptr;
+    }
+
+    inline LogicWireNode* findNode(int id) {
+        for (auto& n : m_nodes) { if (n.id() == id) return &n; }
+        return nullptr;
+    }
+
+    inline bool addWire(const LogicWire& wire) {
+        if (m_wires.size() >= kMaxWires) return false;
+        if (!findNode(wire.sourceNodeId) || !findNode(wire.targetNodeId)) return false;
+        m_wires.push_back(wire);
+        return true;
+    }
+
+    inline bool removeWire(size_t index) {
+        if (index >= m_wires.size()) return false;
+        m_wires.erase(m_wires.begin() + static_cast<std::ptrdiff_t>(index));
+        return true;
+    }
+
+    [[nodiscard]] size_t nodeCount() const { return m_nodes.size(); }
+    [[nodiscard]] size_t wireCount() const { return m_wires.size(); }
+
+    [[nodiscard]] const std::vector<LogicWireNode>& nodes() const { return m_nodes; }
+    [[nodiscard]] const std::vector<LogicWire>& wires() const { return m_wires; }
+
+    void clear() {
+        m_nodes.clear();
+        m_wires.clear();
+        m_nextId = 1;
+    }
+
+    [[nodiscard]] inline bool isValid() const {
+        for (const auto& w : m_wires) {
+            if (!findNode(w.sourceNodeId) || !findNode(w.targetNodeId))
+                return false;
+        }
+        return true;
+    }
+
+    inline void evaluate() {
+        for (auto& n : m_nodes) n.evaluate();
+    }
+
+    static constexpr size_t kMaxNodes = 128;
+    static constexpr size_t kMaxWires = 256;
+
+private:
+    std::vector<LogicWireNode> m_nodes;
+    std::vector<LogicWire> m_wires;
+    int m_nextId = 1;
+};
+
+struct LogicGraphTemplate {
+    std::string name;
+    std::string description;
+    std::string category;
+    std::vector<LogicNodeDef> nodeDefs;
+};
+
+class LogicTemplateLibrary {
+public:
+    inline bool addTemplate(const LogicGraphTemplate& tmpl) {
+        if (m_templates.size() >= kMaxTemplates) return false;
+        for (const auto& t : m_templates) {
+            if (t.name == tmpl.name) return false;
+        }
+        m_templates.push_back(tmpl);
+        return true;
+    }
+
+    inline bool removeTemplate(const std::string& name) {
+        auto it = std::find_if(m_templates.begin(), m_templates.end(),
+            [&name](const LogicGraphTemplate& t) { return t.name == name; });
+        if (it == m_templates.end()) return false;
+        m_templates.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] inline const LogicGraphTemplate* findTemplate(const std::string& name) const {
+        for (const auto& t : m_templates) {
+            if (t.name == name) return &t;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] inline std::vector<const LogicGraphTemplate*>
+    templatesInCategory(const std::string& category) const {
+        std::vector<const LogicGraphTemplate*> result;
+        for (const auto& t : m_templates) {
+            if (t.category == category) result.push_back(&t);
+        }
+        return result;
+    }
+
+    [[nodiscard]] size_t templateCount() const { return m_templates.size(); }
+    [[nodiscard]] const std::vector<LogicGraphTemplate>& templates() const { return m_templates; }
+
+    void clear() { m_templates.clear(); }
+
+    [[nodiscard]] inline size_t categoryCount() const {
+        std::set<std::string> cats;
+        for (const auto& t : m_templates) cats.insert(t.category);
+        return cats.size();
+    }
+
+    static constexpr size_t kMaxTemplates = 64;
+
+private:
+    std::vector<LogicGraphTemplate> m_templates;
+};
+
+// ── S8 — Tool Ecosystem ──────────────────────────────────────────
+
+enum class ToolStatus : uint8_t {
+    Stopped, Starting, Running, Unhealthy, Stopping, Crashed, Unknown, Disabled
+};
+
+inline const char* toolStatusName(ToolStatus s) {
+    switch (s) {
+        case ToolStatus::Stopped:   return "Stopped";
+        case ToolStatus::Starting:  return "Starting";
+        case ToolStatus::Running:   return "Running";
+        case ToolStatus::Unhealthy: return "Unhealthy";
+        case ToolStatus::Stopping:  return "Stopping";
+        case ToolStatus::Crashed:   return "Crashed";
+        case ToolStatus::Unknown:   return "Unknown";
+        case ToolStatus::Disabled:  return "Disabled";
+    }
+    return "Unknown";
+}
+
+struct ToolInstanceInfo {
+    std::string name;
+    std::string executablePath;
+    ToolStatus status = ToolStatus::Stopped;
+    int pid = -1;
+    float uptimeSeconds = 0.f;
+    size_t eventsHandled = 0;
+    float lastHeartbeatAge = 0.f;  // seconds since last heartbeat
+};
+
+struct ToolEcosystemConfig {
+    std::string pipelineDir = ".novaforge/pipeline";
+    float heartbeatIntervalSec = 5.f;
+    float unhealthyThresholdSec = 15.f;
+    float crashThresholdSec = 30.f;
+    size_t maxEventsPerTick = 16;
+    bool autoRestart = true;
+};
+
+class StandaloneToolRunner {
+public:
+    void setName(const std::string& n) { m_info.name = n; }
+    void setExecutablePath(const std::string& p) { m_info.executablePath = p; }
+
+    [[nodiscard]] const std::string& name() const { return m_info.name; }
+    [[nodiscard]] const std::string& executablePath() const { return m_info.executablePath; }
+    [[nodiscard]] ToolStatus status() const { return m_info.status; }
+    [[nodiscard]] const ToolInstanceInfo& info() const { return m_info; }
+    [[nodiscard]] float uptimeSeconds() const { return m_info.uptimeSeconds; }
+    [[nodiscard]] size_t eventsHandled() const { return m_info.eventsHandled; }
+
+    bool start() {
+        if (m_info.status == ToolStatus::Running || m_info.status == ToolStatus::Starting) return false;
+        m_info.status = ToolStatus::Starting;
+        m_info.pid = static_cast<int>(std::hash<std::string>{}(m_info.name) % 65536);
+        m_info.uptimeSeconds = 0.f;
+        m_info.eventsHandled = 0;
+        m_info.status = ToolStatus::Running;
+        return true;
+    }
+
+    bool stop() {
+        if (m_info.status != ToolStatus::Running && m_info.status != ToolStatus::Unhealthy) return false;
+        m_info.status = ToolStatus::Stopping;
+        m_info.pid = -1;
+        m_info.status = ToolStatus::Stopped;
+        return true;
+    }
+
+    void recordHeartbeat() {
+        m_info.lastHeartbeatAge = 0.f;
+    }
+
+    void recordEvent() {
+        m_info.eventsHandled++;
+    }
+
+    void tickUptime(float dt) {
+        if (m_info.status == ToolStatus::Running || m_info.status == ToolStatus::Unhealthy) {
+            m_info.uptimeSeconds += dt;
+            m_info.lastHeartbeatAge += dt;
+        }
+    }
+
+    void markCrashed() {
+        m_info.status = ToolStatus::Crashed;
+        m_info.pid = -1;
+    }
+
+    void markUnhealthy() {
+        if (m_info.status == ToolStatus::Running)
+            m_info.status = ToolStatus::Unhealthy;
+    }
+
+    [[nodiscard]] bool isAlive() const {
+        return m_info.status == ToolStatus::Running || m_info.status == ToolStatus::Unhealthy;
+    }
+
+private:
+    ToolInstanceInfo m_info;
+};
+
+class ToolHealthMonitor {
+public:
+    void setConfig(const ToolEcosystemConfig& config) { m_config = config; }
+
+    void addRunner(StandaloneToolRunner* runner) {
+        if (m_runners.size() < kMaxTools && runner)
+            m_runners.push_back(runner);
+    }
+
+    void removeRunner(const std::string& name) {
+        m_runners.erase(
+            std::remove_if(m_runners.begin(), m_runners.end(),
+                [&name](const StandaloneToolRunner* r) { return r->name() == name; }),
+            m_runners.end());
+    }
+
+    void checkHealth() {
+        for (auto* r : m_runners) {
+            if (!r->isAlive()) continue;
+            if (r->info().lastHeartbeatAge >= m_config.crashThresholdSec) {
+                r->markCrashed();
+            } else if (r->info().lastHeartbeatAge >= m_config.unhealthyThresholdSec) {
+                r->markUnhealthy();
+            }
+        }
+    }
+
+    [[nodiscard]] size_t healthyCount() const {
+        size_t count = 0;
+        for (const auto* r : m_runners) {
+            if (r->status() == ToolStatus::Running) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t unhealthyCount() const {
+        size_t count = 0;
+        for (const auto* r : m_runners) {
+            if (r->status() == ToolStatus::Unhealthy) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t crashedCount() const {
+        size_t count = 0;
+        for (const auto* r : m_runners) {
+            if (r->status() == ToolStatus::Crashed) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t runnerCount() const { return m_runners.size(); }
+
+    static constexpr size_t kMaxTools = 8;
+
+private:
+    std::vector<StandaloneToolRunner*> m_runners;
+    ToolEcosystemConfig m_config;
+};
+
+class ToolOrchestrator {
+public:
+    ToolOrchestrator() {
+        m_swissAgent.setName("SwissAgent");
+        m_swissAgent.setExecutablePath("Atlas/Workspace/SwissAgent/cli.py");
+        m_arbiter.setName("ArbiterAI");
+        m_arbiter.setExecutablePath("Atlas/Workspace/Arbiter/arbiter_cli.py");
+        m_contractScanner.setName("ContractScanner");
+        m_contractScanner.setExecutablePath("tools/contract_scanner");
+        m_replayMinimizer.setName("ReplayMinimizer");
+        m_replayMinimizer.setExecutablePath("tools/replay_minimizer");
+    }
+
+    bool startAll() {
+        bool ok = true;
+        ok &= m_swissAgent.start();
+        ok &= m_arbiter.start();
+        ok &= m_contractScanner.start();
+        ok &= m_replayMinimizer.start();
+        return ok;
+    }
+
+    bool stopAll() {
+        bool ok = true;
+        ok &= m_swissAgent.stop();
+        ok &= m_arbiter.stop();
+        ok &= m_contractScanner.stop();
+        ok &= m_replayMinimizer.stop();
+        return ok;
+    }
+
+    StandaloneToolRunner* runner(const std::string& name) {
+        if (name == "SwissAgent") return &m_swissAgent;
+        if (name == "ArbiterAI") return &m_arbiter;
+        if (name == "ContractScanner") return &m_contractScanner;
+        if (name == "ReplayMinimizer") return &m_replayMinimizer;
+        return nullptr;
+    }
+
+    const StandaloneToolRunner* runner(const std::string& name) const {
+        if (name == "SwissAgent") return &m_swissAgent;
+        if (name == "ArbiterAI") return &m_arbiter;
+        if (name == "ContractScanner") return &m_contractScanner;
+        if (name == "ReplayMinimizer") return &m_replayMinimizer;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t runningCount() const {
+        size_t c = 0;
+        if (m_swissAgent.isAlive()) ++c;
+        if (m_arbiter.isAlive()) ++c;
+        if (m_contractScanner.isAlive()) ++c;
+        if (m_replayMinimizer.isAlive()) ++c;
+        return c;
+    }
+
+    [[nodiscard]] size_t totalEventsHandled() const {
+        return m_swissAgent.eventsHandled() + m_arbiter.eventsHandled() +
+               m_contractScanner.eventsHandled() + m_replayMinimizer.eventsHandled();
+    }
+
+    void tickAll(float dt) {
+        m_swissAgent.tickUptime(dt);
+        m_arbiter.tickUptime(dt);
+        m_contractScanner.tickUptime(dt);
+        m_replayMinimizer.tickUptime(dt);
+    }
+
+    static constexpr size_t kToolCount = 4;
+
+private:
+    StandaloneToolRunner m_swissAgent;
+    StandaloneToolRunner m_arbiter;
+    StandaloneToolRunner m_contractScanner;
+    StandaloneToolRunner m_replayMinimizer;
+};
+
+class ToolEcosystem {
+public:
+    void init(const ToolEcosystemConfig& config = {}) {
+        m_config = config;
+        m_monitor.setConfig(config);
+        m_monitor.addRunner(m_orchestrator.runner("SwissAgent"));
+        m_monitor.addRunner(m_orchestrator.runner("ArbiterAI"));
+        m_monitor.addRunner(m_orchestrator.runner("ContractScanner"));
+        m_monitor.addRunner(m_orchestrator.runner("ReplayMinimizer"));
+        m_initialized = true;
+    }
+
+    void shutdown() {
+        m_orchestrator.stopAll();
+        m_initialized = false;
+    }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+    bool startAll() { return m_orchestrator.startAll(); }
+    bool stopAll() { return m_orchestrator.stopAll(); }
+
+    void tick(float dt) {
+        m_orchestrator.tickAll(dt);
+        m_monitor.checkHealth();
+        m_tickCount++;
+
+        if (m_config.autoRestart) {
+            autoRestartCrashed();
+        }
+    }
+
+    [[nodiscard]] const ToolOrchestrator& orchestrator() const { return m_orchestrator; }
+    [[nodiscard]] ToolOrchestrator& orchestrator() { return m_orchestrator; }
+    [[nodiscard]] const ToolHealthMonitor& monitor() const { return m_monitor; }
+    [[nodiscard]] const ToolEcosystemConfig& config() const { return m_config; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+    [[nodiscard]] size_t healthyToolCount() const { return m_monitor.healthyCount(); }
+    [[nodiscard]] size_t totalEventsHandled() const { return m_orchestrator.totalEventsHandled(); }
+
+private:
+    void autoRestartCrashed() {
+        for (const char* name : {"SwissAgent", "ArbiterAI", "ContractScanner", "ReplayMinimizer"}) {
+            auto* r = m_orchestrator.runner(name);
+            if (r && r->status() == ToolStatus::Crashed) {
+                r->start();
+            }
+        }
+    }
+
+    ToolEcosystemConfig m_config;
+    ToolOrchestrator m_orchestrator;
+    ToolHealthMonitor m_monitor;
+    bool m_initialized = false;
+    size_t m_tickCount = 0;
+};
+
 } // namespace NF

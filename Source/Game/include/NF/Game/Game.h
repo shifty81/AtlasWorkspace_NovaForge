@@ -6005,4 +6005,814 @@ private:
     std::vector<std::vector<LifeSupportModule>> m_lifeSupportModules;
 };
 
+// ---------------------------------------------------------------------------
+// G26 — Power Grid System
+// ---------------------------------------------------------------------------
+
+enum class PowerSourceType : uint8_t {
+    Solar, Nuclear, Fusion, Geothermal, Wind, Battery, FuelCell, Antimatter
+};
+
+inline const char* powerSourceTypeName(PowerSourceType t) {
+    switch (t) {
+        case PowerSourceType::Solar:       return "Solar";
+        case PowerSourceType::Nuclear:     return "Nuclear";
+        case PowerSourceType::Fusion:      return "Fusion";
+        case PowerSourceType::Geothermal:  return "Geothermal";
+        case PowerSourceType::Wind:        return "Wind";
+        case PowerSourceType::Battery:     return "Battery";
+        case PowerSourceType::FuelCell:    return "Fuel Cell";
+        case PowerSourceType::Antimatter:  return "Antimatter";
+    }
+    return "Unknown";
+}
+
+struct PowerNode {
+    std::string id;
+    std::string name;
+    PowerSourceType sourceType = PowerSourceType::Solar;
+    float generationRate = 0.f;
+    float consumptionRate = 0.f;
+    int priority = 0;
+    bool online = true;
+
+    [[nodiscard]] float netPower() const { return online ? (generationRate - consumptionRate) : 0.f; }
+    [[nodiscard]] bool isGenerator() const { return generationRate > consumptionRate; }
+    [[nodiscard]] bool isConsumer() const { return consumptionRate > generationRate; }
+};
+
+struct PowerConduit {
+    std::string id;
+    std::string fromNodeId;
+    std::string toNodeId;
+    float maxCapacity = 100.f;
+    float currentLoad = 0.f;
+    float efficiency = 0.95f;
+    bool active = true;
+
+    [[nodiscard]] float availableCapacity() const { return active ? std::max(0.f, maxCapacity - currentLoad) : 0.f; }
+    [[nodiscard]] float loadFraction() const { return maxCapacity > 0.f ? currentLoad / maxCapacity : 0.f; }
+    [[nodiscard]] bool isOverloaded() const { return currentLoad > maxCapacity; }
+};
+
+class PowerGrid {
+public:
+    static constexpr size_t kMaxNodes = 64;
+    static constexpr size_t kMaxConduits = 128;
+
+    bool addNode(PowerNode node) {
+        if (m_nodes.size() >= kMaxNodes) return false;
+        for (const auto& n : m_nodes) {
+            if (n.id == node.id) return false;
+        }
+        m_nodes.push_back(std::move(node));
+        return true;
+    }
+
+    bool removeNode(const std::string& id) {
+        auto it = std::find_if(m_nodes.begin(), m_nodes.end(),
+                               [&](const PowerNode& n) { return n.id == id; });
+        if (it == m_nodes.end()) return false;
+        m_nodes.erase(it);
+        m_conduits.erase(
+            std::remove_if(m_conduits.begin(), m_conduits.end(),
+                           [&](const PowerConduit& c) {
+                               return c.fromNodeId == id || c.toNodeId == id;
+                           }),
+            m_conduits.end());
+        return true;
+    }
+
+    [[nodiscard]] const PowerNode* findNode(const std::string& id) const {
+        for (const auto& n : m_nodes) {
+            if (n.id == id) return &n;
+        }
+        return nullptr;
+    }
+
+    PowerNode* findNode(const std::string& id) {
+        for (auto& n : m_nodes) {
+            if (n.id == id) return &n;
+        }
+        return nullptr;
+    }
+
+    bool addConduit(PowerConduit conduit) {
+        if (m_conduits.size() >= kMaxConduits) return false;
+        for (const auto& c : m_conduits) {
+            if (c.id == conduit.id) return false;
+        }
+        m_conduits.push_back(std::move(conduit));
+        return true;
+    }
+
+    bool removeConduit(const std::string& id) {
+        auto it = std::find_if(m_conduits.begin(), m_conduits.end(),
+                               [&](const PowerConduit& c) { return c.id == id; });
+        if (it == m_conduits.end()) return false;
+        m_conduits.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] const PowerConduit* findConduit(const std::string& id) const {
+        for (const auto& c : m_conduits) {
+            if (c.id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    PowerConduit* findConduit(const std::string& id) {
+        for (auto& c : m_conduits) {
+            if (c.id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] float totalGeneration() const {
+        float sum = 0.f;
+        for (const auto& n : m_nodes) {
+            if (n.online) sum += n.generationRate;
+        }
+        return sum;
+    }
+
+    [[nodiscard]] float totalConsumption() const {
+        float sum = 0.f;
+        for (const auto& n : m_nodes) {
+            if (n.online) sum += n.consumptionRate;
+        }
+        return sum;
+    }
+
+    [[nodiscard]] float netPower() const { return totalGeneration() - totalConsumption(); }
+    [[nodiscard]] bool isDeficit() const { return netPower() < 0.f; }
+    [[nodiscard]] size_t nodeCount() const { return m_nodes.size(); }
+    [[nodiscard]] size_t conduitCount() const { return m_conduits.size(); }
+    [[nodiscard]] const std::vector<PowerNode>& nodes() const { return m_nodes; }
+    [[nodiscard]] const std::vector<PowerConduit>& conduits() const { return m_conduits; }
+
+    [[nodiscard]] size_t generatorCount() const {
+        size_t count = 0;
+        for (const auto& n : m_nodes) {
+            if (n.isGenerator()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t consumerCount() const {
+        size_t count = 0;
+        for (const auto& n : m_nodes) {
+            if (n.isConsumer()) ++count;
+        }
+        return count;
+    }
+
+    void clear() {
+        m_nodes.clear();
+        m_conduits.clear();
+    }
+
+    std::vector<PowerNode>& nodesMutable() { return m_nodes; }
+    std::vector<PowerConduit>& conduitsMutable() { return m_conduits; }
+
+private:
+    std::vector<PowerNode> m_nodes;
+    std::vector<PowerConduit> m_conduits;
+};
+
+class PowerGridSystem {
+public:
+    static constexpr size_t kMaxGrids = 8;
+
+    int createGrid(const std::string& name) {
+        if (m_grids.size() >= kMaxGrids) return -1;
+        int idx = static_cast<int>(m_grids.size());
+        m_grids.emplace_back();
+        m_gridNames.push_back(name);
+        return idx;
+    }
+
+    PowerGrid* grid(int index) {
+        if (index < 0 || static_cast<size_t>(index) >= m_grids.size()) return nullptr;
+        return &m_grids[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] const PowerGrid* grid(int index) const {
+        if (index < 0 || static_cast<size_t>(index) >= m_grids.size()) return nullptr;
+        return &m_grids[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] const std::string& gridName(int index) const {
+        return m_gridNames.at(static_cast<size_t>(index));
+    }
+
+    [[nodiscard]] size_t gridCount() const { return m_grids.size(); }
+
+    void tickDistribution(int gridIdx, float /*dt*/) {
+        PowerGrid* g = grid(gridIdx);
+        if (!g) return;
+
+        for (auto& c : g->conduitsMutable()) {
+            c.currentLoad = 0.f;
+        }
+
+        float totalGen = g->totalGeneration();
+        float totalCons = g->totalConsumption();
+        if (totalGen <= 0.f || totalCons <= 0.f) return;
+
+        auto& conduits = g->conduitsMutable();
+        for (size_t i = 0; i < conduits.size(); ++i) {
+            if (!conduits[i].active) continue;
+            const PowerNode* toNode = g->findNode(conduits[i].toNodeId);
+            if (!toNode || !toNode->online || !toNode->isConsumer()) continue;
+
+            float share = toNode->consumptionRate / totalCons;
+            float load = share * std::min(totalGen, totalCons);
+            load = std::min(load, conduits[i].maxCapacity * conduits[i].efficiency);
+            conduits[i].currentLoad = load;
+        }
+    }
+
+    int shedLoad(int gridIdx) {
+        PowerGrid* g = grid(gridIdx);
+        if (!g) return 0;
+
+        struct ConsumerInfo {
+            size_t index;
+            int priority;
+            std::string id;
+        };
+        std::vector<ConsumerInfo> consumers;
+        const auto& nodes = g->nodes();
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            if (nodes[i].isConsumer() && nodes[i].online) {
+                consumers.push_back({i, nodes[i].priority, nodes[i].id});
+            }
+        }
+        std::sort(consumers.begin(), consumers.end(),
+                  [](const ConsumerInfo& a, const ConsumerInfo& b) {
+                      return a.priority < b.priority;
+                  });
+
+        int shed = 0;
+        for (const auto& ci : consumers) {
+            if (g->netPower() >= 0.f) break;
+            PowerNode* node = g->findNode(ci.id);
+            if (node) {
+                node->online = false;
+                ++shed;
+            }
+        }
+        return shed;
+    }
+
+    int restoreAll(int gridIdx) {
+        PowerGrid* g = grid(gridIdx);
+        if (!g) return 0;
+        int restored = 0;
+        for (auto& n : g->nodesMutable()) {
+            if (!n.online) {
+                n.online = true;
+                ++restored;
+            }
+        }
+        return restored;
+    }
+
+    [[nodiscard]] float totalSystemPower() const {
+        float sum = 0.f;
+        for (const auto& g : m_grids) {
+            sum += g.netPower();
+        }
+        return sum;
+    }
+
+private:
+    std::vector<PowerGrid>   m_grids;
+    std::vector<std::string> m_gridNames;
+};
+
+// ---------------------------------------------------------------------------
+// G27 — Vehicle System
+// ---------------------------------------------------------------------------
+
+enum class VehicleType : uint8_t {
+    Rover, Hoverbike, Mech, Shuttle, Crawler, Speeder, Tank, Dropship
+};
+
+inline const char* vehicleTypeName(VehicleType t) {
+    switch (t) {
+        case VehicleType::Rover:     return "Rover";
+        case VehicleType::Hoverbike: return "Hoverbike";
+        case VehicleType::Mech:      return "Mech";
+        case VehicleType::Shuttle:   return "Shuttle";
+        case VehicleType::Crawler:   return "Crawler";
+        case VehicleType::Speeder:   return "Speeder";
+        case VehicleType::Tank:      return "Tank";
+        case VehicleType::Dropship:  return "Dropship";
+    }
+    return "Unknown";
+}
+
+struct VehicleSeat {
+    std::string id;
+    std::string label;
+    bool isDriver = false;
+    bool occupied = false;
+    std::string occupantId;
+
+    void enter(const std::string& entityId) {
+        occupantId = entityId;
+        occupied = true;
+    }
+
+    void exit() {
+        occupantId.clear();
+        occupied = false;
+    }
+};
+
+struct VehicleComponent {
+    std::string id;
+    std::string name;
+    float health = 100.f;
+    float maxHealth = 100.f;
+    bool functional = true;
+
+    [[nodiscard]] float healthFraction() const { return maxHealth > 0.f ? health / maxHealth : 0.f; }
+
+    bool applyDamage(float amount) {
+        health = std::max(0.f, health - amount);
+        if (health <= 0.f) functional = false;
+        return functional;
+    }
+
+    void repair(float amount) {
+        health = std::min(maxHealth, health + amount);
+        if (health > 0.f) functional = true;
+    }
+
+    [[nodiscard]] bool isDestroyed() const { return health <= 0.f; }
+};
+
+class Vehicle {
+public:
+    void setId(const std::string& vid) { m_id = vid; }
+    [[nodiscard]] const std::string& id() const { return m_id; }
+
+    void setName(const std::string& n) { m_name = n; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void setType(VehicleType type) { m_type = type; }
+    [[nodiscard]] VehicleType type() const { return m_type; }
+
+    // --- Seats (max 8) ---
+    static constexpr size_t kMaxSeats = 8;
+
+    bool addSeat(const VehicleSeat& seat) {
+        if (m_seats.size() >= kMaxSeats) return false;
+        for (const auto& s : m_seats) {
+            if (s.id == seat.id) return false;
+        }
+        m_seats.push_back(seat);
+        return true;
+    }
+
+    bool removeSeat(const std::string& sid) {
+        for (auto it = m_seats.begin(); it != m_seats.end(); ++it) {
+            if (it->id == sid) { m_seats.erase(it); return true; }
+        }
+        return false;
+    }
+
+    VehicleSeat* findSeat(const std::string& sid) {
+        for (auto& s : m_seats) { if (s.id == sid) return &s; }
+        return nullptr;
+    }
+
+    const VehicleSeat* findSeat(const std::string& sid) const {
+        for (const auto& s : m_seats) { if (s.id == sid) return &s; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t seatCount() const { return m_seats.size(); }
+    [[nodiscard]] const std::vector<VehicleSeat>& seats() const { return m_seats; }
+
+    [[nodiscard]] size_t occupantCount() const {
+        size_t count = 0;
+        for (const auto& s : m_seats) { if (s.occupied) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] bool hasDriver() const {
+        for (const auto& s : m_seats) {
+            if (s.isDriver && s.occupied) return true;
+        }
+        return false;
+    }
+
+    // --- Components (max 16) ---
+    static constexpr size_t kMaxComponents = 16;
+
+    bool addComponent(const VehicleComponent& comp) {
+        if (m_components.size() >= kMaxComponents) return false;
+        for (const auto& c : m_components) {
+            if (c.id == comp.id) return false;
+        }
+        m_components.push_back(comp);
+        return true;
+    }
+
+    bool removeComponent(const std::string& cid) {
+        for (auto it = m_components.begin(); it != m_components.end(); ++it) {
+            if (it->id == cid) { m_components.erase(it); return true; }
+        }
+        return false;
+    }
+
+    VehicleComponent* findComponent(const std::string& cid) {
+        for (auto& c : m_components) { if (c.id == cid) return &c; }
+        return nullptr;
+    }
+
+    const VehicleComponent* findComponent(const std::string& cid) const {
+        for (const auto& c : m_components) { if (c.id == cid) return &c; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t componentCount() const { return m_components.size(); }
+    [[nodiscard]] const std::vector<VehicleComponent>& components() const { return m_components; }
+    std::vector<VehicleComponent>& componentsMutable() { return m_components; }
+
+    [[nodiscard]] bool isOperational() const {
+        for (const auto& c : m_components) {
+            if (!c.functional) return false;
+        }
+        return true;
+    }
+
+    // --- Fuel ---
+    void setFuel(float fuel) { m_fuel = std::max(0.f, fuel); }
+    void setMaxFuel(float maxFuel) { m_maxFuel = std::max(0.f, maxFuel); }
+    [[nodiscard]] float fuel() const { return m_fuel; }
+    [[nodiscard]] float maxFuel() const { return m_maxFuel; }
+    [[nodiscard]] float fuelFraction() const { return m_maxFuel > 0.f ? m_fuel / m_maxFuel : 0.f; }
+    void consumeFuel(float amount) { m_fuel = std::max(0.f, m_fuel - amount); }
+    [[nodiscard]] bool hasFuel() const { return m_fuel > 0.f; }
+
+    // --- Speed / physics ---
+    void setSpeed(float speed) { m_speed = speed; }
+    [[nodiscard]] float speed() const { return m_speed; }
+    void setMaxSpeed(float maxSpeed) { m_maxSpeed = maxSpeed; }
+    [[nodiscard]] float maxSpeed() const { return m_maxSpeed; }
+    [[nodiscard]] float speedFraction() const { return m_maxSpeed > 0.f ? m_speed / m_maxSpeed : 0.f; }
+
+    // --- Position ---
+    void setPosition(const Vec3& pos) { m_position = pos; }
+    [[nodiscard]] const Vec3& position() const { return m_position; }
+
+    // --- Engine ---
+    void setEngineActive(bool active) { m_engineActive = active; }
+    [[nodiscard]] bool engineActive() const { return m_engineActive; }
+
+    [[nodiscard]] bool canOperate() const {
+        return m_engineActive && hasFuel() && isOperational() && hasDriver();
+    }
+
+private:
+    std::string m_id;
+    std::string m_name;
+    VehicleType m_type = VehicleType::Rover;
+    std::vector<VehicleSeat> m_seats;
+    std::vector<VehicleComponent> m_components;
+    float m_fuel = 100.f;
+    float m_maxFuel = 100.f;
+    float m_speed = 0.f;
+    float m_maxSpeed = 50.f;
+    Vec3 m_position;
+    bool m_engineActive = false;
+};
+
+class VehicleSystem {
+public:
+    static constexpr size_t kMaxVehicles = 16;
+
+    int createVehicle(const std::string& vname, VehicleType type) {
+        if (m_vehicles.size() >= kMaxVehicles) return -1;
+        int idx = static_cast<int>(m_vehicles.size());
+        Vehicle v;
+        v.setId("vehicle_" + std::to_string(idx));
+        v.setName(vname);
+        v.setType(type);
+        m_vehicles.push_back(std::move(v));
+        return idx;
+    }
+
+    Vehicle* vehicle(int index) {
+        if (index < 0 || static_cast<size_t>(index) >= m_vehicles.size()) return nullptr;
+        return &m_vehicles[static_cast<size_t>(index)];
+    }
+
+    const Vehicle* vehicle(int index) const {
+        if (index < 0 || static_cast<size_t>(index) >= m_vehicles.size()) return nullptr;
+        return &m_vehicles[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] size_t vehicleCount() const { return m_vehicles.size(); }
+
+    void tickVehicle(int index, float dt) {
+        auto* v = vehicle(index);
+        if (!v || !v->canOperate()) return;
+        float fuelRate = 0.5f * (v->speed() / std::max(1.f, v->maxSpeed()));
+        v->consumeFuel(fuelRate * dt);
+        Vec3 pos = v->position();
+        pos.x += v->speed() * dt;
+        v->setPosition(pos);
+    }
+
+    int applyDamage(int index, float amount) {
+        auto* v = vehicle(index);
+        if (!v) return 0;
+        int damaged = 0;
+        for (auto& c : v->componentsMutable()) {
+            c.applyDamage(amount);
+            ++damaged;
+        }
+        return damaged;
+    }
+
+    int repairAll(int index, float amount) {
+        auto* v = vehicle(index);
+        if (!v) return 0;
+        int repaired = 0;
+        for (auto& c : v->componentsMutable()) {
+            c.repair(amount);
+            ++repaired;
+        }
+        return repaired;
+    }
+
+    [[nodiscard]] size_t operationalCount() const {
+        size_t count = 0;
+        for (const auto& v : m_vehicles) {
+            if (v.isOperational()) ++count;
+        }
+        return count;
+    }
+
+private:
+    std::vector<Vehicle> m_vehicles;
+};
+
+// ── G28 — Research System ────────────────────────────────────────
+
+enum class ResearchCategory : uint8_t {
+    Physics, Biology, Engineering, Computing, Materials, Energy, Weapons, Xenotech
+};
+
+inline const char* researchCategoryName(ResearchCategory c) {
+    switch (c) {
+        case ResearchCategory::Physics:     return "Physics";
+        case ResearchCategory::Biology:     return "Biology";
+        case ResearchCategory::Engineering: return "Engineering";
+        case ResearchCategory::Computing:   return "Computing";
+        case ResearchCategory::Materials:   return "Materials";
+        case ResearchCategory::Energy:      return "Energy";
+        case ResearchCategory::Weapons:     return "Weapons";
+        case ResearchCategory::Xenotech:    return "Xenotech";
+    }
+    return "Unknown";
+}
+
+struct ResearchProject {
+    std::string id;
+    std::string name;
+    ResearchCategory category = ResearchCategory::Physics;
+    float cost = 100.f;
+    float progress = 0.f;
+    float durationSeconds = 60.f;
+    std::vector<std::string> prerequisites;
+    bool completed = false;
+
+    [[nodiscard]] float progressFraction() const {
+        return cost > 0.f ? std::min(1.f, progress / cost) : 0.f;
+    }
+
+    [[nodiscard]] bool isComplete() const {
+        return completed || progress >= cost;
+    }
+
+    void addProgress(float points) {
+        progress = std::min(cost, progress + points);
+        if (progress >= cost) completed = true;
+    }
+};
+
+class ResearchLab {
+public:
+    void setId(const std::string& id) { m_id = id; }
+    [[nodiscard]] const std::string& id() const { return m_id; }
+
+    void setName(const std::string& name) { m_name = name; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void setResearchRate(float rate) { m_researchRate = std::max(0.f, rate); }
+    [[nodiscard]] float researchRate() const { return m_researchRate; }
+
+    bool assignProject(const std::string& projectId) {
+        if (m_activeProjectId == projectId) return false;
+        m_activeProjectId = projectId;
+        return true;
+    }
+
+    void clearProject() { m_activeProjectId.clear(); }
+
+    [[nodiscard]] const std::string& activeProjectId() const { return m_activeProjectId; }
+    [[nodiscard]] bool hasActiveProject() const { return !m_activeProjectId.empty(); }
+
+    void markCompleted(const std::string& projectId) {
+        m_completedProjects.push_back(projectId);
+    }
+
+    [[nodiscard]] size_t completedCount() const { return m_completedProjects.size(); }
+
+    [[nodiscard]] bool hasCompleted(const std::string& projectId) const {
+        for (const auto& p : m_completedProjects)
+            if (p == projectId) return true;
+        return false;
+    }
+
+    [[nodiscard]] const std::vector<std::string>& completedProjects() const { return m_completedProjects; }
+
+    void setBudget(float budget) { m_budget = std::max(0.f, budget); }
+    [[nodiscard]] float budget() const { return m_budget; }
+    void spendBudget(float amount) { m_budget = std::max(0.f, m_budget - amount); }
+    [[nodiscard]] bool hasBudget() const { return m_budget > 0.f; }
+
+private:
+    std::string m_id;
+    std::string m_name;
+    float m_researchRate = 1.f;
+    std::string m_activeProjectId;
+    std::vector<std::string> m_completedProjects;
+    float m_budget = 1000.f;
+};
+
+class ResearchTree {
+public:
+    bool addProject(const ResearchProject& project) {
+        if (m_projects.size() >= kMaxProjects) return false;
+        for (const auto& p : m_projects) {
+            if (p.id == project.id) return false;
+        }
+        m_projects.push_back(project);
+        return true;
+    }
+
+    bool removeProject(const std::string& id) {
+        auto it = std::find_if(m_projects.begin(), m_projects.end(),
+            [&id](const ResearchProject& p) { return p.id == id; });
+        if (it == m_projects.end()) return false;
+        m_projects.erase(it);
+        return true;
+    }
+
+    ResearchProject* findProject(const std::string& id) {
+        for (auto& p : m_projects) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+    const ResearchProject* findProject(const std::string& id) const {
+        for (const auto& p : m_projects) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t projectCount() const { return m_projects.size(); }
+    [[nodiscard]] const std::vector<ResearchProject>& projects() const { return m_projects; }
+
+    [[nodiscard]] bool prerequisitesMet(const std::string& projectId, const std::vector<std::string>& completed) const {
+        const auto* proj = findProject(projectId);
+        if (!proj) return false;
+        for (const auto& prereq : proj->prerequisites) {
+            bool found = false;
+            for (const auto& c : completed) {
+                if (c == prereq) { found = true; break; }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] std::vector<const ResearchProject*> projectsInCategory(ResearchCategory cat) const {
+        std::vector<const ResearchProject*> result;
+        for (const auto& p : m_projects) {
+            if (p.category == cat) result.push_back(&p);
+        }
+        return result;
+    }
+
+    [[nodiscard]] size_t completedCount() const {
+        size_t c = 0;
+        for (const auto& p : m_projects) if (p.isComplete()) ++c;
+        return c;
+    }
+
+    void clear() { m_projects.clear(); }
+
+    static constexpr size_t kMaxProjects = 128;
+
+private:
+    std::vector<ResearchProject> m_projects;
+};
+
+class ResearchSystem {
+public:
+    int createLab(const std::string& name) {
+        if (m_labs.size() >= kMaxLabs) return -1;
+        ResearchLab lab;
+        lab.setId("lab_" + std::to_string(m_labs.size()));
+        lab.setName(name);
+        m_labs.push_back(std::move(lab));
+        return static_cast<int>(m_labs.size() - 1);
+    }
+
+    ResearchLab* lab(int index) {
+        if (index < 0 || index >= static_cast<int>(m_labs.size())) return nullptr;
+        return &m_labs[static_cast<size_t>(index)];
+    }
+
+    const ResearchLab* lab(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_labs.size())) return nullptr;
+        return &m_labs[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] size_t labCount() const { return m_labs.size(); }
+
+    ResearchTree& tree() { return m_tree; }
+    const ResearchTree& tree() const { return m_tree; }
+
+    void tick(float dt) {
+        for (auto& lab : m_labs) {
+            if (!lab.hasActiveProject() || !lab.hasBudget()) continue;
+
+            ResearchProject* proj = m_tree.findProject(lab.activeProjectId());
+            if (!proj || proj->isComplete()) {
+                if (proj && proj->isComplete()) {
+                    lab.markCompleted(proj->id);
+                    lab.clearProject();
+                }
+                continue;
+            }
+
+            float points = lab.researchRate() * dt;
+            float budgetCost = points * 0.1f;
+            if (lab.budget() < budgetCost) continue;
+
+            proj->addProgress(points);
+            lab.spendBudget(budgetCost);
+
+            if (proj->isComplete()) {
+                lab.markCompleted(proj->id);
+                lab.clearProject();
+                ++m_discoveries;
+            }
+        }
+    }
+
+    bool assignProject(int labIndex, const std::string& projectId) {
+        auto* l = lab(labIndex);
+        if (!l) return false;
+
+        const auto* proj = m_tree.findProject(projectId);
+        if (!proj || proj->isComplete()) return false;
+
+        std::vector<std::string> allCompleted;
+        for (const auto& lab : m_labs) {
+            for (const auto& c : lab.completedProjects())
+                allCompleted.push_back(c);
+        }
+
+        if (!m_tree.prerequisitesMet(projectId, allCompleted)) return false;
+
+        return l->assignProject(projectId);
+    }
+
+    [[nodiscard]] size_t discoveries() const { return m_discoveries; }
+
+    [[nodiscard]] size_t activeLabCount() const {
+        size_t count = 0;
+        for (const auto& l : m_labs) {
+            if (l.hasActiveProject()) ++count;
+        }
+        return count;
+    }
+
+    static constexpr size_t kMaxLabs = 8;
+
+private:
+    std::vector<ResearchLab> m_labs;
+    ResearchTree m_tree;
+    size_t m_discoveries = 0;
+};
+
 } // namespace NF

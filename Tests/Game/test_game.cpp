@@ -4997,3 +4997,571 @@ TEST_CASE("HabitatSystem tickAtmosphere oxygen generation", "[Game][G25][Habitat
 TEST_CASE("HabitatLayout max zones", "[Game][G25][Habitat]") {
     REQUIRE(NF::HabitatLayout::kMaxZones == 32);
 }
+
+// ---------------------------------------------------------------------------
+// G26 — Power Grid System Tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("PowerSourceType names", "[Game][G26][Power]") {
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Solar))      == "Solar");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Nuclear))    == "Nuclear");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Fusion))     == "Fusion");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Geothermal)) == "Geothermal");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Wind))       == "Wind");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Battery))    == "Battery");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::FuelCell))   == "Fuel Cell");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Antimatter)) == "Antimatter");
+}
+
+TEST_CASE("PowerNode defaults", "[Game][G26][Power]") {
+    NF::PowerNode node;
+    REQUIRE(node.netPower() == 0.f);
+    REQUIRE_FALSE(node.isGenerator());
+    REQUIRE_FALSE(node.isConsumer());
+}
+
+TEST_CASE("PowerNode offline", "[Game][G26][Power]") {
+    NF::PowerNode node;
+    node.generationRate = 100.f;
+    node.online = false;
+    REQUIRE(node.netPower() == 0.f);
+}
+
+TEST_CASE("PowerConduit defaults", "[Game][G26][Power]") {
+    NF::PowerConduit c;
+    REQUIRE(c.availableCapacity() == 100.f);
+    REQUIRE(c.loadFraction() == 0.f);
+    REQUIRE_FALSE(c.isOverloaded());
+}
+
+TEST_CASE("PowerConduit overloaded", "[Game][G26][Power]") {
+    NF::PowerConduit c;
+    c.maxCapacity = 50.f;
+    c.currentLoad = 80.f;
+    REQUIRE(c.isOverloaded());
+    REQUIRE(c.availableCapacity() == 0.f);
+}
+
+TEST_CASE("PowerGrid add/remove nodes", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode a; a.id = "a";
+    NF::PowerNode b; b.id = "b";
+    REQUIRE(grid.addNode(a));
+    REQUIRE(grid.addNode(b));
+    REQUIRE(grid.nodeCount() == 2);
+    REQUIRE(grid.removeNode("a"));
+    REQUIRE(grid.nodeCount() == 1);
+    REQUIRE(grid.findNode("a") == nullptr);
+    REQUIRE(grid.findNode("b") != nullptr);
+}
+
+TEST_CASE("PowerGrid reject duplicate nodes", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode a; a.id = "a";
+    REQUIRE(grid.addNode(a));
+    REQUIRE_FALSE(grid.addNode(a));
+    REQUIRE(grid.nodeCount() == 1);
+}
+
+TEST_CASE("PowerGrid max nodes", "[Game][G26][Power]") {
+    REQUIRE(NF::PowerGrid::kMaxNodes == 64);
+}
+
+TEST_CASE("PowerGrid add/remove conduits", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerConduit c1; c1.id = "c1";
+    NF::PowerConduit c2; c2.id = "c2";
+    REQUIRE(grid.addConduit(c1));
+    REQUIRE(grid.addConduit(c2));
+    REQUIRE(grid.conduitCount() == 2);
+    REQUIRE(grid.removeConduit("c1"));
+    REQUIRE(grid.conduitCount() == 1);
+}
+
+TEST_CASE("PowerGrid total generation and consumption", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 200.f;
+    NF::PowerNode con; con.id = "con"; con.consumptionRate = 50.f;
+    grid.addNode(gen);
+    grid.addNode(con);
+    REQUIRE(grid.totalGeneration() == 200.f);
+    REQUIRE(grid.totalConsumption() == 50.f);
+    REQUIRE(grid.netPower() == 150.f);
+    REQUIRE(grid.generatorCount() == 1);
+    REQUIRE(grid.consumerCount() == 1);
+}
+
+TEST_CASE("PowerGrid deficit detection", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 10.f;
+    NF::PowerNode con; con.id = "con"; con.consumptionRate = 100.f;
+    grid.addNode(gen);
+    grid.addNode(con);
+    REQUIRE(grid.isDeficit());
+}
+
+TEST_CASE("PowerGridSystem create grid", "[Game][G26][Power]") {
+    NF::PowerGridSystem sys;
+    int idx = sys.createGrid("Main");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.gridCount() == 1);
+    REQUIRE(sys.gridName(0) == "Main");
+    REQUIRE(sys.grid(0) != nullptr);
+}
+
+TEST_CASE("PowerGridSystem max grids", "[Game][G26][Power]") {
+    REQUIRE(NF::PowerGridSystem::kMaxGrids == 8);
+    NF::PowerGridSystem sys;
+    for (int i = 0; i < 8; ++i) {
+        REQUIRE(sys.createGrid("g" + std::to_string(i)) == i);
+    }
+    REQUIRE(sys.createGrid("overflow") == -1);
+}
+
+TEST_CASE("PowerGridSystem shed load", "[Game][G26][Power]") {
+    NF::PowerGridSystem sys;
+    int idx = sys.createGrid("Test");
+    NF::PowerGrid* g = sys.grid(idx);
+
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 50.f;
+    NF::PowerNode c1; c1.id = "c1"; c1.consumptionRate = 40.f; c1.priority = 1;
+    NF::PowerNode c2; c2.id = "c2"; c2.consumptionRate = 40.f; c2.priority = 2;
+    g->addNode(gen);
+    g->addNode(c1);
+    g->addNode(c2);
+
+    REQUIRE(g->isDeficit());
+    int shed = sys.shedLoad(idx);
+    REQUIRE(shed >= 1);
+    REQUIRE_FALSE(g->isDeficit());
+    // Low-priority consumer (c1, priority=1) should be shed first
+    REQUIRE_FALSE(g->findNode("c1")->online);
+}
+
+TEST_CASE("PowerGridSystem restore all", "[Game][G26][Power]") {
+    NF::PowerGridSystem sys;
+    int idx = sys.createGrid("Test");
+    NF::PowerGrid* g = sys.grid(idx);
+
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 50.f;
+    NF::PowerNode c1; c1.id = "c1"; c1.consumptionRate = 40.f; c1.priority = 1;
+    g->addNode(gen);
+    g->addNode(c1);
+
+    sys.shedLoad(idx);
+    int restored = sys.restoreAll(idx);
+    REQUIRE(restored >= 0);
+    REQUIRE(g->findNode("c1")->online);
+}
+
+// ---------------------------------------------------------------------------
+// G27 — Vehicle System Tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("VehicleType names cover all 8 types", "[Game][G27][Vehicle]") {
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Rover))     == "Rover");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Hoverbike)) == "Hoverbike");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Mech))      == "Mech");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Shuttle))   == "Shuttle");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Crawler))   == "Crawler");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Speeder))   == "Speeder");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Tank))      == "Tank");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Dropship))  == "Dropship");
+}
+
+TEST_CASE("VehicleSeat enter and exit", "[Game][G27][Vehicle]") {
+    NF::VehicleSeat seat;
+    seat.id = "driver";
+    seat.label = "Driver";
+    seat.isDriver = true;
+
+    REQUIRE_FALSE(seat.occupied);
+    seat.enter("player_1");
+    REQUIRE(seat.occupied);
+    REQUIRE(seat.occupantId == "player_1");
+
+    seat.exit();
+    REQUIRE_FALSE(seat.occupied);
+    REQUIRE(seat.occupantId.empty());
+}
+
+TEST_CASE("VehicleComponent damage and repair", "[Game][G27][Vehicle]") {
+    NF::VehicleComponent comp;
+    comp.id = "engine";
+    comp.name = "Engine";
+
+    REQUIRE(comp.healthFraction() == Catch::Approx(1.f));
+    comp.applyDamage(30.f);
+    REQUIRE(comp.health == Catch::Approx(70.f));
+    REQUIRE(comp.functional);
+
+    comp.repair(10.f);
+    REQUIRE(comp.health == Catch::Approx(80.f));
+}
+
+TEST_CASE("VehicleComponent destroyed state", "[Game][G27][Vehicle]") {
+    NF::VehicleComponent comp;
+    comp.id = "wheel";
+    comp.name = "Wheel";
+
+    comp.applyDamage(150.f);
+    REQUIRE(comp.isDestroyed());
+    REQUIRE_FALSE(comp.functional);
+
+    comp.repair(50.f);
+    REQUIRE_FALSE(comp.isDestroyed());
+    REQUIRE(comp.functional);
+}
+
+TEST_CASE("Vehicle add and remove seats", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat s1; s1.id = "s1"; s1.label = "Driver"; s1.isDriver = true;
+    NF::VehicleSeat s2; s2.id = "s2"; s2.label = "Passenger";
+
+    REQUIRE(v.addSeat(s1));
+    REQUIRE(v.addSeat(s2));
+    REQUIRE(v.seatCount() == 2);
+
+    REQUIRE(v.removeSeat("s1"));
+    REQUIRE(v.seatCount() == 1);
+    REQUIRE(v.findSeat("s1") == nullptr);
+    REQUIRE(v.findSeat("s2") != nullptr);
+}
+
+TEST_CASE("Vehicle seat duplicate rejection", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat s; s.id = "s1"; s.label = "Driver";
+    REQUIRE(v.addSeat(s));
+    REQUIRE_FALSE(v.addSeat(s));
+    REQUIRE(v.seatCount() == 1);
+}
+
+TEST_CASE("Vehicle max seats", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    for (size_t i = 0; i < NF::Vehicle::kMaxSeats; ++i) {
+        NF::VehicleSeat s; s.id = "seat_" + std::to_string(i);
+        REQUIRE(v.addSeat(s));
+    }
+    REQUIRE(v.seatCount() == NF::Vehicle::kMaxSeats);
+
+    NF::VehicleSeat extra; extra.id = "extra";
+    REQUIRE_FALSE(v.addSeat(extra));
+}
+
+TEST_CASE("Vehicle add and remove components", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleComponent c1; c1.id = "engine"; c1.name = "Engine";
+    NF::VehicleComponent c2; c2.id = "wheel";  c2.name = "Wheel";
+
+    REQUIRE(v.addComponent(c1));
+    REQUIRE(v.addComponent(c2));
+    REQUIRE(v.componentCount() == 2);
+
+    REQUIRE(v.removeComponent("engine"));
+    REQUIRE(v.componentCount() == 1);
+    REQUIRE(v.findComponent("engine") == nullptr);
+}
+
+TEST_CASE("Vehicle occupant count", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat s1; s1.id = "s1"; s1.label = "Driver"; s1.isDriver = true;
+    NF::VehicleSeat s2; s2.id = "s2"; s2.label = "Passenger";
+    v.addSeat(s1);
+    v.addSeat(s2);
+
+    REQUIRE(v.occupantCount() == 0);
+    v.findSeat("s1")->enter("p1");
+    REQUIRE(v.occupantCount() == 1);
+    v.findSeat("s2")->enter("p2");
+    REQUIRE(v.occupantCount() == 2);
+}
+
+TEST_CASE("Vehicle has driver", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat driver; driver.id = "d"; driver.label = "Driver"; driver.isDriver = true;
+    NF::VehicleSeat passenger; passenger.id = "p"; passenger.label = "Passenger";
+    v.addSeat(driver);
+    v.addSeat(passenger);
+
+    REQUIRE_FALSE(v.hasDriver());
+    v.findSeat("p")->enter("p1");
+    REQUIRE_FALSE(v.hasDriver());
+    v.findSeat("d")->enter("p2");
+    REQUIRE(v.hasDriver());
+}
+
+TEST_CASE("Vehicle fuel consumption", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    v.setFuel(100.f);
+    v.setMaxFuel(100.f);
+    REQUIRE(v.hasFuel());
+    REQUIRE(v.fuelFraction() == Catch::Approx(1.f));
+
+    v.consumeFuel(40.f);
+    REQUIRE(v.fuel() == Catch::Approx(60.f));
+
+    v.consumeFuel(200.f);
+    REQUIRE(v.fuel() == Catch::Approx(0.f));
+    REQUIRE_FALSE(v.hasFuel());
+}
+
+TEST_CASE("Vehicle canOperate requires fuel engine operational driver", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat driver; driver.id = "d"; driver.isDriver = true;
+    v.addSeat(driver);
+    NF::VehicleComponent eng; eng.id = "eng"; eng.name = "Engine";
+    v.addComponent(eng);
+
+    REQUIRE_FALSE(v.canOperate()); // no engine active, no driver
+
+    v.setEngineActive(true);
+    REQUIRE_FALSE(v.canOperate()); // no driver
+
+    v.findSeat("d")->enter("player");
+    REQUIRE(v.canOperate());
+
+    v.setFuel(0.f);
+    REQUIRE_FALSE(v.canOperate()); // no fuel
+}
+
+TEST_CASE("VehicleSystem create vehicle", "[Game][G27][Vehicle]") {
+    NF::VehicleSystem sys;
+    int idx = sys.createVehicle("Rover Alpha", NF::VehicleType::Rover);
+    REQUIRE(idx == 0);
+    REQUIRE(sys.vehicleCount() == 1);
+
+    auto* v = sys.vehicle(idx);
+    REQUIRE(v != nullptr);
+    REQUIRE(v->name() == "Rover Alpha");
+    REQUIRE(v->type() == NF::VehicleType::Rover);
+}
+
+TEST_CASE("VehicleSystem max vehicles", "[Game][G27][Vehicle]") {
+    NF::VehicleSystem sys;
+    for (size_t i = 0; i < NF::VehicleSystem::kMaxVehicles; ++i) {
+        int idx = sys.createVehicle("V" + std::to_string(i), NF::VehicleType::Mech);
+        REQUIRE(idx >= 0);
+    }
+    REQUIRE(sys.vehicleCount() == NF::VehicleSystem::kMaxVehicles);
+    int overflow = sys.createVehicle("Extra", NF::VehicleType::Tank);
+    REQUIRE(overflow == -1);
+}
+
+TEST_CASE("VehicleSystem tick physics moves position", "[Game][G27][Vehicle]") {
+    NF::VehicleSystem sys;
+    int idx = sys.createVehicle("Speeder", NF::VehicleType::Speeder);
+    auto* v = sys.vehicle(idx);
+
+    // Set up a fully operable vehicle
+    NF::VehicleSeat driver; driver.id = "d"; driver.isDriver = true;
+    v->addSeat(driver);
+    v->findSeat("d")->enter("pilot");
+    NF::VehicleComponent eng; eng.id = "eng"; eng.name = "Engine";
+    v->addComponent(eng);
+    v->setEngineActive(true);
+    v->setFuel(100.f);
+    v->setSpeed(10.f);
+
+    float startX = v->position().x;
+    sys.tickVehicle(idx, 1.f);
+
+    REQUIRE(v->position().x > startX);
+    REQUIRE(v->fuel() < 100.f);
+}
+
+// ── G28 Research System Tests ────────────────────────────────────
+
+TEST_CASE("ResearchCategory all 8 names", "[Game][G28][Research]") {
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Physics)) == "Physics");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Biology)) == "Biology");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Engineering)) == "Engineering");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Computing)) == "Computing");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Materials)) == "Materials");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Energy)) == "Energy");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Weapons)) == "Weapons");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Xenotech)) == "Xenotech");
+}
+
+TEST_CASE("ResearchProject defaults and progressFraction", "[Game][G28][Research]") {
+    NF::ResearchProject proj;
+    REQUIRE(proj.cost == 100.f);
+    REQUIRE(proj.progress == 0.f);
+    REQUIRE(proj.durationSeconds == 60.f);
+    REQUIRE(proj.completed == false);
+    REQUIRE(proj.progressFraction() == Catch::Approx(0.f));
+}
+
+TEST_CASE("ResearchProject addProgress completes", "[Game][G28][Research]") {
+    NF::ResearchProject proj;
+    proj.id = "p1";
+    proj.cost = 50.f;
+    proj.addProgress(30.f);
+    REQUIRE(proj.progress == Catch::Approx(30.f));
+    REQUIRE_FALSE(proj.isComplete());
+    proj.addProgress(25.f);
+    REQUIRE(proj.progress == Catch::Approx(50.f));
+    REQUIRE(proj.isComplete());
+    REQUIRE(proj.completed);
+}
+
+TEST_CASE("ResearchProject isComplete check", "[Game][G28][Research]") {
+    NF::ResearchProject proj;
+    proj.cost = 10.f;
+    REQUIRE_FALSE(proj.isComplete());
+    proj.completed = true;
+    REQUIRE(proj.isComplete());
+    proj.completed = false;
+    proj.progress = 10.f;
+    REQUIRE(proj.isComplete());
+}
+
+TEST_CASE("ResearchLab assign/clear project", "[Game][G28][Research]") {
+    NF::ResearchLab lab;
+    lab.setId("lab0");
+    lab.setName("Alpha Lab");
+    REQUIRE(lab.id() == "lab0");
+    REQUIRE(lab.name() == "Alpha Lab");
+    REQUIRE_FALSE(lab.hasActiveProject());
+    REQUIRE(lab.assignProject("proj_a"));
+    REQUIRE(lab.activeProjectId() == "proj_a");
+    REQUIRE(lab.hasActiveProject());
+    REQUIRE_FALSE(lab.assignProject("proj_a")); // same project
+    lab.clearProject();
+    REQUIRE_FALSE(lab.hasActiveProject());
+}
+
+TEST_CASE("ResearchLab completed tracking", "[Game][G28][Research]") {
+    NF::ResearchLab lab;
+    REQUIRE(lab.completedCount() == 0);
+    lab.markCompleted("p1");
+    lab.markCompleted("p2");
+    REQUIRE(lab.completedCount() == 2);
+    REQUIRE(lab.hasCompleted("p1"));
+    REQUIRE(lab.hasCompleted("p2"));
+    REQUIRE_FALSE(lab.hasCompleted("p3"));
+    REQUIRE(lab.completedProjects().size() == 2);
+}
+
+TEST_CASE("ResearchLab budget management", "[Game][G28][Research]") {
+    NF::ResearchLab lab;
+    REQUIRE(lab.budget() == Catch::Approx(1000.f));
+    REQUIRE(lab.hasBudget());
+    lab.spendBudget(999.f);
+    REQUIRE(lab.budget() == Catch::Approx(1.f));
+    lab.spendBudget(5.f);
+    REQUIRE(lab.budget() == Catch::Approx(0.f));
+    REQUIRE_FALSE(lab.hasBudget());
+    lab.setBudget(500.f);
+    REQUIRE(lab.budget() == Catch::Approx(500.f));
+}
+
+TEST_CASE("ResearchTree add/remove/find projects", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject p; p.id = "rp1"; p.name = "Laser";
+    REQUIRE(tree.addProject(p));
+    REQUIRE(tree.projectCount() == 1);
+    REQUIRE(tree.findProject("rp1") != nullptr);
+    REQUIRE(tree.findProject("rp1")->name == "Laser");
+    REQUIRE(tree.findProject("nope") == nullptr);
+    REQUIRE(tree.removeProject("rp1"));
+    REQUIRE(tree.projectCount() == 0);
+    REQUIRE_FALSE(tree.removeProject("rp1"));
+}
+
+TEST_CASE("ResearchTree reject duplicate ids", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject p; p.id = "dup";
+    REQUIRE(tree.addProject(p));
+    REQUIRE_FALSE(tree.addProject(p));
+    REQUIRE(tree.projectCount() == 1);
+}
+
+TEST_CASE("ResearchTree max projects", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    for (size_t i = 0; i < NF::ResearchTree::kMaxProjects; ++i) {
+        NF::ResearchProject p;
+        p.id = "p_" + std::to_string(i);
+        REQUIRE(tree.addProject(p));
+    }
+    REQUIRE(tree.projectCount() == NF::ResearchTree::kMaxProjects);
+    NF::ResearchProject overflow; overflow.id = "overflow";
+    REQUIRE_FALSE(tree.addProject(overflow));
+}
+
+TEST_CASE("ResearchTree prerequisitesMet", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject a; a.id = "a";
+    NF::ResearchProject b; b.id = "b"; b.prerequisites = {"a"};
+    tree.addProject(a);
+    tree.addProject(b);
+
+    std::vector<std::string> none;
+    REQUIRE(tree.prerequisitesMet("a", none));
+    REQUIRE_FALSE(tree.prerequisitesMet("b", none));
+
+    std::vector<std::string> doneA = {"a"};
+    REQUIRE(tree.prerequisitesMet("b", doneA));
+}
+
+TEST_CASE("ResearchTree projectsInCategory", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject p1; p1.id = "e1"; p1.category = NF::ResearchCategory::Energy;
+    NF::ResearchProject p2; p2.id = "e2"; p2.category = NF::ResearchCategory::Energy;
+    NF::ResearchProject p3; p3.id = "w1"; p3.category = NF::ResearchCategory::Weapons;
+    tree.addProject(p1);
+    tree.addProject(p2);
+    tree.addProject(p3);
+    auto energy = tree.projectsInCategory(NF::ResearchCategory::Energy);
+    REQUIRE(energy.size() == 2);
+    auto weapons = tree.projectsInCategory(NF::ResearchCategory::Weapons);
+    REQUIRE(weapons.size() == 1);
+    auto bio = tree.projectsInCategory(NF::ResearchCategory::Biology);
+    REQUIRE(bio.empty());
+}
+
+TEST_CASE("ResearchSystem create lab", "[Game][G28][Research]") {
+    NF::ResearchSystem sys;
+    REQUIRE(sys.labCount() == 0);
+    int idx = sys.createLab("Lab Alpha");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.labCount() == 1);
+    REQUIRE(sys.lab(0)->name() == "Lab Alpha");
+    REQUIRE(sys.lab(0)->id() == "lab_0");
+    REQUIRE(sys.lab(-1) == nullptr);
+    REQUIRE(sys.lab(99) == nullptr);
+}
+
+TEST_CASE("ResearchSystem max labs", "[Game][G28][Research]") {
+    NF::ResearchSystem sys;
+    for (size_t i = 0; i < NF::ResearchSystem::kMaxLabs; ++i) {
+        int idx = sys.createLab("L" + std::to_string(i));
+        REQUIRE(idx >= 0);
+    }
+    REQUIRE(sys.labCount() == NF::ResearchSystem::kMaxLabs);
+    REQUIRE(sys.createLab("Extra") == -1);
+}
+
+TEST_CASE("ResearchSystem tick advances research", "[Game][G28][Research]") {
+    NF::ResearchSystem sys;
+    NF::ResearchProject proj;
+    proj.id = "tp";
+    proj.name = "Test Project";
+    proj.cost = 10.f;
+    sys.tree().addProject(proj);
+
+    int labIdx = sys.createLab("Main");
+    sys.lab(labIdx)->setResearchRate(5.f);
+    REQUIRE(sys.assignProject(labIdx, "tp"));
+    REQUIRE(sys.activeLabCount() == 1);
+
+    sys.tick(1.f); // 5 points
+    auto* p = sys.tree().findProject("tp");
+    REQUIRE(p->progress == Catch::Approx(5.f));
+    REQUIRE_FALSE(p->isComplete());
+
+    sys.tick(1.f); // another 5 points -> 10 total
+    REQUIRE(p->isComplete());
+    REQUIRE(sys.discoveries() == 1);
+    REQUIRE(sys.activeLabCount() == 0);
+    REQUIRE(sys.lab(labIdx)->hasCompleted("tp"));
+}

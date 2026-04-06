@@ -1069,3 +1069,221 @@ G25 (Habitat System) fully delivered:
 - HabitatSystem with atmosphere simulation, breach/repair mechanics
 - 13 new game tests, all passing
 Total: 1042 tests, 0 failures.
+
+---
+
+## S6 — PCG World Tuning ✅
+
+- [x] S6-1: BiomeBrushType enum (Paint, Erase, Smooth, Raise, Lower, Flatten, Noise, Fill)
+  - biomeBrushTypeName() for all 8 types
+- [x] S6-2: BiomePaintCell struct (x, y, biomeIndex, intensity)
+- [x] S6-3: BiomePainter class — grid-based biome painting tool
+  - Configurable grid size (default 64, max 256)
+  - Active brush type, radius, intensity, biome index
+  - paint/erase/fill operations with bounds checking
+  - cellAt lookup, dirty flag tracking
+- [x] S6-4: StructureSeedOverride struct (structureId, overrideSeed, locked, notes)
+  - StructureSeedBank class — seed override management (max 128)
+  - add/remove/find/lock/unlock overrides, lockedCount
+- [x] S6-5: OreSeamType enum (Iron, Copper, Gold, Silver, Titanium, Uranium, Crystal, Exotic)
+  - oreSeamTypeName() for all 8 types
+  - OreSeamDef struct with volume() calculation
+  - OreSeamEditor class — ore seam management (max 64)
+  - add/remove/find, seamsOfType, totalVolume
+- [x] S6-6: PCGPreviewMode enum (Heightmap, Biome, Moisture, OreDeposits, Structures, Combined, Wireframe, Heatmap)
+  - pcgPreviewModeName() for all 8 modes
+  - PCGPreviewSettings struct (mode, resolution, zoom, autoRefresh, showGrid, showLabels, seed)
+  - PCGPreviewRenderer class — preview rendering with stale/fresh tracking
+  - setResolution (32..512 clamp), setZoom (0.1..10 clamp), refresh counter
+- [x] S6-7: test_s6_editor.cpp — 23 new Catch2 test cases
+- [x] Build verification: 1080/1080 tests pass
+
+## S6 Complete ✅
+
+S6 (PCG World Tuning) fully delivered:
+- BiomeBrushType×8 with BiomePainter grid painting tool
+- StructureSeedOverride + StructureSeedBank for deterministic seed control
+- OreSeamType×8 with OreSeamEditor for ore vein management
+- PCGPreviewMode×8 with PCGPreviewRenderer for real-time preview
+- 23 new editor tests, all passing
+
+---
+
+## G26 — Power Grid System ✅
+
+- [x] G26-1: PowerSourceType enum (Solar, Nuclear, Fusion, Geothermal, Wind, Battery, FuelCell, Antimatter)
+  - powerSourceTypeName() for all 8 types
+- [x] G26-2: PowerNode struct (id, name, sourceType, generationRate, consumptionRate, priority, online)
+  - netPower(), isGenerator(), isConsumer()
+- [x] G26-3: PowerConduit struct (id, fromNodeId, toNodeId, maxCapacity, currentLoad, efficiency)
+  - availableCapacity(), loadFraction(), isOverloaded()
+- [x] G26-4: PowerGrid class — node/conduit management
+  - addNode/removeNode (max 64), findNode, reject duplicates
+  - addConduit/removeConduit (max 128), findConduit
+  - totalGeneration, totalConsumption, netPower, isDeficit
+  - generatorCount, consumerCount
+  - removeNode cascades to connected conduits
+- [x] G26-5: PowerGridSystem class — central power grid management
+  - createGrid (max 8), grid access, gridName
+  - tickDistribution (proportional load distribution with efficiency)
+  - shedLoad (ascending priority load shedding until balanced)
+  - restoreAll (bring all nodes online)
+  - totalSystemPower across all grids
+- [x] G26-6: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1080/1080 tests pass (1042 existing + 23 S6 + 15 G26)
+
+## G26 Complete ✅
+
+G26 (Power Grid System) fully delivered:
+- PowerSourceType×8 with name helper
+- PowerNode with generation/consumption/priority model
+- PowerConduit with capacity, load tracking, and efficiency
+- PowerGrid with node/conduit management and deficit detection
+- PowerGridSystem with multi-grid simulation, load shedding, and restoration
+- 15 new game tests, all passing
+Total: 1080 tests, 0 failures.
+
+---
+
+## S7 — Logic Wiring UI ✅
+
+- [x] S7-1: LogicPinType enum (Flow, Bool, Int, Float, String, Vector, Event, Object)
+  - logicPinTypeName() for all 8 types
+- [x] S7-2: LogicPin struct (id, name, type, isOutput, connected, value)
+- [x] S7-3: LogicNodeType enum (AndGate, OrGate, NotGate, Latch, Delay, Switch, Compare, MathOp)
+  - logicNodeTypeName() for all 8 types
+  - LogicNodeDef struct (name, nodeType, inputs, outputs, description)
+- [x] S7-4: LogicWireNode class — evaluable logic node
+  - addInput/addOutput (max 16 pins each)
+  - findInput/findOutput by pin id
+  - evaluate() — gate logic (AND, OR, NOT, Latch, Compare, MathOp, Delay, Switch)
+- [x] S7-5: LogicWire struct + LogicWireGraph class
+  - addNode/removeNode (max 128), findNode
+  - addWire (max 256, validates endpoints), removeWire
+  - isValid() wire endpoint validation
+  - evaluate() all nodes
+- [x] S7-6: LogicGraphTemplate struct + LogicTemplateLibrary class
+  - addTemplate/removeTemplate (max 64), findTemplate
+  - templatesInCategory(), categoryCount()
+  - Duplicate name rejection
+- [x] S7-7: test_s7_editor.cpp — 21 new Catch2 test cases
+- [x] Build verification: 1116/1116 tests pass
+
+## S7 Complete ✅
+
+S7 (Logic Wiring UI) fully delivered:
+- LogicPinType×8 typed pin system for entity logic graphs
+- LogicNodeType×8 gate types with evaluable LogicWireNode
+- LogicWireGraph for node/wire management with validation
+- LogicTemplateLibrary for reusable graph templates with category filtering
+- 21 new editor tests, all passing
+
+---
+
+## G27 — Vehicle System ✅
+
+- [x] G27-1: VehicleType enum (Rover, Hoverbike, Mech, Shuttle, Crawler, Speeder, Tank, Dropship)
+  - vehicleTypeName() for all 8 types
+- [x] G27-2: VehicleSeat struct (id, label, isDriver, occupied, occupantId)
+  - enter()/exit() occupant management
+- [x] G27-3: VehicleComponent struct (id, name, health, maxHealth, functional)
+  - healthFraction(), applyDamage(), repair(), isDestroyed()
+- [x] G27-4: Vehicle class — single vehicle entity
+  - Seat management (max 8): addSeat/removeSeat/findSeat
+  - Component management (max 16): addComponent/removeComponent/findComponent
+  - Fuel system: fuel/maxFuel/consumeFuel/hasFuel/fuelFraction
+  - Physics: speed/maxSpeed/position/engineActive
+  - occupantCount(), hasDriver(), isOperational(), canOperate()
+- [x] G27-5: VehicleSystem class — central vehicle management
+  - createVehicle (max 16), vehicle access
+  - tickVehicle (fuel consumption + position update)
+  - applyDamage/repairAll for all components
+  - operationalCount()
+- [x] G27-6: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1116/1116 tests pass (1080 existing + 21 S7 + 15 G27)
+
+## G27 Complete ✅
+
+G27 (Vehicle System) fully delivered:
+- VehicleType×8 with name helper
+- VehicleSeat with enter/exit occupant tracking
+- VehicleComponent with health/damage/repair model
+- Vehicle with seats, components, fuel, physics state, and operational checks
+- VehicleSystem with multi-vehicle management, tick physics, and damage/repair
+- 15 new game tests, all passing
+Total: 1116 tests, 0 failures.
+
+---
+
+## S8 — Tool Ecosystem ✅
+
+- [x] S8-1: ToolStatus enum (Stopped, Starting, Running, Unhealthy, Stopping, Crashed, Unknown, Disabled)
+  - toolStatusName() for all 8 states
+  - ToolInstanceInfo struct (name, path, status, pid, uptime, events, heartbeat)
+- [x] S8-2: ToolEcosystemConfig struct (pipeline dir, heartbeat/unhealthy/crash thresholds, maxEvents, autoRestart)
+- [x] S8-3: StandaloneToolRunner class — single tool process lifecycle
+  - start/stop lifecycle with status transitions
+  - tickUptime, recordHeartbeat, recordEvent
+  - markCrashed/markUnhealthy, isAlive
+- [x] S8-4: ToolHealthMonitor class — health tracking across registered runners
+  - addRunner/removeRunner (max 8)
+  - checkHealth() based on heartbeat age thresholds
+  - healthyCount/unhealthyCount/crashedCount
+- [x] S8-5: ToolOrchestrator class — manages 4 canonical tools
+  - SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer
+  - startAll/stopAll, runner lookup by name
+  - tickAll, runningCount, totalEventsHandled
+- [x] S8-6: ToolEcosystem class — top-level ecosystem manager
+  - init/shutdown, startAll/stopAll
+  - tick with uptime + health check + auto-restart
+  - healthyToolCount, totalEventsHandled, tickCount
+- [x] S8-7: test_s8_editor.cpp — 21 new Catch2 test cases
+- [x] Build verification: 1152/1152 tests pass
+
+## S8 Complete ✅
+
+S8 (Tool Ecosystem) fully delivered:
+- ToolStatus×8 with name helper
+- ToolInstanceInfo/ToolEcosystemConfig configuration structs
+- StandaloneToolRunner for individual tool process lifecycle
+- ToolHealthMonitor with heartbeat-based health detection
+- ToolOrchestrator managing the 4 canonical tools
+- ToolEcosystem as top-level manager with tick loop and auto-restart
+- 21 new editor tests, all passing
+
+---
+
+## G28 — Research System ✅
+
+- [x] G28-1: ResearchCategory enum (Physics, Biology, Engineering, Computing, Materials, Energy, Weapons, Xenotech)
+  - researchCategoryName() for all 8 types
+- [x] G28-2: ResearchProject struct (id, name, category, cost, progress, duration, prerequisites, completed)
+  - progressFraction(), isComplete(), addProgress()
+- [x] G28-3: ResearchLab class — single research lab
+  - assignProject/clearProject, active project tracking
+  - completedProjects tracking with hasCompleted()
+  - Budget management: setBudget/spendBudget/hasBudget
+  - researchRate for tick-based progress
+- [x] G28-4: ResearchTree class — project registry
+  - addProject/removeProject/findProject (max 128, duplicate rejection)
+  - prerequisitesMet() validation against completed list
+  - projectsInCategory() filtering
+  - completedCount()
+- [x] G28-5: ResearchSystem class — central research management
+  - createLab (max 8), lab access
+  - tick() advances research, consumes budget, tracks discoveries
+  - assignProject() with prerequisite validation
+  - activeLabCount(), discoveries()
+- [x] G28-6: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1152/1152 tests pass (1116 existing + 21 S8 + 15 G28)
+
+## G28 Complete ✅
+
+G28 (Research System) fully delivered:
+- ResearchCategory×8 with name helper
+- ResearchProject with progress/completion tracking
+- ResearchLab with budget, rate, and project assignment
+- ResearchTree with prerequisite validation and category filtering
+- ResearchSystem with multi-lab management, tick-based progress, and discovery tracking
+- 15 new game tests, all passing
+Total: 1152 tests, 0 failures.
