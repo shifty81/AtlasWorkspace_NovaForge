@@ -7346,4 +7346,485 @@ private:
     size_t m_tickCount = 0;
 };
 
+// ── G31 — Colony Management ─────────────────────────────────────
+
+enum class ColonyRole : uint8_t {
+    Governor,
+    Engineer,
+    Scientist,
+    Miner,
+    Farmer,
+    Guard,
+    Medic,
+    Explorer
+};
+
+inline const char* colonyRoleName(ColonyRole r) noexcept {
+    switch (r) {
+        case ColonyRole::Governor:  return "Governor";
+        case ColonyRole::Engineer:  return "Engineer";
+        case ColonyRole::Scientist: return "Scientist";
+        case ColonyRole::Miner:     return "Miner";
+        case ColonyRole::Farmer:    return "Farmer";
+        case ColonyRole::Guard:     return "Guard";
+        case ColonyRole::Medic:     return "Medic";
+        case ColonyRole::Explorer:  return "Explorer";
+        default:                    return "Unknown";
+    }
+}
+
+struct Colonist {
+    std::string id;
+    std::string name;
+    ColonyRole role = ColonyRole::Farmer;
+    float morale = 1.f;
+    float health = 1.f;
+    float productivity = 1.f;
+    bool assigned = false;
+
+    [[nodiscard]] bool isHealthy() const { return health > 0.25f; }
+    [[nodiscard]] bool isProductive() const { return isHealthy() && morale > 0.25f; }
+    [[nodiscard]] float effectiveOutput() const { return productivity * morale * health; }
+    void takeDamage(float amount) { health = std::max(0.f, health - amount); }
+    void heal(float amount) { health = std::min(1.f, health + amount); }
+    void boostMorale(float amount) { morale = std::min(1.f, morale + amount); }
+    void reduceMorale(float amount) { morale = std::max(0.f, morale - amount); }
+};
+
+struct ColonyBuilding {
+    std::string id;
+    std::string name;
+    size_t capacity = 0;
+    size_t occupants = 0;
+    float operationalLevel = 1.f;
+    bool powered = true;
+    bool damaged = false;
+
+    [[nodiscard]] bool isOperational() const { return powered && !damaged && operationalLevel > 0.f; }
+    [[nodiscard]] bool isFull() const { return occupants >= capacity; }
+    [[nodiscard]] size_t availableSlots() const { return capacity > occupants ? capacity - occupants : 0; }
+    void damage() { damaged = true; operationalLevel *= 0.5f; }
+    void repair() { damaged = false; operationalLevel = 1.f; }
+};
+
+class Colony {
+public:
+    explicit Colony(const std::string& colonyName)
+        : m_name(colonyName) {}
+
+    bool addColonist(const Colonist& colonist) {
+        if (m_colonists.size() >= kMaxColonists) return false;
+        for (const auto& c : m_colonists) {
+            if (c.id == colonist.id) return false;
+        }
+        m_colonists.push_back(colonist);
+        return true;
+    }
+
+    bool removeColonist(const std::string& colonistId) {
+        for (auto it = m_colonists.begin(); it != m_colonists.end(); ++it) {
+            if (it->id == colonistId) {
+                m_colonists.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Colonist* findColonist(const std::string& colonistId) {
+        for (auto& c : m_colonists) {
+            if (c.id == colonistId) return &c;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const Colonist* findColonist(const std::string& colonistId) const {
+        for (const auto& c : m_colonists) {
+            if (c.id == colonistId) return &c;
+        }
+        return nullptr;
+    }
+
+    bool addBuilding(const ColonyBuilding& building) {
+        if (m_buildings.size() >= kMaxBuildings) return false;
+        for (const auto& b : m_buildings) {
+            if (b.id == building.id) return false;
+        }
+        m_buildings.push_back(building);
+        return true;
+    }
+
+    bool removeBuilding(const std::string& buildingId) {
+        for (auto it = m_buildings.begin(); it != m_buildings.end(); ++it) {
+            if (it->id == buildingId && it->occupants == 0) {
+                m_buildings.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ColonyBuilding* findBuilding(const std::string& buildingId) {
+        for (auto& b : m_buildings) {
+            if (b.id == buildingId) return &b;
+        }
+        return nullptr;
+    }
+
+    void tick(float /*dt*/) {
+        float totalMorale = 0.f;
+        size_t productiveCount = 0;
+        for (const auto& c : m_colonists) {
+            totalMorale += c.morale;
+            if (c.isProductive()) ++productiveCount;
+        }
+        m_avgMorale = m_colonists.empty() ? 0.f : totalMorale / static_cast<float>(m_colonists.size());
+        m_productiveCount = productiveCount;
+
+        float totalOutput = 0.f;
+        for (const auto& c : m_colonists) {
+            if (c.isProductive()) totalOutput += c.effectiveOutput();
+        }
+        m_resourceOutput += totalOutput;
+    }
+
+    [[nodiscard]] size_t population() const { return m_colonists.size(); }
+    [[nodiscard]] size_t buildingCount() const { return m_buildings.size(); }
+    [[nodiscard]] float averageMorale() const { return m_avgMorale; }
+    [[nodiscard]] size_t productiveCount() const { return m_productiveCount; }
+    [[nodiscard]] float resourceOutput() const { return m_resourceOutput; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+    [[nodiscard]] const std::vector<Colonist>& colonists() const { return m_colonists; }
+    [[nodiscard]] const std::vector<ColonyBuilding>& buildings() const { return m_buildings; }
+
+    [[nodiscard]] size_t operationalBuildingCount() const {
+        size_t count = 0;
+        for (const auto& b : m_buildings) {
+            if (b.isOperational()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t colonistsWithRole(ColonyRole role) const {
+        size_t count = 0;
+        for (const auto& c : m_colonists) {
+            if (c.role == role) ++count;
+        }
+        return count;
+    }
+
+    static constexpr size_t kMaxColonists = 128;
+    static constexpr size_t kMaxBuildings = 64;
+
+private:
+    std::string m_name;
+    std::vector<Colonist> m_colonists;
+    std::vector<ColonyBuilding> m_buildings;
+    float m_avgMorale = 0.f;
+    size_t m_productiveCount = 0;
+    float m_resourceOutput = 0.f;
+};
+
+class ColonySystem {
+public:
+    int createColony(const std::string& colonyName) {
+        if (m_colonies.size() >= kMaxColonies) return -1;
+        for (const auto& c : m_colonies) {
+            if (c.name() == colonyName) return -1;
+        }
+        m_colonies.emplace_back(colonyName);
+        return static_cast<int>(m_colonies.size()) - 1;
+    }
+
+    [[nodiscard]] Colony* colony(int index) {
+        if (index < 0 || index >= static_cast<int>(m_colonies.size())) return nullptr;
+        return &m_colonies[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] Colony* colonyByName(const std::string& name) {
+        for (auto& c : m_colonies) {
+            if (c.name() == name) return &c;
+        }
+        return nullptr;
+    }
+
+    bool addColonistToColony(const std::string& colonyName, const Colonist& colonist) {
+        auto* col = colonyByName(colonyName);
+        if (!col) return false;
+        return col->addColonist(colonist);
+    }
+
+    void tick(float dt) {
+        for (auto& c : m_colonies) c.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t colonyCount() const { return m_colonies.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalPopulation() const {
+        size_t count = 0;
+        for (const auto& c : m_colonies) count += c.population();
+        return count;
+    }
+
+    [[nodiscard]] size_t totalBuildings() const {
+        size_t count = 0;
+        for (const auto& c : m_colonies) count += c.buildingCount();
+        return count;
+    }
+
+    [[nodiscard]] float totalResourceOutput() const {
+        float total = 0.f;
+        for (const auto& c : m_colonies) total += c.resourceOutput();
+        return total;
+    }
+
+    static constexpr size_t kMaxColonies = 16;
+
+private:
+    std::vector<Colony> m_colonies;
+    size_t m_tickCount = 0;
+};
+
+// ── G32 — Archaeology System ────────────────────────────────────
+
+enum class ArtifactRarity : uint8_t {
+    Common,
+    Uncommon,
+    Rare,
+    Epic,
+    Legendary,
+    Ancient,
+    Mythic,
+    Unique
+};
+
+inline const char* artifactRarityName(ArtifactRarity r) noexcept {
+    switch (r) {
+        case ArtifactRarity::Common:    return "Common";
+        case ArtifactRarity::Uncommon:  return "Uncommon";
+        case ArtifactRarity::Rare:      return "Rare";
+        case ArtifactRarity::Epic:      return "Epic";
+        case ArtifactRarity::Legendary: return "Legendary";
+        case ArtifactRarity::Ancient:   return "Ancient";
+        case ArtifactRarity::Mythic:    return "Mythic";
+        case ArtifactRarity::Unique:    return "Unique";
+        default:                        return "Unknown";
+    }
+}
+
+struct Artifact {
+    std::string id;
+    std::string name;
+    ArtifactRarity rarity = ArtifactRarity::Common;
+    std::string origin;
+    float researchProgress = 0.f;
+    bool decoded = false;
+
+    [[nodiscard]] bool isDecoded() const { return decoded; }
+    [[nodiscard]] bool isResearching() const { return researchProgress > 0.f && !decoded; }
+    [[nodiscard]] float progressFraction() const { return std::min(1.f, researchProgress); }
+
+    void advanceResearch(float amount) {
+        if (decoded) return;
+        researchProgress = std::min(1.f, researchProgress + amount);
+        if (researchProgress >= 1.f) decoded = true;
+    }
+};
+
+struct ExcavationSite {
+    std::string id;
+    std::string location;
+    float difficulty = 1.f;
+    float progress = 0.f;
+    float durationSeconds = 0.f;
+    float elapsedSeconds = 0.f;
+    size_t artifactsFound = 0;
+    bool completed = false;
+    bool active = false;
+
+    [[nodiscard]] float progressFraction() const {
+        return durationSeconds > 0.f ? std::min(1.f, elapsedSeconds / durationSeconds) : 0.f;
+    }
+
+    [[nodiscard]] bool isActive() const { return active && !completed; }
+    [[nodiscard]] bool isComplete() const { return completed; }
+
+    void activate() { active = true; }
+
+    void advance(float dt) {
+        if (!active || completed) return;
+        elapsedSeconds += dt;
+        progress = progressFraction();
+        if (durationSeconds > 0.f && elapsedSeconds >= durationSeconds) {
+            completed = true;
+            progress = 1.f;
+        }
+    }
+};
+
+class ArtifactCollection {
+public:
+    explicit ArtifactCollection(const std::string& ownerName)
+        : m_owner(ownerName) {}
+
+    bool addArtifact(const Artifact& artifact) {
+        if (m_artifacts.size() >= kMaxArtifacts) return false;
+        for (const auto& a : m_artifacts) {
+            if (a.id == artifact.id) return false;
+        }
+        m_artifacts.push_back(artifact);
+        return true;
+    }
+
+    bool removeArtifact(const std::string& artifactId) {
+        for (auto it = m_artifacts.begin(); it != m_artifacts.end(); ++it) {
+            if (it->id == artifactId) {
+                m_artifacts.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Artifact* findArtifact(const std::string& artifactId) {
+        for (auto& a : m_artifacts) {
+            if (a.id == artifactId) return &a;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const Artifact* findArtifact(const std::string& artifactId) const {
+        for (const auto& a : m_artifacts) {
+            if (a.id == artifactId) return &a;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t artifactCount() const { return m_artifacts.size(); }
+    [[nodiscard]] const std::string& owner() const { return m_owner; }
+    [[nodiscard]] const std::vector<Artifact>& artifacts() const { return m_artifacts; }
+
+    [[nodiscard]] size_t decodedCount() const {
+        size_t count = 0;
+        for (const auto& a : m_artifacts) {
+            if (a.isDecoded()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t rarityCount(ArtifactRarity rarity) const {
+        size_t count = 0;
+        for (const auto& a : m_artifacts) {
+            if (a.rarity == rarity) ++count;
+        }
+        return count;
+    }
+
+    static constexpr size_t kMaxArtifacts = 256;
+
+private:
+    std::string m_owner;
+    std::vector<Artifact> m_artifacts;
+};
+
+class ArchaeologySystem {
+public:
+    int createSite(const std::string& siteId, const std::string& location, float duration) {
+        if (m_sites.size() >= kMaxSites) return -1;
+        for (const auto& s : m_sites) {
+            if (s.id == siteId) return -1;
+        }
+        ExcavationSite site;
+        site.id = siteId;
+        site.location = location;
+        site.durationSeconds = duration;
+        m_sites.push_back(site);
+        return static_cast<int>(m_sites.size()) - 1;
+    }
+
+    bool activateSite(const std::string& siteId) {
+        for (auto& s : m_sites) {
+            if (s.id == siteId && !s.active) {
+                s.activate();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ExcavationSite* findSite(const std::string& siteId) {
+        for (auto& s : m_sites) {
+            if (s.id == siteId) return &s;
+        }
+        return nullptr;
+    }
+
+    bool addCollection(const std::string& ownerName) {
+        if (m_collections.size() >= kMaxCollections) return false;
+        for (const auto& c : m_collections) {
+            if (c.owner() == ownerName) return false;
+        }
+        m_collections.emplace_back(ownerName);
+        return true;
+    }
+
+    [[nodiscard]] ArtifactCollection* collectionByOwner(const std::string& ownerName) {
+        for (auto& c : m_collections) {
+            if (c.owner() == ownerName) return &c;
+        }
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& s : m_sites) {
+            bool wasDone = s.isComplete();
+            s.advance(dt);
+            if (!wasDone && s.isComplete()) {
+                s.artifactsFound++;
+                m_totalArtifactsFound++;
+            }
+        }
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t siteCount() const { return m_sites.size(); }
+    [[nodiscard]] size_t collectionCount() const { return m_collections.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+    [[nodiscard]] size_t totalArtifactsFound() const { return m_totalArtifactsFound; }
+    [[nodiscard]] const std::vector<ExcavationSite>& sites() const { return m_sites; }
+
+    [[nodiscard]] size_t activeSiteCount() const {
+        size_t count = 0;
+        for (const auto& s : m_sites) {
+            if (s.isActive()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t completedSiteCount() const {
+        size_t count = 0;
+        for (const auto& s : m_sites) {
+            if (s.isComplete()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t totalDecodedArtifacts() const {
+        size_t count = 0;
+        for (const auto& c : m_collections) count += c.decodedCount();
+        return count;
+    }
+
+    static constexpr size_t kMaxSites = 32;
+    static constexpr size_t kMaxCollections = 8;
+
+private:
+    std::vector<ExcavationSite> m_sites;
+    std::vector<ArtifactCollection> m_collections;
+    size_t m_tickCount = 0;
+    size_t m_totalArtifactsFound = 0;
+};
+
 } // namespace NF
