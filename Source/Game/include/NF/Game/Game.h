@@ -5719,4 +5719,290 @@ private:
     std::vector<float>        m_powerOutputs;
 };
 
+// ── G25 Habitat System ────────────────────────────────────────────
+
+enum class HabitatZoneType : uint8_t {
+    Living      = 0,
+    Engineering = 1,
+    Medical     = 2,
+    Command     = 3,
+    Cargo       = 4,
+    Recreation  = 5,
+    Hydroponics = 6,
+    Airlock     = 7
+};
+
+inline const char* habitatZoneTypeName(HabitatZoneType t) {
+    switch (t) {
+        case HabitatZoneType::Living:      return "Living";
+        case HabitatZoneType::Engineering: return "Engineering";
+        case HabitatZoneType::Medical:     return "Medical";
+        case HabitatZoneType::Command:     return "Command";
+        case HabitatZoneType::Cargo:       return "Cargo";
+        case HabitatZoneType::Recreation:  return "Recreation";
+        case HabitatZoneType::Hydroponics: return "Hydroponics";
+        case HabitatZoneType::Airlock:     return "Airlock";
+    }
+    return "Unknown";
+}
+
+/// A single zone in a habitat (room/section).
+struct HabitatZone {
+    std::string     id;
+    std::string     name;
+    HabitatZoneType type        = HabitatZoneType::Living;
+    int             capacity    = 4;        // max crew occupancy
+    int             occupants   = 0;
+    float           oxygenLevel = 1.f;      // 0–1 (fraction of normal)
+    float           temperature = 22.f;     // Celsius
+    float           pressure    = 1.f;      // atmospheres
+    bool            sealed      = true;     // false if breached
+
+    [[nodiscard]] bool isHabitable() const {
+        return sealed && oxygenLevel > 0.15f && pressure > 0.5f
+               && temperature > 5.f && temperature < 45.f;
+    }
+
+    [[nodiscard]] bool isBreached() const { return !sealed; }
+
+    [[nodiscard]] float availableCapacity() const {
+        return static_cast<float>(capacity - occupants);
+    }
+};
+
+/// Life support module — maintains atmosphere in connected zones.
+struct LifeSupportModule {
+    std::string id;
+    float oxygenGenRate  = 0.1f;   // O₂ per second
+    float co2ScrubRate   = 0.08f;  // CO₂ removed per second
+    float tempTarget     = 22.f;   // target temperature °C
+    float tempAdjustRate = 0.5f;   // °C per second of convergence
+    float powerDraw      = 15.f;   // watts
+    bool  active         = true;
+
+    [[nodiscard]] bool isOperational() const { return active; }
+};
+
+/// Habitat layout — manages zones and connectivity.
+class HabitatLayout {
+public:
+    static constexpr int kMaxZones = 32;
+
+    /// Add a zone. Returns false if at capacity or duplicate ID.
+    bool addZone(const HabitatZone& zone) {
+        if (static_cast<int>(m_zones.size()) >= kMaxZones) return false;
+        for (auto& z : m_zones) if (z.id == zone.id) return false;
+        m_zones.push_back(zone);
+        return true;
+    }
+
+    /// Remove a zone by ID.
+    bool removeZone(const std::string& id) {
+        for (auto it = m_zones.begin(); it != m_zones.end(); ++it) {
+            if (it->id == id) {
+                // Remove any connections referencing this zone
+                auto cit = m_connections.begin();
+                while (cit != m_connections.end()) {
+                    if (cit->first == id || cit->second == id)
+                        cit = m_connections.erase(cit);
+                    else
+                        ++cit;
+                }
+                m_zones.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Find zone by ID (mutable).
+    [[nodiscard]] HabitatZone* findZone(const std::string& id) {
+        for (auto& z : m_zones) if (z.id == id) return &z;
+        return nullptr;
+    }
+
+    /// Find zone by ID (const).
+    [[nodiscard]] const HabitatZone* findZone(const std::string& id) const {
+        for (auto& z : m_zones) if (z.id == id) return &z;
+        return nullptr;
+    }
+
+    /// Connect two zones (bidirectional passage).
+    bool connect(const std::string& a, const std::string& b) {
+        if (!findZone(a) || !findZone(b)) return false;
+        // Avoid duplicates
+        for (auto& c : m_connections)
+            if ((c.first == a && c.second == b) || (c.first == b && c.second == a))
+                return false;
+        m_connections.emplace_back(a, b);
+        return true;
+    }
+
+    /// Count neighbors of a zone.
+    [[nodiscard]] int neighborCount(const std::string& id) const {
+        int n = 0;
+        for (auto& c : m_connections)
+            if (c.first == id || c.second == id) ++n;
+        return n;
+    }
+
+    /// Get all zones connected to a given zone.
+    [[nodiscard]] std::vector<std::string> neighbors(const std::string& id) const {
+        std::vector<std::string> result;
+        for (auto& c : m_connections) {
+            if (c.first == id) result.push_back(c.second);
+            else if (c.second == id) result.push_back(c.first);
+        }
+        return result;
+    }
+
+    /// Count habitable zones.
+    [[nodiscard]] int habitableCount() const {
+        int n = 0;
+        for (auto& z : m_zones) if (z.isHabitable()) ++n;
+        return n;
+    }
+
+    /// Total crew capacity across habitable zones.
+    [[nodiscard]] int totalCapacity() const {
+        int c = 0;
+        for (auto& z : m_zones)
+            if (z.isHabitable()) c += z.capacity;
+        return c;
+    }
+
+    [[nodiscard]] const std::vector<HabitatZone>& zones() const { return m_zones; }
+    [[nodiscard]] size_t zoneCount() const { return m_zones.size(); }
+    void clear() { m_zones.clear(); m_connections.clear(); }
+
+private:
+    std::vector<HabitatZone> m_zones;
+    std::vector<std::pair<std::string, std::string>> m_connections;
+};
+
+/// Central habitat system — manages habitats, life support, and atmosphere.
+class HabitatSystem {
+public:
+    static constexpr int kMaxHabitats = 4;
+
+    /// Create a new habitat. Returns index or -1 if at limit.
+    int createHabitat(const std::string& name) {
+        if (static_cast<int>(m_names.size()) >= kMaxHabitats) return -1;
+        m_names.push_back(name);
+        m_layouts.emplace_back();
+        m_lifeSupportModules.emplace_back();
+        return static_cast<int>(m_names.size()) - 1;
+    }
+
+    /// Add a life support module to a habitat.
+    bool addLifeSupport(int habIdx, const LifeSupportModule& mod) {
+        if (habIdx < 0 || habIdx >= static_cast<int>(m_lifeSupportModules.size()))
+            return false;
+        m_lifeSupportModules[static_cast<size_t>(habIdx)].push_back(mod);
+        return true;
+    }
+
+    /// Access layout for a habitat.
+    [[nodiscard]] HabitatLayout* layout(int index) {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return nullptr;
+        return &m_layouts[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] const HabitatLayout* layout(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return nullptr;
+        return &m_layouts[static_cast<size_t>(index)];
+    }
+
+    /// Get habitat name.
+    [[nodiscard]] const std::string& habitatName(int index) const {
+        static const std::string empty;
+        if (index < 0 || index >= static_cast<int>(m_names.size())) return empty;
+        return m_names[static_cast<size_t>(index)];
+    }
+
+    /// Simulate atmosphere tick for a habitat.
+    /// Oxygen generation, CO₂ scrubbing, and temperature convergence.
+    void tickAtmosphere(int habIdx, float dt) {
+        if (habIdx < 0 || habIdx >= static_cast<int>(m_layouts.size())) return;
+
+        auto& layout = m_layouts[static_cast<size_t>(habIdx)];
+        auto& modules = m_lifeSupportModules[static_cast<size_t>(habIdx)];
+
+        // Aggregate life support rates
+        float totalO2Gen = 0.f;
+        float totalTempTarget = 0.f;
+        float totalTempRate = 0.f;
+        int activeCount = 0;
+        for (auto& mod : modules) {
+            if (!mod.active) continue;
+            totalO2Gen += mod.oxygenGenRate;
+            totalTempTarget += mod.tempTarget;
+            totalTempRate += mod.tempAdjustRate;
+            ++activeCount;
+        }
+        if (activeCount > 0)
+            totalTempTarget /= static_cast<float>(activeCount);
+
+        // Apply to each sealed zone
+        for (auto& zone : const_cast<std::vector<HabitatZone>&>(layout.zones())) {
+            if (!zone.sealed) continue;
+
+            // Oxygen: generate toward 1.0, reduced by occupants
+            float o2Drain = static_cast<float>(zone.occupants) * 0.02f * dt;
+            zone.oxygenLevel += (totalO2Gen * dt - o2Drain);
+            zone.oxygenLevel = std::clamp(zone.oxygenLevel, 0.f, 1.f);
+
+            // Temperature: converge toward target
+            if (activeCount > 0) {
+                float diff = totalTempTarget - zone.temperature;
+                float adj = totalTempRate * dt;
+                if (std::abs(diff) <= adj)
+                    zone.temperature = totalTempTarget;
+                else
+                    zone.temperature += (diff > 0.f ? adj : -adj);
+            }
+        }
+    }
+
+    /// Breach a zone — sets sealed=false, vents atmosphere.
+    bool breachZone(int habIdx, const std::string& zoneId) {
+        auto* lay = layout(habIdx);
+        if (!lay) return false;
+        auto* zone = lay->findZone(zoneId);
+        if (!zone) return false;
+        zone->sealed = false;
+        zone->oxygenLevel = 0.f;
+        zone->pressure = 0.f;
+        return true;
+    }
+
+    /// Repair a breach — re-seals the zone.
+    bool repairBreach(int habIdx, const std::string& zoneId) {
+        auto* lay = layout(habIdx);
+        if (!lay) return false;
+        auto* zone = lay->findZone(zoneId);
+        if (!zone) return false;
+        zone->sealed = true;
+        zone->pressure = 1.f;
+        return true;
+    }
+
+    /// Total life support power draw for a habitat.
+    [[nodiscard]] float lifeSupportPowerDraw(int habIdx) const {
+        if (habIdx < 0 || habIdx >= static_cast<int>(m_lifeSupportModules.size()))
+            return 0.f;
+        float total = 0.f;
+        for (auto& mod : m_lifeSupportModules[static_cast<size_t>(habIdx)])
+            if (mod.active) total += mod.powerDraw;
+        return total;
+    }
+
+    [[nodiscard]] size_t habitatCount() const { return m_names.size(); }
+
+private:
+    std::vector<std::string>                    m_names;
+    std::vector<HabitatLayout>                  m_layouts;
+    std::vector<std::vector<LifeSupportModule>> m_lifeSupportModules;
+};
+
 } // namespace NF

@@ -86,6 +86,7 @@ catch_discover_tests(NF_AudioTests)
 # Animation tests
 add_executable(NF_AnimationTests
     Animation/test_animation.cpp
+    Animation/test_s5_animation.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_AnimationTests PRIVATE NF::Animation NF::Core Catch2::Catch2)

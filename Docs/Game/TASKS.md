@@ -1005,3 +1005,67 @@ G24 (Base Building System) fully delivered:
 - BaseSystem with multi-base management and power budgeting
 - 15 new game tests, all passing
 Total: 1012 tests, 0 failures.
+
+## S5 — Character & Animation Suite ✅
+
+- [x] S5-1: BoneChain struct (root/mid/end bone indices, isValid())
+- [x] S5-2: TwoJointIK solver
+  - Analytical 2-bone IK with law of cosines
+  - Pole vector for bend plane orientation
+  - Clamped reach range, solve statistics
+- [x] S5-3: FPSHandRig class
+  - Left/right arm chains with HandSide enum
+  - Per-hand IK target and pole target
+  - applyIK() drives both arms via TwoJointIK
+  - Weapon sway offset with applySwayToTargets()
+- [x] S5-4: AnimationBlendGraph
+  - BlendNode struct (clip, weight, timeScale, localTime, looping)
+  - addNode/setWeight/findNode, max 16 nodes
+  - update() advances localTime with looping wrap
+  - sample() normalized weighted pose blending
+- [x] S5-5: CharacterGroundingSystem
+  - Ground height + max adjustment, foot bone indices
+  - apply() adjusts foot bone Y positions, clamped to maxAdjustment
+  - needsGrounding() threshold check
+- [x] S5-6: test_s5_animation.cpp — 17 new Catch2 test cases
+- [x] Build verification: 1042/1042 tests pass
+
+## S5 Complete ✅
+
+S5 (Character & Animation Suite) fully delivered:
+- BoneChain + TwoJointIK analytical solver with pole vector
+- FPSHandRig with dual-arm IK and weapon sway
+- AnimationBlendGraph with weighted multi-clip blending
+- CharacterGroundingSystem with foot bone adjustment
+- 17 new animation tests, all passing
+
+## G25 — Habitat System ✅
+
+- [x] G25-1: HabitatZoneType enum (Living, Engineering, Medical, Command, Cargo, Recreation, Hydroponics, Airlock)
+  - habitatZoneTypeName() for all 8 types
+- [x] G25-2: HabitatZone struct (id, name, type, capacity, occupants, oxygenLevel, temperature, pressure, sealed)
+  - isHabitable() (sealed, O₂ > 0.15, pressure > 0.5, temp 5–45°C)
+  - isBreached(), availableCapacity()
+- [x] G25-3: LifeSupportModule struct (oxygenGenRate, co2ScrubRate, tempTarget, tempAdjustRate, powerDraw)
+  - isOperational() active check
+- [x] G25-4: HabitatLayout class — zone management with connections
+  - addZone/removeZone (max 32 zones), findZone, connect (bidirectional)
+  - neighborCount, neighbors, habitableCount, totalCapacity
+- [x] G25-5: HabitatSystem class — central habitat management
+  - createHabitat (max 4), addLifeSupport, layout access
+  - tickAtmosphere (oxygen generation, occupant drain, temperature convergence)
+  - breachZone/repairBreach (seal/unseal with atmosphere venting)
+  - lifeSupportPowerDraw calculation
+- [x] G25-6: 13 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1042/1042 tests pass
+
+## G25 Complete ✅
+
+G25 (Habitat System) fully delivered:
+- HabitatZoneType×8 with name helper
+- HabitatZone with habitability checks and atmosphere properties
+- LifeSupportModule for oxygen generation and temperature control
+- HabitatLayout with zone connectivity and capacity tracking
+- HabitatSystem with atmosphere simulation, breach/repair mechanics
+- 13 new game tests, all passing
+Total: 1042 tests, 0 failures.

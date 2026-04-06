@@ -4815,3 +4815,185 @@ TEST_CASE("BaseSystem max bases", "[Game][G24][Base]") {
 TEST_CASE("BaseLayout max parts", "[Game][G24][Base]") {
     REQUIRE(NF::BaseLayout::kMaxParts == 256);
 }
+
+// ── G25 Habitat System Tests ──────────────────────────────────────
+
+TEST_CASE("HabitatZoneType names", "[Game][G25][Habitat]") {
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Living))      == "Living");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Engineering)) == "Engineering");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Medical))     == "Medical");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Command))     == "Command");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Cargo))       == "Cargo");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Recreation))  == "Recreation");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Hydroponics)) == "Hydroponics");
+    REQUIRE(std::string(NF::habitatZoneTypeName(NF::HabitatZoneType::Airlock))     == "Airlock");
+}
+
+TEST_CASE("HabitatZone habitability", "[Game][G25][Habitat]") {
+    NF::HabitatZone zone;
+    zone.id = "quarters";
+    zone.name = "Crew Quarters";
+    zone.sealed = true;
+    zone.oxygenLevel = 0.95f;
+    zone.pressure = 1.0f;
+    zone.temperature = 22.f;
+    REQUIRE(zone.isHabitable());
+
+    // Breached → not habitable
+    zone.sealed = false;
+    REQUIRE_FALSE(zone.isHabitable());
+    REQUIRE(zone.isBreached());
+
+    // Low oxygen → not habitable
+    zone.sealed = true;
+    zone.oxygenLevel = 0.1f;
+    REQUIRE_FALSE(zone.isHabitable());
+}
+
+TEST_CASE("HabitatZone capacity", "[Game][G25][Habitat]") {
+    NF::HabitatZone zone;
+    zone.capacity = 6;
+    zone.occupants = 4;
+    REQUIRE(zone.availableCapacity() == 2.f);
+}
+
+TEST_CASE("LifeSupportModule defaults", "[Game][G25][Habitat]") {
+    NF::LifeSupportModule mod;
+    REQUIRE(mod.isOperational());
+    REQUIRE(mod.oxygenGenRate > 0.f);
+    REQUIRE(mod.powerDraw > 0.f);
+
+    mod.active = false;
+    REQUIRE_FALSE(mod.isOperational());
+}
+
+TEST_CASE("HabitatLayout add and remove zones", "[Game][G25][Habitat]") {
+    NF::HabitatLayout layout;
+    NF::HabitatZone z1;
+    z1.id = "bridge"; z1.name = "Bridge"; z1.type = NF::HabitatZoneType::Command;
+    NF::HabitatZone z2;
+    z2.id = "medbay"; z2.name = "Med Bay"; z2.type = NF::HabitatZoneType::Medical;
+
+    REQUIRE(layout.addZone(z1));
+    REQUIRE(layout.addZone(z2));
+    REQUIRE(layout.zoneCount() == 2);
+
+    // No duplicate
+    REQUIRE_FALSE(layout.addZone(z1));
+
+    REQUIRE(layout.findZone("bridge") != nullptr);
+    REQUIRE(layout.removeZone("bridge"));
+    REQUIRE(layout.zoneCount() == 1);
+    REQUIRE(layout.findZone("bridge") == nullptr);
+}
+
+TEST_CASE("HabitatLayout connections", "[Game][G25][Habitat]") {
+    NF::HabitatLayout layout;
+    NF::HabitatZone z1, z2, z3;
+    z1.id = "a"; z2.id = "b"; z3.id = "c";
+    layout.addZone(z1);
+    layout.addZone(z2);
+    layout.addZone(z3);
+
+    REQUIRE(layout.connect("a", "b"));
+    REQUIRE(layout.connect("b", "c"));
+
+    // No duplicate connection
+    REQUIRE_FALSE(layout.connect("a", "b"));
+
+    REQUIRE(layout.neighborCount("b") == 2);
+    REQUIRE(layout.neighborCount("a") == 1);
+
+    auto nbrs = layout.neighbors("b");
+    REQUIRE(nbrs.size() == 2);
+}
+
+TEST_CASE("HabitatLayout habitable count and capacity", "[Game][G25][Habitat]") {
+    NF::HabitatLayout layout;
+    NF::HabitatZone h1, h2;
+    h1.id = "x"; h1.capacity = 4; h1.sealed = true; h1.oxygenLevel = 0.9f;
+    h2.id = "y"; h2.capacity = 6; h2.sealed = false; // breached
+    layout.addZone(h1);
+    layout.addZone(h2);
+
+    REQUIRE(layout.habitableCount() == 1);
+    REQUIRE(layout.totalCapacity() == 4);
+}
+
+TEST_CASE("HabitatSystem create habitat", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int idx = sys.createHabitat("Station Alpha");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.habitatCount() == 1);
+    REQUIRE(sys.habitatName(0) == "Station Alpha");
+}
+
+TEST_CASE("HabitatSystem max habitats", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    REQUIRE(NF::HabitatSystem::kMaxHabitats == 4);
+    for (int i = 0; i < 4; ++i)
+        REQUIRE(sys.createHabitat("h" + std::to_string(i)) >= 0);
+    REQUIRE(sys.createHabitat("overflow") == -1);
+}
+
+TEST_CASE("HabitatSystem life support power draw", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int h = sys.createHabitat("TestHab");
+
+    NF::LifeSupportModule mod;
+    mod.id = "ls1";
+    mod.powerDraw = 20.f;
+    sys.addLifeSupport(h, mod);
+    mod.id = "ls2";
+    mod.powerDraw = 10.f;
+    sys.addLifeSupport(h, mod);
+
+    REQUIRE(sys.lifeSupportPowerDraw(h) == Catch::Approx(30.f));
+}
+
+TEST_CASE("HabitatSystem breach and repair", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int h = sys.createHabitat("OutpostBeta");
+    NF::HabitatZone zone;
+    zone.id = "cargo";
+    zone.name = "Cargo Bay";
+    zone.type = NF::HabitatZoneType::Cargo;
+    sys.layout(h)->addZone(zone);
+
+    REQUIRE(sys.breachZone(h, "cargo"));
+    auto* z = sys.layout(h)->findZone("cargo");
+    REQUIRE_FALSE(z->sealed);
+    REQUIRE(z->oxygenLevel == 0.f);
+    REQUIRE(z->pressure == 0.f);
+
+    REQUIRE(sys.repairBreach(h, "cargo"));
+    REQUIRE(z->sealed);
+    REQUIRE(z->pressure == 1.f);
+}
+
+TEST_CASE("HabitatSystem tickAtmosphere oxygen generation", "[Game][G25][Habitat]") {
+    NF::HabitatSystem sys;
+    int h = sys.createHabitat("AtmoTest");
+
+    NF::HabitatZone zone;
+    zone.id = "living";
+    zone.name = "Living";
+    zone.oxygenLevel = 0.5f;
+    zone.sealed = true;
+    zone.occupants = 0;
+    sys.layout(h)->addZone(zone);
+
+    NF::LifeSupportModule mod;
+    mod.id = "ls";
+    mod.oxygenGenRate = 0.1f;
+    sys.addLifeSupport(h, mod);
+
+    sys.tickAtmosphere(h, 1.f);
+
+    auto* z = sys.layout(h)->findZone("living");
+    REQUIRE(z->oxygenLevel > 0.5f);  // oxygen should increase
+}
+
+TEST_CASE("HabitatLayout max zones", "[Game][G25][Habitat]") {
+    REQUIRE(NF::HabitatLayout::kMaxZones == 32);
+}
