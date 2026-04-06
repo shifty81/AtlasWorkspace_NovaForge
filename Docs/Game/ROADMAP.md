@@ -86,6 +86,7 @@
 | **G54** — Tornado System | TornadoScale×6, TornadoStage×6, TornadoEvent, TornadoRegion, TornadoSystem | ✅ Done |
 | **G55** — Dust Storm System | DustDensity×5, DustStormPhase×5, DustStormEvent, DustStormRegion, DustStormSystem | ✅ Done |
 | **G56** — Hail Storm System | HailSize×5, HailStormPhase×5, HailStormEvent, HailStormRegion, HailStormSystem | ✅ Done |
+| **G57** — Ice Storm System | IceThickness×5, IceStormPhase×5, IceStormEvent, IceStormRegion, IceStormSystem | ✅ Done |
 
 ---
 
@@ -153,6 +154,7 @@
 | **S35** — Texture Editor | TextureFormat×8, TextureFilter×4, TextureWrapMode×4, TextureAsset, TextureEditor | ✅ Done |
 | **S36** — Font Editor | FontStyle×4, FontWeight×6, FontVariant×4, FontAsset, FontEditor | ✅ Done |
 | **S37** — Icon Editor | IconSize×5, IconTheme×4, IconState×5, IconAsset, IconEditor | ✅ Done |
+| **S38** — Sprite Editor | SpriteOrigin×5, SpriteBlendMode×5, SpriteAnimState×5, SpriteAsset, SpriteEditor | ✅ Done |
 
 ## Status Key
 

@@ -2835,3 +2835,43 @@ Total: 1875 tests, 0 failures (1852 existing + 14 S36 + 9 G55 = 1875).
 ## Build Verification ✅
 
 Total: 1899 tests, 0 failures (1875 existing + 14 S37 + 10 G56 = 1899).
+
+---
+
+## S38 — Sprite Editor ✅
+
+- [x] SpriteOrigin enum ×5 (TopLeft, TopCenter, Center, BottomLeft, BottomCenter) + spriteOriginName()
+- [x] SpriteBlendMode enum ×5 (Normal, Additive, Multiply, Screen, Overlay) + spriteBlendModeName()
+- [x] SpriteAnimState enum ×5 (Idle, Playing, Paused, Stopped, Finished) + spriteAnimStateName()
+- [x] SpriteAsset (name, width, height, origin, blendMode, animState, frameCount, frameRate, looping, flippedH, flippedV, dirty)
+  - isAnimated (frameCount > 1), isPlaying, isPaused, isFinished, area()
+- [x] SpriteEditor (max 512 sprites)
+  - addSprite (duplicate rejected), removeSprite (clears activeSprite), findSprite, setActiveSprite
+  - spriteCount, dirtyCount, animatedCount, playingCount, loopingCount, countByBlendMode, countByOrigin
+- [x] 14 new editor tests (test_s38_editor.cpp), all passing
+
+## S38 Complete ✅
+
+---
+
+## G57 — Ice Storm System ✅
+
+- [x] IceThickness enum ×5 (Glaze, Light, Moderate, Heavy, Extreme) + iceThicknessName()
+- [x] IceStormPhase enum ×5 (Forming, Spreading, Intensifying, Freezing, Dissipating) + iceStormPhaseName()
+- [x] IceStormEvent (id, thickness, phase, intensity, coverage, active)
+  - activate, deactivate, isSevere (>= Heavy), isFreezing (Freezing phase), isWidespread (>= 400 km²), hazardScore
+- [x] IceStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, freezingCount, widespreadCount
+- [x] IceStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, freezingEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G57 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1923 tests, 0 failures (1899 existing + 14 S38 + 10 G57 = 1923).

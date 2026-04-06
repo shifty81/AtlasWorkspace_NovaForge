@@ -9187,3 +9187,106 @@ TEST_CASE("HailStormSystem aggregate event counts", "[Game][G56][HailStorm]") {
     REQUIRE(sys.peakEventCount()       == 1); // only x (y=Developing, z inactive)
     REQUIRE(sys.widespreadEventCount() == 1); // only x (coverage >= 500)
 }
+
+// ── G57 — Ice Storm System ────────────────────────────────────────
+
+TEST_CASE("IceThickness names cover all 5 values", "[Game][G57][IceStorm]") {
+    REQUIRE(std::string(NF::iceThicknessName(NF::IceThickness::Glaze))    == "Glaze");
+    REQUIRE(std::string(NF::iceThicknessName(NF::IceThickness::Light))    == "Light");
+    REQUIRE(std::string(NF::iceThicknessName(NF::IceThickness::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::iceThicknessName(NF::IceThickness::Heavy))    == "Heavy");
+    REQUIRE(std::string(NF::iceThicknessName(NF::IceThickness::Extreme))  == "Extreme");
+}
+
+TEST_CASE("IceStormPhase names cover all 5 values", "[Game][G57][IceStorm]") {
+    REQUIRE(std::string(NF::iceStormPhaseName(NF::IceStormPhase::Forming))      == "Forming");
+    REQUIRE(std::string(NF::iceStormPhaseName(NF::IceStormPhase::Spreading))    == "Spreading");
+    REQUIRE(std::string(NF::iceStormPhaseName(NF::IceStormPhase::Intensifying)) == "Intensifying");
+    REQUIRE(std::string(NF::iceStormPhaseName(NF::IceStormPhase::Freezing))     == "Freezing");
+    REQUIRE(std::string(NF::iceStormPhaseName(NF::IceStormPhase::Dissipating))  == "Dissipating");
+}
+
+TEST_CASE("IceStormEvent isSevere threshold is Heavy+", "[Game][G57][IceStorm]") {
+    NF::IceStormEvent ev; ev.id = "i1";
+    ev.thickness = NF::IceThickness::Moderate;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.thickness = NF::IceThickness::Heavy;
+    REQUIRE(ev.isSevere());
+
+    ev.thickness = NF::IceThickness::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("IceStormEvent isFreezing and isWidespread", "[Game][G57][IceStorm]") {
+    NF::IceStormEvent ev; ev.id = "i2";
+    ev.phase    = NF::IceStormPhase::Spreading;
+    ev.coverage = 100.0f;
+    REQUIRE_FALSE(ev.isFreezing());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.phase    = NF::IceStormPhase::Freezing;
+    ev.coverage = 500.0f;
+    REQUIRE(ev.isFreezing());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("IceStormEvent hazardScore calculation", "[Game][G57][IceStorm]") {
+    NF::IceStormEvent ev; ev.id = "i3";
+    // Heavy (uint8=3): (3+1) * 100 / 100 = 4.0
+    ev.thickness = NF::IceThickness::Heavy;
+    ev.intensity = 100.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(4.0f));
+}
+
+TEST_CASE("IceStormEvent activate and deactivate", "[Game][G57][IceStorm]") {
+    NF::IceStormEvent ev; ev.id = "i4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("IceStormRegion freezingCount and severeCount", "[Game][G57][IceStorm]") {
+    NF::IceStormRegion region("north");
+
+    NF::IceStormEvent a; a.id = "a"; a.thickness = NF::IceThickness::Extreme; a.phase = NF::IceStormPhase::Freezing; a.activate();
+    NF::IceStormEvent b; b.id = "b"; b.thickness = NF::IceThickness::Heavy;   b.phase = NF::IceStormPhase::Spreading; b.activate();
+    NF::IceStormEvent c; c.id = "c"; c.thickness = NF::IceThickness::Light;   c.phase = NF::IceStormPhase::Freezing; c.activate();
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()   == 2); // a (Extreme) and b (Heavy)
+    REQUIRE(region.freezingCount() == 2); // a and c (Freezing phase)
+}
+
+TEST_CASE("IceStormSystem createRegion and tick propagation", "[Game][G57][IceStorm]") {
+    NF::IceStormSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("IceStormSystem aggregate event counts", "[Game][G57][IceStorm]") {
+    NF::IceStormSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::IceStormEvent x; x.id = "x"; x.thickness = NF::IceThickness::Extreme; x.phase = NF::IceStormPhase::Freezing; x.coverage = 600.0f; x.intensity = 80.0f; x.activate();
+    NF::IceStormEvent y; y.id = "y"; y.thickness = NF::IceThickness::Glaze;   y.phase = NF::IceStormPhase::Forming;  y.activate();
+    NF::IceStormEvent z; z.id = "z"; z.thickness = NF::IceThickness::Heavy;   z.phase = NF::IceStormPhase::Freezing; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Glaze, z inactive)
+    REQUIRE(sys.freezingEventCount()   == 1); // only x (y=Forming, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (coverage >= 400)
+}

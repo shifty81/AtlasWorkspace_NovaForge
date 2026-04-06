@@ -11499,4 +11499,147 @@ private:
     size_t                       m_tickCount = 0;
 };
 
+// ── G57 — Ice Storm System ────────────────────────────────────────
+
+enum class IceThickness : uint8_t {
+    Glaze, Light, Moderate, Heavy, Extreme
+};
+
+inline const char* iceThicknessName(IceThickness t) {
+    switch (t) {
+        case IceThickness::Glaze:    return "Glaze";
+        case IceThickness::Light:    return "Light";
+        case IceThickness::Moderate: return "Moderate";
+        case IceThickness::Heavy:    return "Heavy";
+        case IceThickness::Extreme:  return "Extreme";
+    }
+    return "Unknown";
+}
+
+enum class IceStormPhase : uint8_t {
+    Forming, Spreading, Intensifying, Freezing, Dissipating
+};
+
+inline const char* iceStormPhaseName(IceStormPhase p) {
+    switch (p) {
+        case IceStormPhase::Forming:      return "Forming";
+        case IceStormPhase::Spreading:    return "Spreading";
+        case IceStormPhase::Intensifying: return "Intensifying";
+        case IceStormPhase::Freezing:     return "Freezing";
+        case IceStormPhase::Dissipating:  return "Dissipating";
+    }
+    return "Unknown";
+}
+
+struct IceStormEvent {
+    std::string    id;
+    IceThickness   thickness = IceThickness::Glaze;
+    IceStormPhase  phase     = IceStormPhase::Forming;
+    float          intensity = 0.0f;   // 0–100
+    float          coverage  = 0.0f;   // km²
+    bool           active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()      const {
+        return static_cast<uint8_t>(thickness) >= static_cast<uint8_t>(IceThickness::Heavy);
+    }
+    [[nodiscard]] bool isFreezing()    const { return phase == IceStormPhase::Freezing;     }
+    [[nodiscard]] bool isWidespread()  const { return coverage >= 400.0f;                   }
+    [[nodiscard]] float hazardScore()  const {
+        return (static_cast<float>(static_cast<uint8_t>(thickness) + 1)) * intensity / 100.0f;
+    }
+};
+
+class IceStormRegion {
+public:
+    explicit IceStormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const IceStormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] IceStormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()      const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())     ++c; return c;
+    }
+    [[nodiscard]] size_t freezingCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isFreezing())   ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                 m_name;
+    std::vector<IceStormEvent>  m_events;
+    size_t                      m_tickCount = 0;
+};
+
+class IceStormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    IceStormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] IceStormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount;      }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();     return c;
+    }
+    [[nodiscard]] size_t severeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();     return c;
+    }
+    [[nodiscard]] size_t freezingEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.freezingCount();   return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount(); return c;
+    }
+
+private:
+    std::vector<IceStormRegion> m_regions;
+    size_t                      m_tickCount = 0;
+};
+
 } // namespace NF
