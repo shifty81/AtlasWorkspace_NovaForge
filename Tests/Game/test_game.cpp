@@ -5565,3 +5565,169 @@ TEST_CASE("ResearchSystem tick advances research", "[Game][G28][Research]") {
     REQUIRE(sys.activeLabCount() == 0);
     REQUIRE(sys.lab(labIdx)->hasCompleted("tp"));
 }
+
+// ── G29 Tests: Diplomacy System ─────────────────────────────────
+
+TEST_CASE("DiplomacyAction names", "[Game][G29][Diplomacy]") {
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::TradeAgreement))    == "TradeAgreement");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::NonAggression))     == "NonAggression");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::MilitaryAlliance))  == "MilitaryAlliance");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::TechSharing))       == "TechSharing");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::TerritoryExchange)) == "TerritoryExchange");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::Embargo))           == "Embargo");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::WarDeclaration))    == "WarDeclaration");
+    REQUIRE(std::string(NF::diplomacyActionName(NF::DiplomacyAction::PeaceTreaty))       == "PeaceTreaty");
+}
+
+TEST_CASE("DiplomaticStance names", "[Game][G29][Diplomacy]") {
+    REQUIRE(std::string(NF::diplomaticStanceName(NF::DiplomaticStance::Hostile))    == "Hostile");
+    REQUIRE(std::string(NF::diplomaticStanceName(NF::DiplomaticStance::Unfriendly)) == "Unfriendly");
+    REQUIRE(std::string(NF::diplomaticStanceName(NF::DiplomaticStance::Neutral))    == "Neutral");
+    REQUIRE(std::string(NF::diplomaticStanceName(NF::DiplomaticStance::Friendly))   == "Friendly");
+    REQUIRE(std::string(NF::diplomaticStanceName(NF::DiplomaticStance::Allied))     == "Allied");
+}
+
+TEST_CASE("DiplomaticRelation adjustOpinion clamping + stance", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticRelation rel;
+    REQUIRE(rel.opinion == 0.f);
+    REQUIRE(rel.stance == NF::DiplomaticStance::Neutral);
+
+    rel.adjustOpinion(80.f);
+    REQUIRE(rel.opinion == Catch::Approx(80.f));
+    REQUIRE(rel.stance == NF::DiplomaticStance::Allied);
+
+    rel.adjustOpinion(50.f); // clamps at 100
+    REQUIRE(rel.opinion == Catch::Approx(100.f));
+    REQUIRE(rel.stance == NF::DiplomaticStance::Allied);
+
+    rel.adjustOpinion(-180.f); // 100 + (-180) = -80, clamped at -100
+    REQUIRE(rel.opinion == Catch::Approx(-80.f));
+    REQUIRE(rel.stance == NF::DiplomaticStance::Hostile);
+}
+
+TEST_CASE("DiplomaticRelation declareWar/declarePeace", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticRelation rel;
+    rel.declareWar();
+    REQUIRE(rel.atWar);
+    REQUIRE(rel.opinion == Catch::Approx(-100.f));
+    REQUIRE(rel.isHostile());
+
+    rel.declarePeace();
+    REQUIRE_FALSE(rel.atWar);
+    REQUIRE(rel.opinion == Catch::Approx(-80.f)); // -100 + 20
+    REQUIRE(rel.stance == NF::DiplomaticStance::Hostile); // still hostile at -80
+}
+
+TEST_CASE("Treaty tick + expiration", "[Game][G29][Diplomacy]") {
+    NF::Treaty t;
+    t.durationSeconds = 10.f;
+    REQUIRE(t.isActive());
+    REQUIRE(t.remainingSeconds() == Catch::Approx(10.f));
+
+    t.tick(7.f);
+    REQUIRE(t.isActive());
+    REQUIRE(t.remainingSeconds() == Catch::Approx(3.f));
+
+    t.tick(5.f); // exceeds duration
+    REQUIRE_FALSE(t.isActive());
+    REQUIRE(t.expired);
+}
+
+TEST_CASE("Treaty permanent stays active", "[Game][G29][Diplomacy]") {
+    NF::Treaty t;
+    t.durationSeconds = 0.f; // permanent
+    REQUIRE(t.isPermanent());
+    REQUIRE(t.remainingSeconds() == Catch::Approx(-1.f));
+
+    t.tick(1000.f);
+    REQUIRE(t.isActive()); // permanent never expires
+}
+
+TEST_CASE("Treaty revoke", "[Game][G29][Diplomacy]") {
+    NF::Treaty t;
+    t.durationSeconds = 100.f;
+    REQUIRE(t.isActive());
+    t.revoke();
+    REQUIRE_FALSE(t.isActive());
+}
+
+TEST_CASE("DiplomaticChannel addRelation + duplicates rejected", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticChannel ch("Alpha");
+    REQUIRE(ch.addRelation("Beta"));
+    REQUIRE(ch.relationCount() == 1);
+    REQUIRE_FALSE(ch.addRelation("Beta")); // duplicate
+    REQUIRE(ch.relationCount() == 1);
+}
+
+TEST_CASE("DiplomaticChannel self-relation rejected", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticChannel ch("Alpha");
+    REQUIRE_FALSE(ch.addRelation("Alpha"));
+}
+
+TEST_CASE("DiplomaticChannel proposeTreaty + opinion adjustment", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticChannel ch("Alpha");
+    ch.addRelation("Beta");
+    REQUIRE(ch.proposeTreaty("Beta", NF::DiplomacyAction::TradeAgreement));
+    auto* rel = ch.findRelation("Beta");
+    REQUIRE(rel->opinion == Catch::Approx(10.f));
+    REQUIRE(ch.activeTreatyCount() == 1);
+}
+
+TEST_CASE("DiplomaticChannel war blocks non-peace treaties", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticChannel ch("Alpha");
+    ch.addRelation("Beta");
+    ch.proposeTreaty("Beta", NF::DiplomacyAction::WarDeclaration);
+    auto* rel = ch.findRelation("Beta");
+    REQUIRE(rel->atWar);
+
+    REQUIRE_FALSE(ch.proposeTreaty("Beta", NF::DiplomacyAction::TradeAgreement));
+    REQUIRE(ch.proposeTreaty("Beta", NF::DiplomacyAction::PeaceTreaty));
+    REQUIRE_FALSE(rel->atWar);
+}
+
+TEST_CASE("DiplomaticChannel alliedCount/hostileCount", "[Game][G29][Diplomacy]") {
+    NF::DiplomaticChannel ch("Alpha");
+    ch.addRelation("Beta", 80.f);  // Allied
+    ch.addRelation("Gamma", -60.f); // Hostile
+    ch.addRelation("Delta", 0.f);   // Neutral
+    REQUIRE(ch.alliedCount() == 1);
+    REQUIRE(ch.hostileCount() == 1);
+}
+
+TEST_CASE("DiplomacySystem createChannel + duplicate rejection", "[Game][G29][Diplomacy]") {
+    NF::DiplomacySystem sys;
+    REQUIRE(sys.createChannel("Alpha") == 0);
+    REQUIRE(sys.createChannel("Beta") == 1);
+    REQUIRE(sys.createChannel("Alpha") == -1); // duplicate
+    REQUIRE(sys.channelCount() == 2);
+}
+
+TEST_CASE("DiplomacySystem establishRelation bidirectional", "[Game][G29][Diplomacy]") {
+    NF::DiplomacySystem sys;
+    sys.createChannel("Alpha");
+    sys.createChannel("Beta");
+    REQUIRE(sys.establishRelation("Alpha", "Beta", 30.f));
+
+    auto* chA = sys.channelByName("Alpha");
+    auto* chB = sys.channelByName("Beta");
+    REQUIRE(chA->findRelation("Beta") != nullptr);
+    REQUIRE(chB->findRelation("Alpha") != nullptr);
+    REQUIRE(chA->findRelation("Beta")->opinion == Catch::Approx(30.f));
+}
+
+TEST_CASE("DiplomacySystem treaty + tick expiration", "[Game][G29][Diplomacy]") {
+    NF::DiplomacySystem sys;
+    sys.createChannel("Alpha");
+    sys.createChannel("Beta");
+    sys.establishRelation("Alpha", "Beta");
+
+    REQUIRE(sys.proposeTreaty("Alpha", "Beta", NF::DiplomacyAction::TradeAgreement, 5.f));
+    REQUIRE(sys.totalActiveTreaties() == 1);
+
+    sys.tick(3.f);
+    REQUIRE(sys.totalActiveTreaties() == 1);
+
+    sys.tick(3.f); // total 6 > 5 -> expired
+    REQUIRE(sys.totalActiveTreaties() == 0);
+    REQUIRE(sys.tickCount() == 2);
+}

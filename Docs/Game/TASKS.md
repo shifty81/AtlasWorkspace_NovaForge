@@ -1287,3 +1287,27 @@ G28 (Research System) fully delivered:
 - ResearchSystem with multi-lab management, tick-based progress, and discovery tracking
 - 15 new game tests, all passing
 Total: 1152 tests, 0 failures.
+
+---
+
+## S9 — AtlasAI Integration ✅
+
+- [x] AIInsightType enum (CodeQuality, PerformanceHint, AssetOptimization, LogicBug, SecurityRisk, Refactoring, Documentation, General)
+- [x] AIInsight struct with confidence/severity scoring, dismiss/apply workflow
+- [x] AIQueryRequest/AIQueryResponse structs with AIQueryPriority enum
+- [x] AIAnalysisEngine — event-driven insight generation (AssetImported→AssetOptimization, ScriptUpdated→CodeQuality, ContractIssue→SecurityRisk)
+- [x] AIProactiveSuggester — suggestion engine with accept/reject workflow, deduplication
+- [x] AIPipelineBridge — pipeline event to AI analysis connector with query support
+- [x] AtlasAIIntegration — top-level coordinator with tick loop and proactive suggestions
+- [x] 21 new editor tests (test_s9_editor.cpp), all passing
+
+## G29 — Diplomacy System ✅
+
+- [x] DiplomacyAction enum ×8 (TradeAgreement, NonAggression, MilitaryAlliance, TechSharing, TerritoryExchange, Embargo, WarDeclaration, PeaceTreaty)
+- [x] DiplomaticStance enum ×5 (Hostile, Unfriendly, Neutral, Friendly, Allied) with opinion thresholds
+- [x] DiplomaticRelation struct with opinion tracking (-100 to +100), war/peace mechanics
+- [x] Treaty struct with duration, expiration, revocation
+- [x] DiplomaticChannel class — per-faction relation/treaty management (max 32 relations, 64 treaties)
+- [x] DiplomacySystem class — multi-faction diplomacy with bidirectional relations (max 16 channels)
+- [x] 15 new game tests, all passing
+Total: 1188 tests, 0 failures.

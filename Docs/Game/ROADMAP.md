@@ -58,7 +58,8 @@
 | **G26** — Power Grid System | PowerSourceType×8, PowerNode, PowerConduit, PowerGrid, PowerGridSystem | ✅ Done |
 | **G27** — Vehicle System | VehicleType×8, VehicleSeat, VehicleComponent, Vehicle, VehicleSystem | ✅ Done |
 | **G28** — Research System | ResearchCategory×8, ResearchProject, ResearchLab, ResearchTree, ResearchSystem | ✅ Done |
-| **G29** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G29** — Diplomacy System | DiplomacyAction×8, DiplomaticStance×5, DiplomaticRelation, Treaty, DiplomaticChannel, DiplomacySystem | ✅ Done |
+| **G30** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -97,7 +98,8 @@
 | **S6** — PCG World Tuning | BiomePainter, structure seed overrides, ore-seam editor, PCG preview | ✅ Done |
 | **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | ✅ Done |
 | **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | ✅ Done |
-| **S9** — AtlasAI Integration | Pipeline intelligence, proactive suggestions, tool orchestration | 📋 Far future |
+| **S9** — AtlasAI Integration | AIInsightType×8, AIAnalysisEngine, AIProactiveSuggester, AIPipelineBridge, AtlasAIIntegration | ✅ Done |
+| **S10** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
