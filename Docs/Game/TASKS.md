@@ -1212,3 +1212,78 @@ G27 (Vehicle System) fully delivered:
 - VehicleSystem with multi-vehicle management, tick physics, and damage/repair
 - 15 new game tests, all passing
 Total: 1116 tests, 0 failures.
+
+---
+
+## S8 — Tool Ecosystem ✅
+
+- [x] S8-1: ToolStatus enum (Stopped, Starting, Running, Unhealthy, Stopping, Crashed, Unknown, Disabled)
+  - toolStatusName() for all 8 states
+  - ToolInstanceInfo struct (name, path, status, pid, uptime, events, heartbeat)
+- [x] S8-2: ToolEcosystemConfig struct (pipeline dir, heartbeat/unhealthy/crash thresholds, maxEvents, autoRestart)
+- [x] S8-3: StandaloneToolRunner class — single tool process lifecycle
+  - start/stop lifecycle with status transitions
+  - tickUptime, recordHeartbeat, recordEvent
+  - markCrashed/markUnhealthy, isAlive
+- [x] S8-4: ToolHealthMonitor class — health tracking across registered runners
+  - addRunner/removeRunner (max 8)
+  - checkHealth() based on heartbeat age thresholds
+  - healthyCount/unhealthyCount/crashedCount
+- [x] S8-5: ToolOrchestrator class — manages 4 canonical tools
+  - SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer
+  - startAll/stopAll, runner lookup by name
+  - tickAll, runningCount, totalEventsHandled
+- [x] S8-6: ToolEcosystem class — top-level ecosystem manager
+  - init/shutdown, startAll/stopAll
+  - tick with uptime + health check + auto-restart
+  - healthyToolCount, totalEventsHandled, tickCount
+- [x] S8-7: test_s8_editor.cpp — 21 new Catch2 test cases
+- [x] Build verification: 1152/1152 tests pass
+
+## S8 Complete ✅
+
+S8 (Tool Ecosystem) fully delivered:
+- ToolStatus×8 with name helper
+- ToolInstanceInfo/ToolEcosystemConfig configuration structs
+- StandaloneToolRunner for individual tool process lifecycle
+- ToolHealthMonitor with heartbeat-based health detection
+- ToolOrchestrator managing the 4 canonical tools
+- ToolEcosystem as top-level manager with tick loop and auto-restart
+- 21 new editor tests, all passing
+
+---
+
+## G28 — Research System ✅
+
+- [x] G28-1: ResearchCategory enum (Physics, Biology, Engineering, Computing, Materials, Energy, Weapons, Xenotech)
+  - researchCategoryName() for all 8 types
+- [x] G28-2: ResearchProject struct (id, name, category, cost, progress, duration, prerequisites, completed)
+  - progressFraction(), isComplete(), addProgress()
+- [x] G28-3: ResearchLab class — single research lab
+  - assignProject/clearProject, active project tracking
+  - completedProjects tracking with hasCompleted()
+  - Budget management: setBudget/spendBudget/hasBudget
+  - researchRate for tick-based progress
+- [x] G28-4: ResearchTree class — project registry
+  - addProject/removeProject/findProject (max 128, duplicate rejection)
+  - prerequisitesMet() validation against completed list
+  - projectsInCategory() filtering
+  - completedCount()
+- [x] G28-5: ResearchSystem class — central research management
+  - createLab (max 8), lab access
+  - tick() advances research, consumes budget, tracks discoveries
+  - assignProject() with prerequisite validation
+  - activeLabCount(), discoveries()
+- [x] G28-6: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1152/1152 tests pass (1116 existing + 21 S8 + 15 G28)
+
+## G28 Complete ✅
+
+G28 (Research System) fully delivered:
+- ResearchCategory×8 with name helper
+- ResearchProject with progress/completion tracking
+- ResearchLab with budget, rate, and project assignment
+- ResearchTree with prerequisite validation and category filtering
+- ResearchSystem with multi-lab management, tick-based progress, and discovery tracking
+- 15 new game tests, all passing
+Total: 1152 tests, 0 failures.

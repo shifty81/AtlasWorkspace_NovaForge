@@ -57,7 +57,8 @@
 | **G25** — Habitat System | HabitatZoneType×8, HabitatZone, LifeSupportModule, HabitatSystem | ✅ Done |
 | **G26** — Power Grid System | PowerSourceType×8, PowerNode, PowerConduit, PowerGrid, PowerGridSystem | ✅ Done |
 | **G27** — Vehicle System | VehicleType×8, VehicleSeat, VehicleComponent, Vehicle, VehicleSystem | ✅ Done |
-| **G28** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G28** — Research System | ResearchCategory×8, ResearchProject, ResearchLab, ResearchTree, ResearchSystem | ✅ Done |
+| **G29** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -95,7 +96,7 @@
 | **S5** — Character & Animation Suite | FPSHandRig, TwoJointIK, AnimationBlendGraph, CharacterGroundingSystem | ✅ Done |
 | **S6** — PCG World Tuning | BiomePainter, structure seed overrides, ore-seam editor, PCG preview | ✅ Done |
 | **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | ✅ Done |
-| **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | 📋 Planned |
+| **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | ✅ Done |
 | **S9** — AtlasAI Integration | Pipeline intelligence, proactive suggestions, tool orchestration | 📋 Far future |
 
 ## Status Key
