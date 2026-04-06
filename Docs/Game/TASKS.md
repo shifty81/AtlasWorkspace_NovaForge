@@ -2467,3 +2467,51 @@ Total: 1673 tests, 0 failures (1648 existing + 14 S28 + 11 G47 = 1673).
 ## Build Verification ✅
 
 Total: 1699 tests, 0 failures (1673 existing + 14 S29 + 12 G48 = 1699).
+
+---
+
+## S30 — Gradient Editor ✅
+
+- [x] GradientType enum ×8 (Linear, Radial, Angular, Diamond, Square, Reflected, Conical, Custom)
+  - gradientTypeName() for all 8 types
+- [x] GradientInterpolation enum ×4 (Linear, Step, Spline, Constant)
+  - gradientInterpolationName() for all 4 modes
+- [x] GradientColorStop struct (position, r, g, b, a, interpolation, selected)
+  - select, deselect, setPosition
+- [x] GradientRamp class — named collection of GradientColorStop (max 64 stops)
+  - addStop (duplicate position rejected), removeStop, findStop
+  - stopCount, selectedCount, selectAll, deselectAll, name, type
+- [x] GradientEditorPanel class — multi-ramp editor (max 32 ramps)
+  - addRamp (duplicate/full rejected), removeRamp, findRamp
+  - rampCount, setActiveRamp, activeRamp, isSymmetric, setSymmetric
+  - selectAllStops, deselectAllStops
+- [x] 14 new editor tests (test_s30_editor.cpp), all passing
+
+## S30 Complete ✅
+
+---
+
+## G49 — Aurora System ✅
+
+- [x] AuroraType enum ×8 (Borealis, Australis, Polar, Substorm, Diffuse, Discrete, Pulsating, Custom)
+  - auroraTypeName() for all 8 types
+- [x] AuroraIntensity enum ×6 (Faint, Quiet, Active, Storm, Severe, Extreme)
+  - auroraIntensityName() for all 6 intensities
+- [x] AuroraEvent struct (id, type, intensity, duration, colorShift, active)
+  - activate, deactivate, isVisible (>= Active), isStorm (>= Storm), radiationIndex
+- [x] AuroraRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, stormCount
+  - name, tick, tickCount
+- [x] AuroraSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, stormEventCount
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G49 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1725 tests, 0 failures (1699 existing + 14 S30 + 12 G49 = 1725).

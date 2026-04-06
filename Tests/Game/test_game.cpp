@@ -8230,3 +8230,142 @@ TEST_CASE("MeteorShowerSystem activeEventCount and majorEventCount", "[Game][G48
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+// ── G49 — Aurora System ───────────────────────────────────────────
+
+TEST_CASE("AuroraType names cover all 8 values", "[Game][G49][Aurora]") {
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Borealis))  == "Borealis");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Australis)) == "Australis");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Polar))     == "Polar");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Substorm))  == "Substorm");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Diffuse))   == "Diffuse");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Discrete))  == "Discrete");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Pulsating)) == "Pulsating");
+    REQUIRE(std::string(NF::auroraTypeName(NF::AuroraType::Custom))    == "Custom");
+}
+
+TEST_CASE("AuroraIntensity names cover all 6 values", "[Game][G49][Aurora]") {
+    REQUIRE(std::string(NF::auroraIntensityName(NF::AuroraIntensity::Faint))   == "Faint");
+    REQUIRE(std::string(NF::auroraIntensityName(NF::AuroraIntensity::Quiet))   == "Quiet");
+    REQUIRE(std::string(NF::auroraIntensityName(NF::AuroraIntensity::Active))  == "Active");
+    REQUIRE(std::string(NF::auroraIntensityName(NF::AuroraIntensity::Storm))   == "Storm");
+    REQUIRE(std::string(NF::auroraIntensityName(NF::AuroraIntensity::Severe))  == "Severe");
+    REQUIRE(std::string(NF::auroraIntensityName(NF::AuroraIntensity::Extreme)) == "Extreme");
+}
+
+TEST_CASE("AuroraEvent isVisible and isStorm thresholds", "[Game][G49][Aurora]") {
+    NF::AuroraEvent ev;
+    ev.id = "ev1"; ev.intensity = NF::AuroraIntensity::Quiet;
+    REQUIRE_FALSE(ev.isVisible());
+    REQUIRE_FALSE(ev.isStorm());
+
+    ev.intensity = NF::AuroraIntensity::Active;
+    REQUIRE(ev.isVisible());
+    REQUIRE_FALSE(ev.isStorm());
+
+    ev.intensity = NF::AuroraIntensity::Storm;
+    REQUIRE(ev.isVisible());
+    REQUIRE(ev.isStorm());
+
+    ev.intensity = NF::AuroraIntensity::Extreme;
+    REQUIRE(ev.isVisible());
+    REQUIRE(ev.isStorm());
+}
+
+TEST_CASE("AuroraEvent radiationIndex calculation", "[Game][G49][Aurora]") {
+    NF::AuroraEvent ev;
+    ev.intensity = NF::AuroraIntensity::Active; // index 2 → (2+1)*duration
+    ev.duration  = 2.0f;
+    REQUIRE(ev.radiationIndex() == Catch::Approx(6.0f));
+}
+
+TEST_CASE("AuroraEvent activate and deactivate toggle active", "[Game][G49][Aurora]") {
+    NF::AuroraEvent ev; ev.id = "aurora-1";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("AuroraRegion addEvent and duplicate rejection", "[Game][G49][Aurora]") {
+    NF::AuroraRegion region("north-pole");
+
+    NF::AuroraEvent a; a.id = "ev-a";
+    NF::AuroraEvent b; b.id = "ev-b";
+    NF::AuroraEvent dup; dup.id = "ev-a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("AuroraRegion activateAll and deactivateAll", "[Game][G49][Aurora]") {
+    NF::AuroraRegion region("south-pole");
+
+    NF::AuroraEvent a; a.id = "a";
+    NF::AuroraEvent b; b.id = "b";
+    region.addEvent(a);
+    region.addEvent(b);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("AuroraRegion activeCount and stormCount", "[Game][G49][Aurora]") {
+    NF::AuroraRegion region("polar-cap");
+
+    NF::AuroraEvent storm; storm.id = "s1"; storm.intensity = NF::AuroraIntensity::Storm; storm.activate();
+    NF::AuroraEvent faint; faint.id = "f1"; faint.intensity = NF::AuroraIntensity::Faint; faint.activate();
+    NF::AuroraEvent idle;  idle.id  = "i1"; idle.intensity  = NF::AuroraIntensity::Quiet;
+
+    region.addEvent(storm);
+    region.addEvent(faint);
+    region.addEvent(idle);
+
+    REQUIRE(region.activeCount() == 2);
+    REQUIRE(region.stormCount()  == 1);
+}
+
+TEST_CASE("AuroraSystem createRegion and duplicate rejection", "[Game][G49][Aurora]") {
+    NF::AuroraSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("AuroraSystem tick propagates to all regions", "[Game][G49][Aurora]") {
+    NF::AuroraSystem sys;
+    sys.createRegion("a");
+    sys.createRegion("b");
+
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()           == 3);
+    REQUIRE(sys.byName("a")->tickCount() == 3);
+    REQUIRE(sys.byName("b")->tickCount() == 3);
+}
+
+TEST_CASE("AuroraSystem activeEventCount and stormEventCount", "[Game][G49][Aurora]") {
+    NF::AuroraSystem sys;
+    sys.createRegion("reg1");
+    sys.createRegion("reg2");
+
+    NF::AuroraEvent ae; ae.id = "ae1"; ae.intensity = NF::AuroraIntensity::Severe; ae.activate();
+    NF::AuroraEvent se; se.id = "se1"; se.intensity = NF::AuroraIntensity::Storm;  se.activate();
+    NF::AuroraEvent ie; ie.id = "ie1"; ie.intensity = NF::AuroraIntensity::Quiet;
+
+    sys.byName("reg1")->addEvent(ae);
+    sys.byName("reg1")->addEvent(ie);
+    sys.byName("reg2")->addEvent(se);
+
+    REQUIRE(sys.activeEventCount() == 2); // ae and se are active
+    REQUIRE(sys.stormEventCount()  == 2); // Severe and Storm both >= Storm
+
+    sys.tick();
+    REQUIRE(sys.tickCount() == 1);
+}

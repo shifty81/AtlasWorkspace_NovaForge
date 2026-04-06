@@ -10358,4 +10358,146 @@ private:
     size_t                          m_tickCount = 0;
 };
 
+// G49 — Aurora System
+
+enum class AuroraType : uint8_t {
+    Borealis, Australis, Polar, Substorm, Diffuse, Discrete, Pulsating, Custom
+};
+
+inline const char* auroraTypeName(AuroraType t) {
+    switch (t) {
+        case AuroraType::Borealis:  return "Borealis";
+        case AuroraType::Australis: return "Australis";
+        case AuroraType::Polar:     return "Polar";
+        case AuroraType::Substorm:  return "Substorm";
+        case AuroraType::Diffuse:   return "Diffuse";
+        case AuroraType::Discrete:  return "Discrete";
+        case AuroraType::Pulsating: return "Pulsating";
+        case AuroraType::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class AuroraIntensity : uint8_t {
+    Faint, Quiet, Active, Storm, Severe, Extreme
+};
+
+inline const char* auroraIntensityName(AuroraIntensity i) {
+    switch (i) {
+        case AuroraIntensity::Faint:   return "Faint";
+        case AuroraIntensity::Quiet:   return "Quiet";
+        case AuroraIntensity::Active:  return "Active";
+        case AuroraIntensity::Storm:   return "Storm";
+        case AuroraIntensity::Severe:  return "Severe";
+        case AuroraIntensity::Extreme: return "Extreme";
+    }
+    return "Unknown";
+}
+
+struct AuroraEvent {
+    std::string     id;
+    AuroraType      type       = AuroraType::Borealis;
+    AuroraIntensity intensity  = AuroraIntensity::Quiet;
+    float           duration   = 1.0f;
+    float           colorShift = 0.0f;
+    bool            active     = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isVisible() const {
+        return static_cast<uint8_t>(intensity) >= static_cast<uint8_t>(AuroraIntensity::Active);
+    }
+    [[nodiscard]] bool isStorm() const {
+        return static_cast<uint8_t>(intensity) >= static_cast<uint8_t>(AuroraIntensity::Storm);
+    }
+    [[nodiscard]] float radiationIndex() const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * duration;
+    }
+};
+
+class AuroraRegion {
+public:
+    explicit AuroraRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const AuroraEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] AuroraEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()  const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t stormCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isStorm()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string              m_name;
+    std::vector<AuroraEvent> m_events;
+    size_t                   m_tickCount = 0;
+};
+
+class AuroraSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    AuroraRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] AuroraRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t stormEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.stormCount();
+        return c;
+    }
+
+private:
+    std::vector<AuroraRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF
