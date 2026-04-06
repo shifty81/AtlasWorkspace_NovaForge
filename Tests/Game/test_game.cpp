@@ -4583,3 +4583,235 @@ TEST_CASE("TradingSystem max caps", "[Game][G23][Trading]") {
     REQUIRE(NF::TradingSystem::kMaxRoutes == 64);
     REQUIRE(NF::TradingSystem::kMaxGoods == 128);
 }
+
+// ── G24 Base Building System Tests ────────────────────────────
+
+TEST_CASE("BasePartCategory names", "[Game][G24][Base]") {
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Foundation)) == "Foundation");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Wall))       == "Wall");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Floor))      == "Floor");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Ceiling))    == "Ceiling");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Door))       == "Door");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Window))     == "Window");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Utility))    == "Utility");
+    REQUIRE(std::string(NF::basePartCategoryName(NF::BasePartCategory::Decoration)) == "Decoration");
+}
+
+TEST_CASE("BasePart requiresPower", "[Game][G24][Base]") {
+    NF::BasePart p;
+    p.powerDraw = 0.f;
+    REQUIRE_FALSE(p.requiresPower());
+    p.powerDraw = 5.f;
+    REQUIRE(p.requiresPower());
+}
+
+TEST_CASE("BaseGridPos equality", "[Game][G24][Base]") {
+    NF::BaseGridPos a{1, 2, 3};
+    NF::BaseGridPos b{1, 2, 3};
+    NF::BaseGridPos c{0, 2, 3};
+    REQUIRE(a == b);
+    REQUIRE(a != c);
+}
+
+TEST_CASE("BaseLayout place and remove", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    REQUIRE(layout.partCount() == 0);
+
+    REQUIRE(layout.placePart("foundation_1", {0, 0, 0}));
+    REQUIRE(layout.partCount() == 1);
+
+    // Can't place on occupied cell
+    REQUIRE_FALSE(layout.placePart("wall_1", {0, 0, 0}));
+
+    // Place adjacent
+    REQUIRE(layout.placePart("wall_1", {1, 0, 0}));
+    REQUIRE(layout.partCount() == 2);
+
+    // Remove
+    REQUIRE(layout.removePart({0, 0, 0}));
+    REQUIRE(layout.partCount() == 1);
+
+    // Can't remove non-existent
+    REQUIRE_FALSE(layout.removePart({5, 5, 5}));
+}
+
+TEST_CASE("BaseLayout partAt", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    layout.placePart("floor_1", {3, 0, 2});
+
+    auto* p = layout.partAt({3, 0, 2});
+    REQUIRE(p != nullptr);
+    REQUIRE(p->partId == "floor_1");
+
+    REQUIRE(layout.partAt({9, 9, 9}) == nullptr);
+}
+
+TEST_CASE("BaseLayout adjacency", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    layout.placePart("center", {5, 5, 5});
+    layout.placePart("left",   {4, 5, 5});
+    layout.placePart("right",  {6, 5, 5});
+    layout.placePart("above",  {5, 6, 5});
+
+    REQUIRE(layout.adjacentCount({5, 5, 5}) == 3);
+    REQUIRE(layout.adjacentCount({4, 5, 5}) == 1);  // only "center"
+    REQUIRE(layout.adjacentCount({0, 0, 0}) == 0);  // no neighbors
+}
+
+TEST_CASE("BaseLayout structural integrity", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    std::vector<NF::BasePart> defs;
+
+    NF::BasePart found;
+    found.id = "foundation";
+    found.category = NF::BasePartCategory::Foundation;
+    defs.push_back(found);
+
+    NF::BasePart wall;
+    wall.id = "wall";
+    wall.category = NF::BasePartCategory::Wall;
+    defs.push_back(wall);
+
+    // Foundation alone is always valid
+    layout.placePart("foundation", {0, 0, 0});
+    REQUIRE(layout.isStructurallySound(defs));
+
+    // Wall adjacent to foundation — valid
+    layout.placePart("wall", {1, 0, 0});
+    REQUIRE(layout.isStructurallySound(defs));
+
+    // Floating wall (no neighbors) — invalid
+    layout.placePart("wall", {10, 10, 10});
+    REQUIRE_FALSE(layout.isStructurallySound(defs));
+}
+
+TEST_CASE("BaseLayout totalPowerDraw", "[Game][G24][Base]") {
+    NF::BaseLayout layout;
+    std::vector<NF::BasePart> defs;
+
+    NF::BasePart generator;
+    generator.id = "generator";
+    generator.powerDraw = 0.f;
+    defs.push_back(generator);
+
+    NF::BasePart light;
+    light.id = "light";
+    light.powerDraw = 5.f;
+    defs.push_back(light);
+
+    layout.placePart("generator", {0, 0, 0});
+    layout.placePart("light", {1, 0, 0});
+    layout.placePart("light", {2, 0, 0});
+
+    REQUIRE(layout.totalPowerDraw(defs) == Catch::Approx(10.f));
+}
+
+TEST_CASE("BaseDefense shield absorb", "[Game][G24][Base]") {
+    NF::BaseDefense def;
+    def.shieldStrength = 100.f;
+    def.hullArmor = 0.25f;
+    def.currentShield = 80.f;
+
+    // Damage fully absorbed by shield
+    float passthrough = def.takeDamage(30.f);
+    REQUIRE(passthrough == 0.f);
+    REQUIRE(def.currentShield == Catch::Approx(50.f));
+
+    // Damage partially absorbed — remainder reduced by armor
+    passthrough = def.takeDamage(70.f);
+    // 50 absorbed by shield, 20 remaining, 25% armor → 15 pass-through
+    REQUIRE(passthrough == Catch::Approx(15.f));
+    REQUIRE(def.currentShield == 0.f);
+}
+
+TEST_CASE("BaseDefense shield regen", "[Game][G24][Base]") {
+    NF::BaseDefense def;
+    def.shieldStrength = 100.f;
+    def.currentShield = 50.f;
+
+    def.regenShield(30.f);
+    REQUIRE(def.currentShield == Catch::Approx(80.f));
+
+    // Capped at max
+    def.regenShield(50.f);
+    REQUIRE(def.currentShield == Catch::Approx(100.f));
+}
+
+TEST_CASE("BaseDefense reset shields", "[Game][G24][Base]") {
+    NF::BaseDefense def;
+    def.shieldStrength = 200.f;
+    def.currentShield = 0.f;
+    def.resetShields();
+    REQUIRE(def.currentShield == Catch::Approx(200.f));
+}
+
+TEST_CASE("BaseSystem create and manage bases", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    REQUIRE(sys.baseCount() == 0);
+
+    int idx = sys.createBase("Alpha Outpost");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.baseCount() == 1);
+    REQUIRE(sys.baseName(0) == "Alpha Outpost");
+
+    int idx2 = sys.createBase("Beta Station");
+    REQUIRE(idx2 == 1);
+
+    REQUIRE(sys.removeBase(0));
+    REQUIRE(sys.baseCount() == 1);
+    REQUIRE(sys.baseName(0) == "Beta Station");
+}
+
+TEST_CASE("BaseSystem register parts", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    NF::BasePart p;
+    p.id = "metal_wall";
+    p.name = "Metal Wall";
+    p.category = NF::BasePartCategory::Wall;
+    sys.registerPart(p);
+    REQUIRE(sys.partDefCount() == 1);
+
+    // No duplicates
+    sys.registerPart(p);
+    REQUIRE(sys.partDefCount() == 1);
+
+    auto* found = sys.findPart("metal_wall");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->name == "Metal Wall");
+}
+
+TEST_CASE("BaseSystem power management", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    NF::BasePart light;
+    light.id = "light";
+    light.powerDraw = 10.f;
+    sys.registerPart(light);
+
+    int base = sys.createBase("Test Base");
+    sys.layout(base)->placePart("light", {0, 0, 0});
+    sys.layout(base)->placePart("light", {1, 0, 0});
+
+    // Default power = 100, draw = 20
+    REQUIRE(sys.hasSufficientPower(base));
+    REQUIRE(sys.availablePower(base) == Catch::Approx(80.f));
+
+    // Reduce power output below draw
+    sys.setPowerOutput(base, 15.f);
+    REQUIRE_FALSE(sys.hasSufficientPower(base));
+    REQUIRE(sys.availablePower(base) == Catch::Approx(-5.f));
+}
+
+TEST_CASE("BaseSystem max bases", "[Game][G24][Base]") {
+    NF::BaseSystem sys;
+    REQUIRE(NF::BaseSystem::kMaxBases == 8);
+
+    for (int i = 0; i < 8; ++i)
+        REQUIRE(sys.createBase("base" + std::to_string(i)) >= 0);
+
+    // 9th should fail
+    REQUIRE(sys.createBase("overflow") == -1);
+}
+
+TEST_CASE("BaseLayout max parts", "[Game][G24][Base]") {
+    REQUIRE(NF::BaseLayout::kMaxParts == 256);
+}

@@ -53,7 +53,8 @@
 | **G21** — Faction System | FactionType×8, Faction, FactionTerritory, FactionRelation, FactionManager | ✅ Done |
 | **G22** — Weather System | WeatherType×8, WeatherCondition, WeatherForecast, WeatherSystem | ✅ Done |
 | **G23** — Trading System | TradeGoodCategory×8, TradingPost, TradeRoute, TradingSystem | ✅ Done |
-| **G24** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G24** — Base Building | BasePartCategory×8, BaseLayout, BaseDefense, BaseSystem | ✅ Done |
+| **G25** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -87,7 +88,7 @@
 | **M2 / S1** — Dev World Editing | PCG tuning panel, entity placement, voxel paint, undo/redo | ✅ Done |
 | **M3 / S2** — Play-in-Editor | EditorWorldSession, Play/Pause/Stop toolbar, PIE snapshot | ✅ Done |
 | **M4 / S3** — Asset Pipeline | AssetDatabase (GUID), mesh/texture importers, content browser hot-reload | ✅ Done |
-| **S4** — Blender Bridge | novaforge_bridge.py add-on (BG-1→5), engine-side auto-import | 📋 Planned |
+| **S4** — Blender Bridge | novaforge_bridge.py add-on (BG-1→5), engine-side auto-import | ✅ Done |
 | **S5** — Character & Animation Suite | FPSHandRig, TwoJointIK, AnimationBlendGraph, CharacterGroundingSystem | 📋 Planned |
 | **S6** — PCG World Tuning | BiomePainter, structure seed overrides, ore-seam editor, PCG preview | 📋 Planned |
 | **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | 📋 Planned |

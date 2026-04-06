@@ -936,3 +936,72 @@ G23 (Trading System) fully delivered:
 - TradingSystem with global trade management, route profit analysis
 - 19 new game tests, all passing
 Total: 983 tests, 0 failures.
+
+## S4 — Blender Bridge ✅
+
+- [x] S4-1: BlenderExportFormat enum (FBX, GLTF, OBJ, GLB)
+  - blenderExportFormatName() and blenderExportFormatExtension() helpers
+- [x] S4-2: BlenderExportEntry struct (sourcePath, format, exportedAt, autoImported, importedGuid)
+- [x] S4-3: BlenderAutoImporter class — watches export dir, auto-imports
+  - setExportDirectory, scanExports (detects .fbx/.gltf/.obj/.glb)
+  - importPending (imports via MeshImporter → AssetDatabase)
+  - poll() convenience (scan + auto-import in one call)
+  - exportCount, importedCount, pendingCount tracking
+  - Auto-import toggle, clearHistory
+- [x] S4-4: novaforge_bridge.py Blender add-on
+  - NovaForgePreferences (export dir, default format, auto-export on save)
+  - NOVAFORGE_OT_export operator (FBX/GLTF/OBJ/GLB export)
+  - NOVAFORGE_PT_panel sidebar panel (Export Selected/All, settings)
+  - Menu entry in File → Export → NovaForge Export
+  - Auto-export on save handler
+  - register/unregister lifecycle
+- [x] S4-5: EditorApp integration
+  - Member: m_blenderImporter (BlenderAutoImporter)
+  - Accessor: blenderAutoImporter() (const + non-const)
+  - Commands: blender.set_export_dir, blender.scan_exports, blender.import_pending, blender.toggle_auto_import
+  - Menu: Tools → Set Blender Export Dir, Scan Blender Exports, Import Pending, Toggle Auto-Import
+- [x] S4-6: test_s4_editor.cpp — 14 new Catch2 test cases
+- [x] Build verification: 1012/1012 tests pass
+
+## S4 Complete ✅
+
+S4 (Blender Bridge) fully delivered:
+- BlenderExportFormat enum with name + extension helpers
+- BlenderAutoImporter with directory watch, auto-import, and pending tracking
+- novaforge_bridge.py Blender add-on with export operator, sidebar panel, and auto-export
+- Fully wired into EditorApp with 4 commands and menu items
+- 14 new editor tests, all passing
+
+## G24 — Base Building System ✅
+
+- [x] G24-1: BasePartCategory enum (Foundation, Wall, Floor, Ceiling, Door, Window, Utility, Decoration)
+  - basePartCategoryName() for all 8 categories
+- [x] G24-2: BasePart struct (id, name, category, hitPoints, buildCost, powerDraw, weight)
+  - requiresPower() convenience query
+- [x] G24-3: BaseGridPos struct (x, y, z with equality operators)
+- [x] G24-4: PlacedBasePart struct (partId, position, currentHP, powered)
+- [x] G24-5: BaseLayout class — grid-based part placement
+  - placePart (collision check, max 256 parts), removePart, partAt
+  - adjacentCount (Manhattan distance = 1), isStructurallySound (non-foundation needs neighbor)
+  - totalPowerDraw calculation from part definitions
+- [x] G24-6: BaseDefense struct — shield and armor system
+  - takeDamage (shields absorb first, armor reduces remainder)
+  - regenShield (capped at max), resetShields
+- [x] G24-7: BaseSystem class — central base management
+  - registerPart (no duplicates), findPart
+  - createBase/removeBase (max 8 bases), baseName
+  - Power management: setPowerOutput, hasSufficientPower, availablePower
+  - Per-base layout and defense access
+- [x] G24-8: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1012/1012 tests pass
+
+## G24 Complete ✅
+
+G24 (Base Building System) fully delivered:
+- BasePartCategory×8 with name helper
+- BasePart, BaseGridPos, PlacedBasePart data types
+- BaseLayout with grid placement, adjacency, structural integrity
+- BaseDefense with shield/armor damage model
+- BaseSystem with multi-base management and power budgeting
+- 15 new game tests, all passing
+Total: 1012 tests, 0 failures.

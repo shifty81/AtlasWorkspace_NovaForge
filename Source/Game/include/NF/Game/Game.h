@@ -5459,4 +5459,264 @@ private:
     float m_totalVolume = 0.f;
 };
 
+// ── G24 Base Building System ──────────────────────────────────────
+
+enum class BasePartCategory : uint8_t {
+    Foundation = 0,
+    Wall       = 1,
+    Floor      = 2,
+    Ceiling    = 3,
+    Door       = 4,
+    Window     = 5,
+    Utility    = 6,
+    Decoration = 7
+};
+
+inline const char* basePartCategoryName(BasePartCategory c) {
+    switch (c) {
+        case BasePartCategory::Foundation: return "Foundation";
+        case BasePartCategory::Wall:       return "Wall";
+        case BasePartCategory::Floor:      return "Floor";
+        case BasePartCategory::Ceiling:    return "Ceiling";
+        case BasePartCategory::Door:       return "Door";
+        case BasePartCategory::Window:     return "Window";
+        case BasePartCategory::Utility:    return "Utility";
+        case BasePartCategory::Decoration: return "Decoration";
+    }
+    return "Unknown";
+}
+
+/// A single buildable part in a base.
+struct BasePart {
+    std::string       id;
+    std::string       name;
+    BasePartCategory  category   = BasePartCategory::Foundation;
+    float             hitPoints  = 100.f;
+    float             buildCost  = 10.f;   // resource units
+    float             powerDraw  = 0.f;    // watts consumed
+    float             weight     = 1.f;    // kg
+
+    [[nodiscard]] bool requiresPower() const { return powerDraw > 0.f; }
+};
+
+/// Grid coordinates for part placement.
+struct BaseGridPos {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+
+    bool operator==(const BaseGridPos& o) const { return x == o.x && y == o.y && z == o.z; }
+    bool operator!=(const BaseGridPos& o) const { return !(*this == o); }
+};
+
+/// A placed part instance within a base layout.
+struct PlacedBasePart {
+    std::string partId;
+    BaseGridPos position;
+    float       currentHP = 100.f;
+    bool        powered   = true;
+};
+
+/// Grid-based base layout managing part placement and adjacency.
+class BaseLayout {
+public:
+    static constexpr int kMaxParts = 256;
+
+    /// Place a part at the given grid position. Returns false if occupied or at limit.
+    bool placePart(const std::string& partId, BaseGridPos pos, float hp = 100.f) {
+        if (static_cast<int>(m_parts.size()) >= kMaxParts) return false;
+        // Check for collision
+        for (auto& p : m_parts) {
+            if (p.position == pos) return false;
+        }
+        PlacedBasePart pp;
+        pp.partId = partId;
+        pp.position = pos;
+        pp.currentHP = hp;
+        m_parts.push_back(pp);
+        return true;
+    }
+
+    /// Remove a part at the given position.
+    bool removePart(BaseGridPos pos) {
+        for (auto it = m_parts.begin(); it != m_parts.end(); ++it) {
+            if (it->position == pos) { m_parts.erase(it); return true; }
+        }
+        return false;
+    }
+
+    /// Find a part at the given position.
+    [[nodiscard]] PlacedBasePart* partAt(BaseGridPos pos) {
+        for (auto& p : m_parts) if (p.position == pos) return &p;
+        return nullptr;
+    }
+
+    /// Count adjacent parts (Manhattan distance = 1 on same plane or directly above/below).
+    [[nodiscard]] int adjacentCount(BaseGridPos pos) const {
+        int count = 0;
+        for (auto& p : m_parts) {
+            int dx = std::abs(p.position.x - pos.x);
+            int dy = std::abs(p.position.y - pos.y);
+            int dz = std::abs(p.position.z - pos.z);
+            if (dx + dy + dz == 1) ++count;
+        }
+        return count;
+    }
+
+    /// Check structural integrity: every non-foundation part must be adjacent to at least one other part.
+    [[nodiscard]] bool isStructurallySound(
+        const std::vector<BasePart>& partDefs) const {
+        for (auto& placed : m_parts) {
+            // Find the part definition
+            const BasePart* def = nullptr;
+            for (auto& d : partDefs) {
+                if (d.id == placed.partId) { def = &d; break; }
+            }
+            if (!def) continue;
+            // Foundations are always valid
+            if (def->category == BasePartCategory::Foundation) continue;
+            // Other parts need at least one neighbor
+            if (adjacentCount(placed.position) == 0) return false;
+        }
+        return true;
+    }
+
+    /// Calculate total power draw of all parts.
+    [[nodiscard]] float totalPowerDraw(const std::vector<BasePart>& partDefs) const {
+        float total = 0.f;
+        for (auto& placed : m_parts) {
+            for (auto& d : partDefs) {
+                if (d.id == placed.partId) { total += d.powerDraw; break; }
+            }
+        }
+        return total;
+    }
+
+    [[nodiscard]] const std::vector<PlacedBasePart>& parts() const { return m_parts; }
+    [[nodiscard]] size_t partCount() const { return m_parts.size(); }
+    void clear() { m_parts.clear(); }
+
+private:
+    std::vector<PlacedBasePart> m_parts;
+};
+
+/// Defensive capabilities of a base.
+struct BaseDefense {
+    int   turretSlots     = 0;
+    float shieldStrength  = 0.f;    // max shield HP
+    float hullArmor       = 0.f;    // damage reduction percentage 0-1
+    float currentShield   = 0.f;
+
+    /// Take damage — shields absorb first, then hull pass-through.
+    float takeDamage(float damage) {
+        if (currentShield > 0.f) {
+            if (damage <= currentShield) {
+                currentShield -= damage;
+                return 0.f;
+            }
+            damage -= currentShield;
+            currentShield = 0.f;
+        }
+        // Apply armor reduction
+        return damage * (1.f - hullArmor);
+    }
+
+    /// Regenerate shields by amount, capped at max.
+    void regenShield(float amount) {
+        currentShield = std::min(currentShield + amount, shieldStrength);
+    }
+
+    /// Reset shields to full.
+    void resetShields() { currentShield = shieldStrength; }
+};
+
+/// Central base system managing power, life support, storage, and defenses.
+class BaseSystem {
+public:
+    static constexpr int kMaxBases = 8;
+    static constexpr float kDefaultPowerOutput = 100.f;
+
+    /// Register a part definition.
+    void registerPart(const BasePart& part) {
+        for (auto& p : m_partDefs) if (p.id == part.id) return;
+        m_partDefs.push_back(part);
+    }
+
+    /// Create a new base with given name. Returns base index or -1 if at limit.
+    int createBase(const std::string& name) {
+        if (static_cast<int>(m_baseNames.size()) >= kMaxBases) return -1;
+        m_baseNames.push_back(name);
+        m_layouts.emplace_back();
+        m_defenses.emplace_back();
+        m_powerOutputs.push_back(kDefaultPowerOutput);
+        return static_cast<int>(m_baseNames.size()) - 1;
+    }
+
+    /// Remove a base by index.
+    bool removeBase(int index) {
+        if (index < 0 || index >= static_cast<int>(m_baseNames.size())) return false;
+        m_baseNames.erase(m_baseNames.begin() + index);
+        m_layouts.erase(m_layouts.begin() + index);
+        m_defenses.erase(m_defenses.begin() + index);
+        m_powerOutputs.erase(m_powerOutputs.begin() + index);
+        return true;
+    }
+
+    /// Access base layout by index.
+    [[nodiscard]] BaseLayout* layout(int index) {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return nullptr;
+        return &m_layouts[static_cast<size_t>(index)];
+    }
+
+    /// Access base defense by index.
+    [[nodiscard]] BaseDefense* defense(int index) {
+        if (index < 0 || index >= static_cast<int>(m_defenses.size())) return nullptr;
+        return &m_defenses[static_cast<size_t>(index)];
+    }
+
+    /// Get base name.
+    [[nodiscard]] const std::string& baseName(int index) const {
+        static const std::string empty;
+        if (index < 0 || index >= static_cast<int>(m_baseNames.size())) return empty;
+        return m_baseNames[static_cast<size_t>(index)];
+    }
+
+    /// Set power output for a base.
+    void setPowerOutput(int index, float watts) {
+        if (index >= 0 && index < static_cast<int>(m_powerOutputs.size()))
+            m_powerOutputs[static_cast<size_t>(index)] = watts;
+    }
+
+    /// Check if a base has sufficient power (output >= draw).
+    [[nodiscard]] bool hasSufficientPower(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_layouts.size())) return false;
+        float draw = m_layouts[static_cast<size_t>(index)].totalPowerDraw(m_partDefs);
+        return m_powerOutputs[static_cast<size_t>(index)] >= draw;
+    }
+
+    /// Get available power (output - draw).
+    [[nodiscard]] float availablePower(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_powerOutputs.size())) return 0.f;
+        float draw = m_layouts[static_cast<size_t>(index)].totalPowerDraw(m_partDefs);
+        return m_powerOutputs[static_cast<size_t>(index)] - draw;
+    }
+
+    [[nodiscard]] const std::vector<BasePart>& partDefinitions() const { return m_partDefs; }
+    [[nodiscard]] size_t baseCount() const { return m_baseNames.size(); }
+    [[nodiscard]] size_t partDefCount() const { return m_partDefs.size(); }
+
+    /// Find part definition by ID.
+    [[nodiscard]] const BasePart* findPart(const std::string& id) const {
+        for (auto& p : m_partDefs) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+private:
+    std::vector<BasePart>     m_partDefs;
+    std::vector<std::string>  m_baseNames;
+    std::vector<BaseLayout>   m_layouts;
+    std::vector<BaseDefense>  m_defenses;
+    std::vector<float>        m_powerOutputs;
+};
+
 } // namespace NF

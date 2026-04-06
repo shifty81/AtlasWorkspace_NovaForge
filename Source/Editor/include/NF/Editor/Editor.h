@@ -3077,6 +3077,140 @@ private:
     std::set<AssetGuid> m_dirtyAssets;
 };
 
+// ── S4 Blender Bridge ────────────────────────────────────────────
+
+/// Supported Blender export formats.
+enum class BlenderExportFormat : uint8_t {
+    FBX  = 0,
+    GLTF = 1,
+    OBJ  = 2,
+    GLB  = 3
+};
+
+inline const char* blenderExportFormatName(BlenderExportFormat f) {
+    switch (f) {
+        case BlenderExportFormat::FBX:  return "FBX";
+        case BlenderExportFormat::GLTF: return "GLTF";
+        case BlenderExportFormat::OBJ:  return "OBJ";
+        case BlenderExportFormat::GLB:  return "GLB";
+    }
+    return "Unknown";
+}
+
+inline const char* blenderExportFormatExtension(BlenderExportFormat f) {
+    switch (f) {
+        case BlenderExportFormat::FBX:  return ".fbx";
+        case BlenderExportFormat::GLTF: return ".gltf";
+        case BlenderExportFormat::OBJ:  return ".obj";
+        case BlenderExportFormat::GLB:  return ".glb";
+    }
+    return "";
+}
+
+/// Record of a single Blender export that arrived in the watched directory.
+struct BlenderExportEntry {
+    std::string sourcePath;                      // path inside export dir
+    BlenderExportFormat format = BlenderExportFormat::FBX;
+    uint64_t exportedAt        = 0;              // epoch seconds
+    bool autoImported          = false;          // true once auto-imported
+    AssetGuid importedGuid;                      // GUID after import (null if not yet)
+};
+
+/// Watches a Blender export directory and auto-imports new/changed assets
+/// into the editor's AssetDatabase via MeshImporter.
+class BlenderAutoImporter {
+public:
+    /// Set the directory to watch for Blender exports.
+    void setExportDirectory(const std::string& dir) { m_exportDir = dir; }
+    [[nodiscard]] const std::string& exportDirectory() const { return m_exportDir; }
+
+    /// Enable or disable auto-import.
+    void setAutoImportEnabled(bool enabled) { m_autoImport = enabled; }
+    [[nodiscard]] bool isAutoImportEnabled() const { return m_autoImport; }
+
+    /// Scan the export directory for new or changed files.
+    /// Returns number of new exports detected.
+    size_t scanExports() {
+        if (m_exportDir.empty() || !std::filesystem::exists(m_exportDir)) return 0;
+
+        size_t detected = 0;
+        for (auto& entry : std::filesystem::directory_iterator(m_exportDir)) {
+            if (!entry.is_regular_file()) continue;
+            auto ext = entry.path().extension().string();
+            BlenderExportFormat fmt;
+            if      (ext == ".fbx")  fmt = BlenderExportFormat::FBX;
+            else if (ext == ".gltf") fmt = BlenderExportFormat::GLTF;
+            else if (ext == ".obj")  fmt = BlenderExportFormat::OBJ;
+            else if (ext == ".glb")  fmt = BlenderExportFormat::GLB;
+            else continue;
+
+            std::string relPath = entry.path().string();
+            // Skip already-known files
+            bool found = false;
+            for (auto& e : m_exports) {
+                if (e.sourcePath == relPath) { found = true; break; }
+            }
+            if (found) continue;
+
+            BlenderExportEntry be;
+            be.sourcePath = relPath;
+            be.format = fmt;
+            auto ftime = std::filesystem::last_write_time(entry);
+            be.exportedAt = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    ftime.time_since_epoch()).count());
+            m_exports.push_back(be);
+            ++detected;
+        }
+        return detected;
+    }
+
+    /// Auto-import all pending exports into the given asset database.
+    /// Returns number of assets imported.
+    size_t importPending(AssetDatabase& db, MeshImporter& meshImporter) {
+        size_t imported = 0;
+        for (auto& ex : m_exports) {
+            if (ex.autoImported) continue;
+            if (!meshImporter.canImport(ex.sourcePath)) continue;
+            AssetGuid guid = meshImporter.import(db, ex.sourcePath);
+            if (!guid.isNull()) {
+                ex.autoImported = true;
+                ex.importedGuid = guid;
+                ++imported;
+                NF_LOG_INFO("BlenderBridge", "Auto-imported: " + ex.sourcePath);
+            }
+        }
+        return imported;
+    }
+
+    /// Poll: scan + auto-import in one call (convenience for editor tick).
+    size_t poll(AssetDatabase& db, MeshImporter& meshImporter) {
+        scanExports();
+        if (!m_autoImport) return 0;
+        return importPending(db, meshImporter);
+    }
+
+    [[nodiscard]] const std::vector<BlenderExportEntry>& exports() const { return m_exports; }
+    [[nodiscard]] size_t exportCount() const { return m_exports.size(); }
+
+    [[nodiscard]] size_t importedCount() const {
+        size_t n = 0;
+        for (auto& e : m_exports) if (e.autoImported) ++n;
+        return n;
+    }
+
+    [[nodiscard]] size_t pendingCount() const {
+        return m_exports.size() - importedCount();
+    }
+
+    void clearHistory() { m_exports.clear(); }
+
+private:
+    std::string m_exportDir;
+    bool m_autoImport = true;
+    std::vector<BlenderExportEntry> m_exports;
+};
+
 // ── Editor application ───────────────────────────────────────────
 
 class EditorApp {
@@ -3416,6 +3550,45 @@ public:
         m_commands.setEnabledCheck("assets.reimport",
             [this]() { return m_assetWatcher.dirtyCount() > 0; });
 
+        // S4 Blender Bridge commands
+        m_commands.registerCommand("blender.set_export_dir", [this]() {
+            // In a real editor, this would open a folder picker.
+            // For now, default to Content/BlenderExports/
+            std::string dir = m_projectPaths.contentPath() + "/BlenderExports";
+            std::filesystem::create_directories(dir);
+            m_blenderImporter.setExportDirectory(dir);
+            NF_LOG_INFO("BlenderBridge", "Export dir: " + dir);
+            m_notifications.push(NotificationType::Success,
+                "Blender export dir set: " + dir);
+        }, "Set Blender Export Dir", "");
+
+        m_commands.registerCommand("blender.scan_exports", [this]() {
+            size_t n = m_blenderImporter.scanExports();
+            NF_LOG_INFO("BlenderBridge", "Scanned: " + std::to_string(n) + " new exports");
+            if (n > 0) {
+                m_notifications.push(NotificationType::Info,
+                    std::to_string(n) + " new Blender exports found");
+            }
+        }, "Scan Blender Exports", "");
+
+        m_commands.registerCommand("blender.import_pending", [this]() {
+            size_t n = m_blenderImporter.importPending(m_assetDatabase, m_meshImporter);
+            if (n > 0) {
+                NF_LOG_INFO("BlenderBridge", "Imported " + std::to_string(n) + " assets");
+                m_notifications.push(NotificationType::Success,
+                    "Imported " + std::to_string(n) + " Blender assets");
+            }
+        }, "Import Pending Blender Assets", "");
+        m_commands.setEnabledCheck("blender.import_pending",
+            [this]() { return m_blenderImporter.pendingCount() > 0; });
+
+        m_commands.registerCommand("blender.toggle_auto_import", [this]() {
+            bool enabled = !m_blenderImporter.isAutoImportEnabled();
+            m_blenderImporter.setAutoImportEnabled(enabled);
+            NF_LOG_INFO("BlenderBridge", std::string("Auto-import: ") +
+                (enabled ? "ON" : "OFF"));
+        }, "Toggle Blender Auto-Import", "");
+
         // Create default toolbar items
         m_toolbar.addItem("Select", "select", "Select tool", [this]() {
             m_gizmo.setMode(GizmoMode::Translate);
@@ -3697,6 +3870,10 @@ public:
     TextureImporter& textureImporter() { return m_textureImporter; }
     AssetWatcher& assetWatcher() { return m_assetWatcher; }
 
+    // S4 accessors
+    BlenderAutoImporter& blenderAutoImporter() { return m_blenderImporter; }
+    const BlenderAutoImporter& blenderAutoImporter() const { return m_blenderImporter; }
+
     [[nodiscard]] PCGTuningPanel* pcgTuningPanel() {
         for (auto& p : m_editorPanels) {
             if (auto* pcg = dynamic_cast<PCGTuningPanel*>(p.get())) return pcg;
@@ -3783,6 +3960,11 @@ private:
         tools.addSeparator();
         tools.addItem("Scan Assets",        "assets.scan");
         tools.addItem("Reimport Changed",   "assets.reimport");
+        tools.addSeparator();
+        tools.addItem("Set Blender Export Dir",  "blender.set_export_dir");
+        tools.addItem("Scan Blender Exports",    "blender.scan_exports");
+        tools.addItem("Import Pending",          "blender.import_pending");
+        tools.addItem("Toggle Auto-Import",      "blender.toggle_auto_import");
     }
 
     Renderer m_renderer;
@@ -3831,6 +4013,9 @@ private:
     MeshImporter m_meshImporter;
     TextureImporter m_textureImporter;
     AssetWatcher m_assetWatcher;
+
+    // S4 Blender Bridge
+    BlenderAutoImporter m_blenderImporter;
 
     // ── State persistence ───────────────────────────────────────
 
