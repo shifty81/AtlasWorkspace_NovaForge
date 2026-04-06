@@ -2282,6 +2282,7 @@ public:
     [[nodiscard]] float gridSize() const { return m_gridSize; }
 
     [[nodiscard]] Vec3 snapToGrid(const Vec3& v) const {
+        if (m_gridSize <= 0.f) return v;
         return {
             std::round(v.x / m_gridSize) * m_gridSize,
             std::round(v.y / m_gridSize) * m_gridSize,
@@ -2358,8 +2359,10 @@ public:
         m_currentStroke = PaintStroke{};
     }
 
+    static constexpr size_t kMaxPaletteSize = 32;
+
     void setPaletteSlot(int slot, uint32_t materialId) {
-        if (slot < 0) return;
+        if (slot < 0 || static_cast<size_t>(slot) >= kMaxPaletteSize) return;
         if (static_cast<size_t>(slot) >= m_palette.size())
             m_palette.resize(static_cast<size_t>(slot) + 1, 0);
         m_palette[static_cast<size_t>(slot)] = materialId;
