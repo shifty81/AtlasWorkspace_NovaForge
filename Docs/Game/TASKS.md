@@ -2274,3 +2274,53 @@ Total: 1576 tests, 0 failures (1552 existing + 14 S24 + 10 G43 = 1576).
 ## Build Verification ✅
 
 Total: 1600 tests, 0 failures (1576 existing + 14 S25 + 10 G44 = 1600).
+
+---
+
+## S26 — Command Palette ✅
+
+- [x] CommandPaletteCategory enum ×8 (File, Edit, View, Navigate, Debug, Build, Tools, Help)
+  - commandPaletteCategoryName() for all 8 categories
+- [x] CommandPaletteState enum ×4 (Idle, Open, Searching, Executing)
+  - commandPaletteStateName() for all 4 states
+- [x] PaletteCommand struct (id, label, category, enabled, executeCount)
+  - execute (increments executeCount only if enabled), disable, enable
+  - hasBeenExecuted (executeCount > 0), isEnabled, timesExecuted
+- [x] PaletteCommandGroup — named group of PaletteCommands
+  - addCommand (duplicate id rejected), removeCommand, find
+  - enableAll, disableAll, commandCount, enabledCount, name
+- [x] CommandPalette — registry + search (max 128 commands)
+  - registerCommand (duplicate/full rejected), unregisterCommand, find
+  - execute (finds and executes by id), search (case-sensitive substring on label)
+  - commandCount, enabledCount, setState, state, open, close
+- [x] 14 new editor tests (test_s26_editor.cpp), all passing
+
+## S26 Complete ✅
+
+---
+
+## G45 — Drought System ✅
+
+- [x] DroughtType enum ×8 (Agricultural, Hydrological, Meteorological, Socioeconomic, Groundwater, Ecological, Coastal, Urban)
+  - droughtTypeName() for all 8 types
+- [x] DroughtIntensity enum ×5 (Mild, Moderate, Severe, Extreme, Exceptional)
+  - droughtIntensityName() for all 5 intensities
+- [x] DroughtRegion struct (id, waterReservePercent, precipitationMm, active)
+  - deplete (clamps to 0), replenish (clamps to 100), activate, deactivate
+  - isArid (< 25%), isCritical (< 10%), isExhausted (<= 0%)
+- [x] DroughtZone class — per-zone drought state + region list
+  - setType, setIntensity, addRegion (duplicate id rejected)
+  - depleteAll, replenishAll, regionCount, aridCount, exhaustedCount
+  - name, type, intensity, isCritical (any region critical), tick
+- [x] DroughtSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, criticalCount, exhaustedRegionCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G45 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1624 tests, 0 failures (1600 existing + 14 S26 + 10 G45 = 1624).

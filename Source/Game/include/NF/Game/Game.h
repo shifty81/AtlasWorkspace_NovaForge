@@ -9765,4 +9765,151 @@ private:
     size_t                     m_tickCount = 0;
 };
 
+// ============================================================
+// G45 — Drought System
+// ============================================================
+
+enum class DroughtType : uint8_t { Agricultural, Hydrological, Meteorological, Socioeconomic, Groundwater, Ecological, Coastal, Urban };
+
+inline const char* droughtTypeName(DroughtType t) {
+    switch (t) {
+        case DroughtType::Agricultural:   return "Agricultural";
+        case DroughtType::Hydrological:   return "Hydrological";
+        case DroughtType::Meteorological: return "Meteorological";
+        case DroughtType::Socioeconomic:  return "Socioeconomic";
+        case DroughtType::Groundwater:    return "Groundwater";
+        case DroughtType::Ecological:     return "Ecological";
+        case DroughtType::Coastal:        return "Coastal";
+        case DroughtType::Urban:          return "Urban";
+        default:                          return "Unknown";
+    }
+}
+
+enum class DroughtIntensity : uint8_t { Mild, Moderate, Severe, Extreme, Exceptional };
+
+inline const char* droughtIntensityName(DroughtIntensity i) {
+    switch (i) {
+        case DroughtIntensity::Mild:        return "Mild";
+        case DroughtIntensity::Moderate:    return "Moderate";
+        case DroughtIntensity::Severe:      return "Severe";
+        case DroughtIntensity::Extreme:     return "Extreme";
+        case DroughtIntensity::Exceptional: return "Exceptional";
+        default:                            return "Unknown";
+    }
+}
+
+struct DroughtRegion {
+    std::string id;
+    float       waterReservePercent = 100.0f;
+    float       precipitationMm     = 0.f;
+    bool        active              = false;
+
+    void deplete(float amount) {
+        waterReservePercent -= amount;
+        if (waterReservePercent < 0.f) waterReservePercent = 0.f;
+    }
+
+    void replenish(float amount) {
+        waterReservePercent += amount;
+        if (waterReservePercent > 100.f) waterReservePercent = 100.f;
+    }
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isArid()      const { return waterReservePercent < 25.0f; }
+    [[nodiscard]] bool isExhausted() const { return waterReservePercent <= 0.f;  }
+    [[nodiscard]] bool isCritical()  const { return waterReservePercent < 10.0f; }
+};
+
+class DroughtZone {
+public:
+    explicit DroughtZone(const std::string& name) : m_name(name) {}
+
+    void setType(DroughtType t)           { m_type = t;      }
+    void setIntensity(DroughtIntensity i) { m_intensity = i; }
+
+    bool addRegion(DroughtRegion r) {
+        for (auto& existing : m_regions) if (existing.id == r.id) return false;
+        m_regions.push_back(std::move(r));
+        return true;
+    }
+
+    void depleteAll(float amount)   { for (auto& r : m_regions) r.deplete(amount);   }
+    void replenishAll(float amount) { for (auto& r : m_regions) r.replenish(amount); }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+
+    [[nodiscard]] size_t aridCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) if (r.isArid()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t exhaustedCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) if (r.isExhausted()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] DroughtType        type()      const { return m_type;      }
+    [[nodiscard]] DroughtIntensity   intensity() const { return m_intensity; }
+
+    [[nodiscard]] bool isCritical() const {
+        for (auto& r : m_regions) if (r.isCritical()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                m_name;
+    DroughtType                m_type      = DroughtType::Agricultural;
+    DroughtIntensity           m_intensity = DroughtIntensity::Mild;
+    std::vector<DroughtRegion> m_regions;
+    size_t                     m_tickCount = 0;
+};
+
+class DroughtSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    DroughtZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] DroughtZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t criticalCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isCritical()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t exhaustedRegionCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) c += z.exhaustedCount();
+        return c;
+    }
+
+private:
+    std::vector<DroughtZone> m_zones;
+    size_t                   m_tickCount = 0;
+};
+
 } // namespace NF

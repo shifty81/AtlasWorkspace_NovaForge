@@ -7727,3 +7727,133 @@ TEST_CASE("LandslideSystem activeCount and tick", "[Game][G44][Landslide]") {
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+// ============================================================
+// G45 — Drought System
+// ============================================================
+
+TEST_CASE("DroughtType names cover all 8 values", "[Game][G45][Drought]") {
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Agricultural))  == "Agricultural");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Hydrological))  == "Hydrological");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Meteorological))== "Meteorological");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Socioeconomic)) == "Socioeconomic");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Groundwater))   == "Groundwater");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Ecological))    == "Ecological");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Coastal))       == "Coastal");
+    REQUIRE(std::string(NF::droughtTypeName(NF::DroughtType::Urban))         == "Urban");
+}
+
+TEST_CASE("DroughtIntensity names cover all 5 values", "[Game][G45][Drought]") {
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Mild))        == "Mild");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Moderate))    == "Moderate");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Severe))      == "Severe");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Extreme))     == "Extreme");
+    REQUIRE(std::string(NF::droughtIntensityName(NF::DroughtIntensity::Exceptional)) == "Exceptional");
+}
+
+TEST_CASE("DroughtRegion deplete clamps to 0", "[Game][G45][Drought]") {
+    NF::DroughtRegion r;
+    r.id = "r1";
+    r.waterReservePercent = 20.f;
+    r.deplete(30.f);
+    REQUIRE(r.waterReservePercent == 0.f);
+    r.deplete(10.f);
+    REQUIRE(r.waterReservePercent == 0.f);
+}
+
+TEST_CASE("DroughtRegion replenish clamps to 100", "[Game][G45][Drought]") {
+    NF::DroughtRegion r;
+    r.id = "r2";
+    r.waterReservePercent = 90.f;
+    r.replenish(20.f);
+    REQUIRE(r.waterReservePercent == 100.f);
+    r.replenish(5.f);
+    REQUIRE(r.waterReservePercent == 100.f);
+}
+
+TEST_CASE("DroughtRegion isArid / isCritical / isExhausted thresholds", "[Game][G45][Drought]") {
+    NF::DroughtRegion r;
+    r.id = "r3";
+
+    r.waterReservePercent = 50.f;
+    REQUIRE_FALSE(r.isArid());
+    REQUIRE_FALSE(r.isCritical());
+    REQUIRE_FALSE(r.isExhausted());
+
+    r.waterReservePercent = 20.f;
+    REQUIRE(r.isArid());
+    REQUIRE_FALSE(r.isCritical());
+
+    r.waterReservePercent = 5.f;
+    REQUIRE(r.isArid());
+    REQUIRE(r.isCritical());
+    REQUIRE_FALSE(r.isExhausted());
+
+    r.waterReservePercent = 0.f;
+    REQUIRE(r.isExhausted());
+    REQUIRE(r.isCritical());
+}
+
+TEST_CASE("DroughtZone addRegion and duplicate rejection", "[Game][G45][Drought]") {
+    NF::DroughtZone zone("sahara");
+
+    NF::DroughtRegion a; a.id = "r-a";
+    NF::DroughtRegion b; b.id = "r-b";
+    NF::DroughtRegion dup; dup.id = "r-a";
+
+    REQUIRE(zone.addRegion(a));
+    REQUIRE(zone.addRegion(b));
+    REQUIRE_FALSE(zone.addRegion(dup));
+    REQUIRE(zone.regionCount() == 2);
+}
+
+TEST_CASE("DroughtZone depleteAll reduces all regions", "[Game][G45][Drought]") {
+    NF::DroughtZone zone("kalahari");
+
+    NF::DroughtRegion a; a.id = "r1"; a.waterReservePercent = 80.f;
+    NF::DroughtRegion b; b.id = "r2"; b.waterReservePercent = 60.f;
+    zone.addRegion(a);
+    zone.addRegion(b);
+
+    zone.depleteAll(20.f);
+
+    // Both regions should be depleted by 20
+    REQUIRE(zone.aridCount() == 0); // 60 and 40 both >= 25
+    zone.depleteAll(40.f);
+    REQUIRE(zone.aridCount() == 2); // 20 and 0 both < 25
+}
+
+TEST_CASE("DroughtZone aridCount counts arid regions", "[Game][G45][Drought]") {
+    NF::DroughtZone zone("gobi");
+
+    NF::DroughtRegion a; a.id = "r1"; a.waterReservePercent = 10.f;
+    NF::DroughtRegion b; b.id = "r2"; b.waterReservePercent = 50.f;
+    NF::DroughtRegion c; c.id = "r3"; c.waterReservePercent = 15.f;
+    zone.addRegion(a);
+    zone.addRegion(b);
+    zone.addRegion(c);
+
+    REQUIRE(zone.aridCount() == 2);
+}
+
+TEST_CASE("DroughtSystem createZone and duplicate rejection", "[Game][G45][Drought]") {
+    NF::DroughtSystem sys;
+    REQUIRE(sys.createZone("zone-1") != nullptr);
+    REQUIRE(sys.createZone("zone-2") != nullptr);
+    REQUIRE(sys.createZone("zone-1") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("DroughtSystem criticalCount and tick", "[Game][G45][Drought]") {
+    NF::DroughtSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::DroughtRegion cr; cr.id = "c1"; cr.waterReservePercent = 5.f;
+    sys.byName("z1")->addRegion(cr);
+
+    REQUIRE(sys.criticalCount() == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
