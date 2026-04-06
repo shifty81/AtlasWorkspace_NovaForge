@@ -8940,4 +8940,152 @@ private:
     size_t                   m_stormCount = 0;
 };
 
+// ============================================================
+// G39 — Earthquake System
+// ============================================================
+
+enum class EarthquakeScale : uint8_t {
+    Micro       = 0,
+    Minor       = 1,
+    Light       = 2,
+    Moderate    = 3,
+    Strong      = 4,
+    Major       = 5,
+    Great       = 6,
+    Catastrophic = 7,
+};
+
+inline const char* earthquakeScaleName(EarthquakeScale s) {
+    switch (s) {
+        case EarthquakeScale::Micro:        return "Micro";
+        case EarthquakeScale::Minor:        return "Minor";
+        case EarthquakeScale::Light:        return "Light";
+        case EarthquakeScale::Moderate:     return "Moderate";
+        case EarthquakeScale::Strong:       return "Strong";
+        case EarthquakeScale::Major:        return "Major";
+        case EarthquakeScale::Great:        return "Great";
+        case EarthquakeScale::Catastrophic: return "Catastrophic";
+        default:                            return "Unknown";
+    }
+}
+
+enum class EarthquakeStatus : uint8_t {
+    Pending    = 0,
+    Active     = 1,
+    Aftershock = 2,
+    Resolved   = 3,
+};
+
+struct Earthquake {
+    std::string      id;
+    std::string      region;
+    EarthquakeScale  scale    = EarthquakeScale::Minor;
+    EarthquakeStatus status   = EarthquakeStatus::Pending;
+    float            magnitude = 0.0f;
+    uint32_t         depth     = 0;    // km
+    uint32_t         duration  = 0;    // ticks
+
+    [[nodiscard]] bool isActive()     const { return status == EarthquakeStatus::Active;     }
+    [[nodiscard]] bool isPending()    const { return status == EarthquakeStatus::Pending;    }
+    [[nodiscard]] bool isResolved()   const { return status == EarthquakeStatus::Resolved;   }
+    [[nodiscard]] bool isAftershock() const { return status == EarthquakeStatus::Aftershock; }
+    [[nodiscard]] bool isMajor()      const { return scale >= EarthquakeScale::Major;        }
+
+    void activate()  { if (status == EarthquakeStatus::Pending)    status = EarthquakeStatus::Active;     }
+    void resolve()   { status = EarthquakeStatus::Resolved;   }
+    void toAftershock() { if (status == EarthquakeStatus::Active) status = EarthquakeStatus::Aftershock; }
+};
+
+class FaultLine {
+public:
+    explicit FaultLine(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()  const { return m_name; }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+
+    bool addEarthquake(const Earthquake& eq) {
+        for (auto& e : m_earthquakes) if (e.id == eq.id) return false;
+        m_earthquakes.push_back(eq);
+        return true;
+    }
+
+    [[nodiscard]] Earthquake* find(const std::string& id) {
+        for (auto& e : m_earthquakes) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t earthquakeCount() const { return m_earthquakes.size(); }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& e : m_earthquakes) if (e.isActive() || e.isAftershock()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorCount() const {
+        size_t c = 0;
+        for (auto& e : m_earthquakes) if (e.isMajor()) c++;
+        return c;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string            m_name;
+    std::vector<Earthquake> m_earthquakes;
+    size_t                 m_tickCount = 0;
+};
+
+class EarthquakeSystem {
+public:
+    static constexpr size_t MAX_FAULTS      = 32;
+    static constexpr size_t MAX_EARTHQUAKES = 256;
+
+    FaultLine* createFaultLine(const std::string& name) {
+        if (m_faults.size() >= MAX_FAULTS) return nullptr;
+        for (auto& f : m_faults) if (f.name() == name) return nullptr;
+        m_faults.emplace_back(name);
+        return &m_faults.back();
+    }
+
+    [[nodiscard]] FaultLine* faultByName(const std::string& name) {
+        for (auto& f : m_faults) if (f.name() == name) return &f;
+        return nullptr;
+    }
+
+    bool addEarthquake(const Earthquake& eq) {
+        if (m_eqCount >= MAX_EARTHQUAKES) return false;
+        auto* fault = faultByName(eq.region);
+        if (!fault) return false;
+        if (fault->addEarthquake(eq)) { m_eqCount++; return true; }
+        return false;
+    }
+
+    void tick() {
+        for (auto& f : m_faults) f.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t faultCount()       const { return m_faults.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount;     }
+    [[nodiscard]] size_t earthquakeCount()  const { return m_eqCount;       }
+
+    [[nodiscard]] size_t activeEarthquakeCount() const {
+        size_t c = 0;
+        for (auto& f : m_faults) c += f.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEarthquakeCount() const {
+        size_t c = 0;
+        for (auto& f : m_faults) c += f.majorCount();
+        return c;
+    }
+
+private:
+    std::vector<FaultLine> m_faults;
+    size_t                 m_tickCount = 0;
+    size_t                 m_eqCount   = 0;
+};
+
 } // namespace NF

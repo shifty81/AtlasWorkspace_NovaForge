@@ -1990,3 +1990,49 @@ G38 (Storm System) fully delivered:
 ## Build Verification ✅
 
 Total: 1454 tests, 0 failures (1427 existing + 14 S19 + 13 G38 = 1454).
+
+---
+
+## S20 — Resource Monitor System ✅
+
+- [x] ResourceMonitorMetric enum ×8 (CPU, GPU, Memory, DiskIO, NetworkIO, FrameTime, DrawCalls, ThreadLoad)
+  - resourceMonitorMetricName() for all 8 metrics
+- [x] ResourceMonitorLevel enum ×4 (Normal, Warning, Critical, Overflow)
+- [x] ResourceMonitorSample struct (metric, level, value, timestamp)
+  - isHealthy/isWarning/isCritical/isOverflow predicates
+  - computeLevel(warnThreshold, critThreshold) for dynamic classification
+- [x] ResourceMonitorChannel class — per-metric ring buffer (max 256)
+  - push (wrong-metric rejection), latest, average, peak, warningCount, clear
+- [x] ResourceMonitorSystem class — top-level coordinator
+  - init auto-creates 8 channels (one per metric), shutdown clears all
+  - record routes samples to correct channel
+  - totalSamples, totalWarnings, clearAll
+- [x] 14 new editor tests (test_s20_editor.cpp), all passing
+
+## S20 Complete ✅
+
+---
+
+## G39 — Earthquake System ✅
+
+- [x] EarthquakeScale enum ×8 (Micro, Minor, Light, Moderate, Strong, Major, Great, Catastrophic)
+  - earthquakeScaleName() for all 8 scales
+- [x] EarthquakeStatus enum ×4 (Pending, Active, Aftershock, Resolved)
+- [x] Earthquake struct (id, region, scale, status, magnitude, depth, duration)
+  - activate (Pending→Active), resolve (any→Resolved), toAftershock (Active→Aftershock)
+  - isMajor (scale ≥ Major), isActive/isPending/isResolved/isAftershock predicates
+- [x] FaultLine class — per-fault earthquake tracker
+  - addEarthquake (no duplicates), find, earthquakeCount
+  - activeCount (Active+Aftershock), majorCount (Major+), tick
+- [x] EarthquakeSystem class — multi-fault coordinator (max 32 faults / 256 earthquakes)
+  - createFaultLine, faultByName, addEarthquake (routes to fault by region)
+  - activeEarthquakeCount, majorEarthquakeCount, tick propagation
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G39 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1480 tests, 0 failures (1454 existing + 14 S20 + 12 G39 = 1480).

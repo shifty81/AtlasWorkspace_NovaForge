@@ -68,7 +68,8 @@
 | **G36** — Famine System | FamineType×8, FamineSeverity×5, FamineEvent, FamineRegion, FamineSystem | ✅ Done |
 | **G37** — Refugee System | RefugeeOrigin×8, RefugeeStatus×5, Refugee, RefugeeCamp, RefugeeSystem | ✅ Done |
 | **G38** — Storm System | StormType×8, StormSeverity×5, Storm, StormRegion, StormSystem | ✅ Done |
-| **G39** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G39** — Earthquake System | EarthquakeScale×8, EarthquakeStatus×4, Earthquake, FaultLine, EarthquakeSystem | ✅ Done |
+| **G40** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -118,7 +119,8 @@
 | **S17** — Asset Dependency Tracker | AssetDepType×8, AssetDepStatus×4, AssetDepNode, AssetDepGraph, AssetDependencyTracker | ✅ Done |
 | **S18** — Build Configuration System | BuildTarget×8, BuildPlatform×5, BuildConfig, BuildProfile, BuildConfigurationSystem | ✅ Done |
 | **S19** — Scene Snapshot System | SceneSnapshotType×8, SceneSnapshotState×4, SceneSnapshotFrame, SceneSnapshotHistory, SceneSnapshotSystem | ✅ Done |
-| **S20** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S20** — Resource Monitor System | ResourceMonitorMetric×8, ResourceMonitorLevel×4, ResourceMonitorSample, ResourceMonitorChannel, ResourceMonitorSystem | ✅ Done |
+| **S21** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

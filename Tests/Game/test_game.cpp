@@ -7044,3 +7044,128 @@ TEST_CASE("StormSystem tick propagates to all regions", "[Game][G38][Storm]") {
     REQUIRE(sys.regionByName("Alpha")->tickCount() == 2);
     REQUIRE(sys.regionByName("Beta")->tickCount() == 2);
 }
+
+// ============================================================
+// G39 — Earthquake System tests
+// ============================================================
+
+TEST_CASE("EarthquakeScale names cover all 8 values", "[Game][G39][Earthquake]") {
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Micro))        == "Micro");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Minor))        == "Minor");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Light))        == "Light");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Strong))       == "Strong");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Major))        == "Major");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Great))        == "Great");
+    REQUIRE(std::string(NF::earthquakeScaleName(NF::EarthquakeScale::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("Earthquake status predicates", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq;
+    eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Pending;
+    REQUIRE(eq.isPending());
+    REQUIRE_FALSE(eq.isActive());
+
+    eq.activate();
+    REQUIRE(eq.isActive());
+    REQUIRE_FALSE(eq.isPending());
+}
+
+TEST_CASE("Earthquake isMajor threshold at Major+", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq; eq.id = "eq1";
+    eq.scale = NF::EarthquakeScale::Strong;
+    REQUIRE_FALSE(eq.isMajor());
+    eq.scale = NF::EarthquakeScale::Major;
+    REQUIRE(eq.isMajor());
+    eq.scale = NF::EarthquakeScale::Catastrophic;
+    REQUIRE(eq.isMajor());
+}
+
+TEST_CASE("Earthquake toAftershock only from Active", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq; eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Pending;
+    eq.toAftershock();
+    REQUIRE(eq.isPending()); // no change from Pending
+
+    eq.activate();
+    eq.toAftershock();
+    REQUIRE(eq.isAftershock());
+}
+
+TEST_CASE("Earthquake resolve sets Resolved", "[Game][G39][Earthquake]") {
+    NF::Earthquake eq; eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Active;
+    eq.resolve();
+    REQUIRE(eq.isResolved());
+}
+
+TEST_CASE("FaultLine addEarthquake + duplicate rejection", "[Game][G39][Earthquake]") {
+    NF::FaultLine fault("Pacific");
+    NF::Earthquake eq; eq.id = "eq1"; eq.status = NF::EarthquakeStatus::Active;
+    NF::Earthquake eqdup; eqdup.id = "eq1";
+
+    REQUIRE(fault.addEarthquake(eq));
+    REQUIRE_FALSE(fault.addEarthquake(eqdup));
+    REQUIRE(fault.earthquakeCount() == 1);
+}
+
+TEST_CASE("FaultLine activeCount + majorCount", "[Game][G39][Earthquake]") {
+    NF::FaultLine fault("Alpine");
+    NF::Earthquake eq1; eq1.id = "e1"; eq1.status = NF::EarthquakeStatus::Active;     eq1.scale = NF::EarthquakeScale::Major;
+    NF::Earthquake eq2; eq2.id = "e2"; eq2.status = NF::EarthquakeStatus::Aftershock; eq2.scale = NF::EarthquakeScale::Minor;
+    NF::Earthquake eq3; eq3.id = "e3"; eq3.status = NF::EarthquakeStatus::Resolved;   eq3.scale = NF::EarthquakeScale::Great;
+    fault.addEarthquake(eq1);
+    fault.addEarthquake(eq2);
+    fault.addEarthquake(eq3);
+
+    REQUIRE(fault.activeCount() == 2); // Active + Aftershock
+    REQUIRE(fault.majorCount()  == 2); // Major + Great (resolved still counts by scale)
+}
+
+TEST_CASE("FaultLine tick increments tickCount", "[Game][G39][Earthquake]") {
+    NF::FaultLine fault("Anatolian");
+    fault.tick(); fault.tick();
+    REQUIRE(fault.tickCount() == 2);
+}
+
+TEST_CASE("EarthquakeSystem createFaultLine + duplicate rejection", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    REQUIRE(sys.createFaultLine("SanAndreas") != nullptr);
+    REQUIRE(sys.createFaultLine("Cascadia")   != nullptr);
+    REQUIRE(sys.createFaultLine("SanAndreas") == nullptr); // duplicate
+    REQUIRE(sys.faultCount() == 2);
+}
+
+TEST_CASE("EarthquakeSystem addEarthquake + bad-region rejection", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    sys.createFaultLine("Japan");
+
+    NF::Earthquake eq; eq.id = "e1"; eq.region = "Japan"; eq.status = NF::EarthquakeStatus::Active;
+    REQUIRE(sys.addEarthquake(eq));
+    REQUIRE(sys.earthquakeCount() == 1);
+
+    NF::Earthquake bad; bad.id = "e2"; bad.region = "Nowhere";
+    REQUIRE_FALSE(sys.addEarthquake(bad));
+}
+
+TEST_CASE("EarthquakeSystem activeEarthquakeCount + majorEarthquakeCount", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    sys.createFaultLine("Fault1");
+
+    NF::Earthquake e1; e1.id = "e1"; e1.region = "Fault1"; e1.status = NF::EarthquakeStatus::Active;     e1.scale = NF::EarthquakeScale::Major;
+    NF::Earthquake e2; e2.id = "e2"; e2.region = "Fault1"; e2.status = NF::EarthquakeStatus::Resolved;   e2.scale = NF::EarthquakeScale::Minor;
+    sys.addEarthquake(e1);
+    sys.addEarthquake(e2);
+
+    REQUIRE(sys.activeEarthquakeCount() == 1);
+    REQUIRE(sys.majorEarthquakeCount()  == 1);
+}
+
+TEST_CASE("EarthquakeSystem tick propagates to faults and increments tickCount", "[Game][G39][Earthquake]") {
+    NF::EarthquakeSystem sys;
+    sys.createFaultLine("F1");
+    sys.createFaultLine("F2");
+    sys.tick();
+    sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.faultByName("F1")->tickCount() == 2);
+    REQUIRE(sys.faultByName("F2")->tickCount() == 2);
+}
