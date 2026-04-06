@@ -11356,4 +11356,147 @@ private:
     size_t                       m_tickCount = 0;
 };
 
+// ── G56 — Hail Storm System ───────────────────────────────────────
+
+enum class HailSize : uint8_t {
+    Pea, Marble, Golf, Baseball, Grapefruit
+};
+
+inline const char* hailSizeName(HailSize h) {
+    switch (h) {
+        case HailSize::Pea:        return "Pea";
+        case HailSize::Marble:     return "Marble";
+        case HailSize::Golf:       return "Golf";
+        case HailSize::Baseball:   return "Baseball";
+        case HailSize::Grapefruit: return "Grapefruit";
+    }
+    return "Unknown";
+}
+
+enum class HailStormPhase : uint8_t {
+    Developing, Intensifying, Peak, Weakening, Dissipating
+};
+
+inline const char* hailStormPhaseName(HailStormPhase p) {
+    switch (p) {
+        case HailStormPhase::Developing:  return "Developing";
+        case HailStormPhase::Intensifying:return "Intensifying";
+        case HailStormPhase::Peak:        return "Peak";
+        case HailStormPhase::Weakening:   return "Weakening";
+        case HailStormPhase::Dissipating: return "Dissipating";
+    }
+    return "Unknown";
+}
+
+struct HailStormEvent {
+    std::string     id;
+    HailSize        hailSize  = HailSize::Pea;
+    HailStormPhase  phase     = HailStormPhase::Developing;
+    float           intensity = 0.0f;   // 0–100
+    float           coverage  = 0.0f;   // km²
+    bool            active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()     const {
+        return static_cast<uint8_t>(hailSize) >= static_cast<uint8_t>(HailSize::Golf);
+    }
+    [[nodiscard]] bool isAtPeak()     const { return phase == HailStormPhase::Peak; }
+    [[nodiscard]] bool isWidespread() const { return coverage >= 500.0f; }
+    [[nodiscard]] float damageScore() const {
+        return (static_cast<float>(static_cast<uint8_t>(hailSize) + 1)) * intensity / 100.0f;
+    }
+};
+
+class HailStormRegion {
+public:
+    explicit HailStormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const HailStormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] HailStormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()      const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                  m_name;
+    std::vector<HailStormEvent>  m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class HailStormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    HailStormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] HailStormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()       const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount;      }
+    [[nodiscard]] size_t activeEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t severeEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()    const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount(); return c;
+    }
+
+private:
+    std::vector<HailStormRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
 } // namespace NF

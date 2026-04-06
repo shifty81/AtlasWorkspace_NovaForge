@@ -2795,3 +2795,43 @@ Total: 1852 tests, 0 failures (1830 existing + 14 S35 + 8 G54 = 1852).
 ## Build Verification ✅
 
 Total: 1875 tests, 0 failures (1852 existing + 14 S36 + 9 G55 = 1875).
+
+---
+
+## S37 — Icon Editor ✅
+
+- [x] IconSize enum ×5 (XSmall, Small, Medium, Large, XLarge) + iconSizeName()
+- [x] IconTheme enum ×4 (Light, Dark, HighContrast, Monochrome) + iconThemeName()
+- [x] IconState enum ×5 (Normal, Hover, Pressed, Disabled, Selected) + iconStateName()
+- [x] IconAsset (name, size, theme, state, pixelDensity, scalable, dirty)
+  - isDisabled, isSelected, isHighDPI (pixelDensity >= 2.0)
+- [x] IconEditor (max 256 icons)
+  - addIcon (duplicate rejected), removeIcon (clears activeIcon), findIcon, setActiveIcon
+  - iconCount, dirtyCount, scalableCount, disabledCount, highDPICount, countByTheme, countBySize
+- [x] 14 new editor tests (test_s37_editor.cpp), all passing
+
+## S37 Complete ✅
+
+---
+
+## G56 — Hail Storm System ✅
+
+- [x] HailSize enum ×5 (Pea, Marble, Golf, Baseball, Grapefruit) + hailSizeName()
+- [x] HailStormPhase enum ×5 (Developing, Intensifying, Peak, Weakening, Dissipating) + hailStormPhaseName()
+- [x] HailStormEvent (id, hailSize, phase, intensity, coverage, active)
+  - activate, deactivate, isSevere (>= Golf), isAtPeak (Peak), isWidespread (>= 500 km²), damageScore
+- [x] HailStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, peakCount, widespreadCount
+- [x] HailStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, peakEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G56 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1899 tests, 0 failures (1875 existing + 14 S37 + 10 G56 = 1899).

@@ -9081,3 +9081,109 @@ TEST_CASE("DustStormSystem aggregate event counts", "[Game][G55][DustStorm]") {
     REQUIRE(sys.hazardousEventCount() == 1); // only x (y=Light, z inactive)
     REQUIRE(sys.peakEventCount()      == 1); // only x (y=Advancing, z inactive)
 }
+
+// ── G56 — Hail Storm System ───────────────────────────────────────
+
+TEST_CASE("HailSize names cover all 5 values", "[Game][G56][HailStorm]") {
+    REQUIRE(std::string(NF::hailSizeName(NF::HailSize::Pea))        == "Pea");
+    REQUIRE(std::string(NF::hailSizeName(NF::HailSize::Marble))     == "Marble");
+    REQUIRE(std::string(NF::hailSizeName(NF::HailSize::Golf))       == "Golf");
+    REQUIRE(std::string(NF::hailSizeName(NF::HailSize::Baseball))   == "Baseball");
+    REQUIRE(std::string(NF::hailSizeName(NF::HailSize::Grapefruit)) == "Grapefruit");
+}
+
+TEST_CASE("HailStormPhase names cover all 5 values", "[Game][G56][HailStorm]") {
+    REQUIRE(std::string(NF::hailStormPhaseName(NF::HailStormPhase::Developing))   == "Developing");
+    REQUIRE(std::string(NF::hailStormPhaseName(NF::HailStormPhase::Intensifying)) == "Intensifying");
+    REQUIRE(std::string(NF::hailStormPhaseName(NF::HailStormPhase::Peak))         == "Peak");
+    REQUIRE(std::string(NF::hailStormPhaseName(NF::HailStormPhase::Weakening))    == "Weakening");
+    REQUIRE(std::string(NF::hailStormPhaseName(NF::HailStormPhase::Dissipating))  == "Dissipating");
+}
+
+TEST_CASE("HailStormEvent isSevere threshold is Golf+", "[Game][G56][HailStorm]") {
+    NF::HailStormEvent ev; ev.id = "h1";
+    ev.hailSize = NF::HailSize::Marble;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.hailSize = NF::HailSize::Golf;
+    REQUIRE(ev.isSevere());
+
+    ev.hailSize = NF::HailSize::Grapefruit;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("HailStormEvent isAtPeak and isWidespread", "[Game][G56][HailStorm]") {
+    NF::HailStormEvent ev; ev.id = "h2";
+    ev.phase    = NF::HailStormPhase::Intensifying;
+    ev.coverage = 100.0f;
+    REQUIRE_FALSE(ev.isAtPeak());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.phase    = NF::HailStormPhase::Peak;
+    ev.coverage = 600.0f;
+    REQUIRE(ev.isAtPeak());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("HailStormEvent damageScore calculation", "[Game][G56][HailStorm]") {
+    NF::HailStormEvent ev; ev.id = "h3";
+    // Golf (uint8=2): (2+1) * 100 / 100 = 3.0
+    ev.hailSize  = NF::HailSize::Golf;
+    ev.intensity = 100.0f;
+    REQUIRE(ev.damageScore() == Catch::Approx(3.0f));
+}
+
+TEST_CASE("HailStormEvent activate and deactivate", "[Game][G56][HailStorm]") {
+    NF::HailStormEvent ev; ev.id = "h4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("HailStormRegion severeCount and peakCount", "[Game][G56][HailStorm]") {
+    NF::HailStormRegion region("midwest");
+
+    NF::HailStormEvent a; a.id = "a"; a.hailSize = NF::HailSize::Grapefruit; a.phase = NF::HailStormPhase::Peak;     a.activate();
+    NF::HailStormEvent b; b.id = "b"; b.hailSize = NF::HailSize::Baseball;   b.phase = NF::HailStormPhase::Weakening; b.activate();
+    NF::HailStormEvent c; c.id = "c"; c.hailSize = NF::HailSize::Pea;        c.phase = NF::HailStormPhase::Peak;     c.activate();
+
+    region.addEvent(a);
+    region.addEvent(b);
+    region.addEvent(c);
+
+    REQUIRE(region.severeCount() == 2); // a (Grapefruit) and b (Baseball)
+    REQUIRE(region.peakCount()   == 2); // a and c (Peak phase)
+}
+
+TEST_CASE("HailStormSystem createRegion and tick propagation", "[Game][G56][HailStorm]") {
+    NF::HailStormSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 3);
+    REQUIRE(sys.byName("r1")->tickCount() == 3);
+}
+
+TEST_CASE("HailStormSystem aggregate event counts", "[Game][G56][HailStorm]") {
+    NF::HailStormSystem sys;
+    sys.createRegion("ra");
+    sys.createRegion("rb");
+
+    NF::HailStormEvent x; x.id = "x"; x.hailSize = NF::HailSize::Grapefruit; x.phase = NF::HailStormPhase::Peak; x.coverage = 800.0f; x.activate();
+    NF::HailStormEvent y; y.id = "y"; y.hailSize = NF::HailSize::Pea;         y.phase = NF::HailStormPhase::Developing; y.activate();
+    NF::HailStormEvent z; z.id = "z"; z.hailSize = NF::HailSize::Baseball;    z.phase = NF::HailStormPhase::Peak; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Pea, z inactive)
+    REQUIRE(sys.peakEventCount()       == 1); // only x (y=Developing, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (coverage >= 500)
+}
