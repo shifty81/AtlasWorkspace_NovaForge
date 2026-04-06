@@ -1850,3 +1850,73 @@ G36 (Famine System) fully delivered:
 ## Build Verification ✅
 
 Total: 1400 tests, 0 failures (1374 existing + 14 S17 + 12 G36 = 1400).
+
+---
+
+## S18 — Build Configuration System ✅
+
+- [x] BuildTarget enum ×8 (Executable, SharedLib, StaticLib, HeaderOnly, TestSuite, Plugin, Shader, ContentPack)
+  - buildTargetName() for all 8 types
+- [x] BuildPlatform enum ×5 (Windows, Linux, MacOS, WebAsm, Console)
+  - buildPlatformName() for all 5 types
+- [x] BuildConfig struct (name, target, platform, debugSymbols, optimized, sanitizers, defines, includePaths)
+  - isDebug/isRelease predicates
+  - addDefine (no duplicates), addIncludePath (no duplicates)
+  - defineCount, includePathCount
+- [x] BuildProfile class — collection of named build configs
+  - addConfig/removeConfig (max 64, no duplicates), findConfig
+  - debugConfigCount, releaseConfigCount
+- [x] BuildConfigurationSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - createProfile/removeProfile (max 16, no duplicates), findProfile
+  - setActiveProfile/activeProfile/activeProfileName
+  - removeProfile clears active if matches
+  - totalConfigCount across all profiles
+- [x] 14 new editor tests (test_s18_editor.cpp), all passing
+
+## S18 Complete ✅
+
+S18 (Build Configuration System) fully delivered:
+- BuildTarget×8 with name helpers
+- BuildPlatform×5 with name helpers
+- BuildConfig with debug/release predicates and define/include management
+- BuildProfile as named config collection
+- BuildConfigurationSystem as top-level coordinator with active profile management
+- 14 new editor tests, all passing
+
+---
+
+## G37 — Refugee System ✅
+
+- [x] RefugeeOrigin enum ×8 (War, Famine, Plague, Disaster, Political, Economic, Religious, Climate)
+  - refugeeOriginName() for all 8 types
+- [x] RefugeeStatus enum ×5 (InTransit, Sheltered, Settled, Displaced, Returned)
+- [x] Refugee struct (id, name, origin, status, health)
+  - isInTransit/isSheltered/isSettled/isDisplaced/isReturned predicates
+  - shelter (from InTransit/Displaced), settle (from Sheltered), displace (from InTransit/Sheltered), sendHome (from Sheltered/Settled)
+  - guarded state transitions prevent invalid paths
+- [x] RefugeeCamp class — camp with capacity limit
+  - addRefugee/removeRefugee (max 512, capped at capacity, no duplicates), findRefugee
+  - shelteredCount, settledCount, isFull
+  - tick propagation
+- [x] RefugeeSystem class — multi-camp coordinator
+  - createCamp (max 32, unique names), campByName
+  - tick propagates to all camps
+  - totalRefugees, totalSheltered, totalSettled, fullCampCount
+- [x] 13 new game tests (in test_game.cpp), all passing
+
+## G37 Complete ✅
+
+G37 (Refugee System) fully delivered:
+- RefugeeOrigin×8 with name helpers
+- RefugeeStatus×5 for full lifecycle tracking
+- Refugee with guarded status transitions (InTransit→Sheltered→Settled→Returned paths)
+- RefugeeCamp with capacity-limited population management
+- RefugeeSystem as multi-camp coordinator with aggregate stats
+- 13 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1427 tests, 0 failures (1400 existing + 14 S18 + 13 G37 = 1427).

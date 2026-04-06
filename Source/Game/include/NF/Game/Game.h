@@ -8598,4 +8598,190 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// ============================================================
+// G37 — Refugee System
+// ============================================================
+
+enum class RefugeeOrigin : uint8_t {
+    War        = 0,
+    Famine     = 1,
+    Plague     = 2,
+    Disaster   = 3,
+    Political  = 4,
+    Economic   = 5,
+    Religious  = 6,
+    Climate    = 7,
+};
+
+inline const char* refugeeOriginName(RefugeeOrigin o) {
+    switch (o) {
+        case RefugeeOrigin::War:       return "War";
+        case RefugeeOrigin::Famine:    return "Famine";
+        case RefugeeOrigin::Plague:    return "Plague";
+        case RefugeeOrigin::Disaster:  return "Disaster";
+        case RefugeeOrigin::Political: return "Political";
+        case RefugeeOrigin::Economic:  return "Economic";
+        case RefugeeOrigin::Religious: return "Religious";
+        case RefugeeOrigin::Climate:   return "Climate";
+        default:                       return "Unknown";
+    }
+}
+
+enum class RefugeeStatus : uint8_t {
+    InTransit  = 0,
+    Sheltered  = 1,
+    Settled    = 2,
+    Displaced  = 3,
+    Returned   = 4,
+};
+
+struct Refugee {
+    std::string    id;
+    std::string    name;
+    RefugeeOrigin  origin  = RefugeeOrigin::War;
+    RefugeeStatus  status  = RefugeeStatus::InTransit;
+    float          health  = 1.0f;  // 0..1
+
+    [[nodiscard]] bool isInTransit() const { return status == RefugeeStatus::InTransit; }
+    [[nodiscard]] bool isSheltered() const { return status == RefugeeStatus::Sheltered; }
+    [[nodiscard]] bool isSettled()   const { return status == RefugeeStatus::Settled;   }
+    [[nodiscard]] bool isDisplaced() const { return status == RefugeeStatus::Displaced; }
+    [[nodiscard]] bool isReturned()  const { return status == RefugeeStatus::Returned;  }
+
+    bool shelter() {
+        if (status != RefugeeStatus::InTransit && status != RefugeeStatus::Displaced)
+            return false;
+        status = RefugeeStatus::Sheltered;
+        return true;
+    }
+
+    bool settle() {
+        if (status != RefugeeStatus::Sheltered) return false;
+        status = RefugeeStatus::Settled;
+        return true;
+    }
+
+    bool displace() {
+        if (status == RefugeeStatus::Returned || status == RefugeeStatus::Settled)
+            return false;
+        status = RefugeeStatus::Displaced;
+        return true;
+    }
+
+    bool sendHome() {
+        if (status != RefugeeStatus::Sheltered && status != RefugeeStatus::Settled)
+            return false;
+        status = RefugeeStatus::Returned;
+        return true;
+    }
+};
+
+class RefugeeCamp {
+public:
+    static constexpr size_t MAX_REFUGEES = 512;
+
+    explicit RefugeeCamp(std::string name, size_t capacity = 100)
+        : m_name(std::move(name)), m_capacity(capacity) {}
+
+    [[nodiscard]] const std::string& name()     const { return m_name; }
+    [[nodiscard]] size_t capacity()             const { return m_capacity; }
+    [[nodiscard]] size_t refugeeCount()         const { return m_refugees.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+
+    bool addRefugee(const Refugee& r) {
+        if (m_refugees.size() >= MAX_REFUGEES) return false;
+        if (m_refugees.size() >= m_capacity)   return false;
+        for (auto& ref : m_refugees) if (ref.id == r.id) return false;
+        m_refugees.push_back(r);
+        return true;
+    }
+
+    bool removeRefugee(const std::string& id) {
+        for (auto it = m_refugees.begin(); it != m_refugees.end(); ++it) {
+            if (it->id == id) { m_refugees.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Refugee* findRefugee(const std::string& id) {
+        for (auto& r : m_refugees) if (r.id == id) return &r;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t shelteredCount() const {
+        size_t c = 0;
+        for (auto& r : m_refugees) if (r.isSheltered()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t settledCount() const {
+        size_t c = 0;
+        for (auto& r : m_refugees) if (r.isSettled()) c++;
+        return c;
+    }
+
+    [[nodiscard]] bool isFull() const { return m_refugees.size() >= m_capacity; }
+
+    void tick(float /*dt*/) { m_tickCount++; }
+
+private:
+    std::string         m_name;
+    size_t              m_capacity;
+    std::vector<Refugee> m_refugees;
+    size_t              m_tickCount = 0;
+};
+
+class RefugeeSystem {
+public:
+    static constexpr size_t MAX_CAMPS = 32;
+
+    RefugeeCamp* createCamp(const std::string& name, size_t capacity = 100) {
+        if (m_camps.size() >= MAX_CAMPS) return nullptr;
+        for (auto& c : m_camps) if (c.name() == name) return nullptr;
+        m_camps.emplace_back(name, capacity);
+        return &m_camps.back();
+    }
+
+    [[nodiscard]] RefugeeCamp* campByName(const std::string& name) {
+        for (auto& c : m_camps) if (c.name() == name) return &c;
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& c : m_camps) c.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t campCount() const { return m_camps.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalRefugees() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) c += camp.refugeeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t totalSheltered() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) c += camp.shelteredCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t totalSettled() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) c += camp.settledCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t fullCampCount() const {
+        size_t c = 0;
+        for (auto& camp : m_camps) if (camp.isFull()) c++;
+        return c;
+    }
+
+private:
+    std::vector<RefugeeCamp> m_camps;
+    size_t                   m_tickCount = 0;
+};
+
 } // namespace NF

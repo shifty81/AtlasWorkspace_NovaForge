@@ -6766,3 +6766,152 @@ TEST_CASE("FamineSystem criticalRegionCount", "[Game][G36][Famine]") {
     sys.createRegion("ZoneB", 100.f, 3.f,   0.f); // ratio=0.03 → Catastrophic
     REQUIRE(sys.criticalRegionCount() == 1);
 }
+
+// ============================================================
+// G37 — Refugee System tests
+// ============================================================
+
+TEST_CASE("RefugeeOrigin names cover all 8 values", "[Game][G37][Refugee]") {
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::War))       == "War");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Famine))    == "Famine");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Plague))    == "Plague");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Disaster))  == "Disaster");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Political)) == "Political");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Economic))  == "Economic");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Religious)) == "Religious");
+    REQUIRE(std::string(NF::refugeeOriginName(NF::RefugeeOrigin::Climate))   == "Climate");
+}
+
+TEST_CASE("Refugee status predicates", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r1"; r.status = NF::RefugeeStatus::InTransit;
+    REQUIRE(r.isInTransit());
+    REQUIRE_FALSE(r.isSheltered());
+    REQUIRE_FALSE(r.isSettled());
+    REQUIRE_FALSE(r.isDisplaced());
+    REQUIRE_FALSE(r.isReturned());
+}
+
+TEST_CASE("Refugee shelter + settle + sendHome transitions", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r1"; r.status = NF::RefugeeStatus::InTransit;
+
+    REQUIRE(r.shelter());
+    REQUIRE(r.isSheltered());
+
+    REQUIRE(r.settle());
+    REQUIRE(r.isSettled());
+
+    REQUIRE(r.sendHome());
+    REQUIRE(r.isReturned());
+
+    // cannot transition further from Returned
+    REQUIRE_FALSE(r.shelter());
+    REQUIRE_FALSE(r.displace());
+}
+
+TEST_CASE("Refugee displace blocks from settled/returned", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r2"; r.status = NF::RefugeeStatus::Settled;
+    REQUIRE_FALSE(r.displace()); // settled can't be displaced
+
+    NF::Refugee r2;
+    r2.id = "r3"; r2.status = NF::RefugeeStatus::InTransit;
+    REQUIRE(r2.displace()); // in transit can be displaced
+    REQUIRE(r2.isDisplaced());
+
+    // can shelter from displaced
+    REQUIRE(r2.shelter());
+    REQUIRE(r2.isSheltered());
+}
+
+TEST_CASE("Refugee settle only from Sheltered", "[Game][G37][Refugee]") {
+    NF::Refugee r;
+    r.id = "r4"; r.status = NF::RefugeeStatus::InTransit;
+    REQUIRE_FALSE(r.settle()); // not sheltered yet
+}
+
+TEST_CASE("RefugeeCamp addRefugee + duplicate rejection + capacity", "[Game][G37][Refugee]") {
+    NF::RefugeeCamp camp("CampAlpha", 2);
+    NF::Refugee r1; r1.id = "r1";
+    NF::Refugee r2; r2.id = "r2";
+    NF::Refugee r3; r3.id = "r3";
+    NF::Refugee r1dup; r1dup.id = "r1"; // duplicate
+
+    REQUIRE(camp.addRefugee(r1));
+    REQUIRE_FALSE(camp.addRefugee(r1dup)); // duplicate
+    REQUIRE(camp.addRefugee(r2));
+    REQUIRE_FALSE(camp.addRefugee(r3)); // over capacity
+    REQUIRE(camp.refugeeCount() == 2);
+    REQUIRE(camp.isFull());
+}
+
+TEST_CASE("RefugeeCamp removeRefugee + findRefugee", "[Game][G37][Refugee]") {
+    NF::RefugeeCamp camp("CampBeta", 10);
+    NF::Refugee r1; r1.id = "r1"; r1.status = NF::RefugeeStatus::Sheltered;
+    camp.addRefugee(r1);
+
+    REQUIRE(camp.findRefugee("r1") != nullptr);
+    REQUIRE(camp.findRefugee("r1")->isSheltered());
+    REQUIRE(camp.removeRefugee("r1"));
+    REQUIRE(camp.findRefugee("r1") == nullptr);
+    REQUIRE_FALSE(camp.removeRefugee("r1")); // already gone
+}
+
+TEST_CASE("RefugeeCamp shelteredCount + settledCount", "[Game][G37][Refugee]") {
+    NF::RefugeeCamp camp("CampGamma", 10);
+    NF::Refugee r1; r1.id = "r1"; r1.status = NF::RefugeeStatus::Sheltered;
+    NF::Refugee r2; r2.id = "r2"; r2.status = NF::RefugeeStatus::Settled;
+    NF::Refugee r3; r3.id = "r3"; r3.status = NF::RefugeeStatus::InTransit;
+    camp.addRefugee(r1);
+    camp.addRefugee(r2);
+    camp.addRefugee(r3);
+
+    REQUIRE(camp.shelteredCount() == 1);
+    REQUIRE(camp.settledCount()   == 1);
+}
+
+TEST_CASE("RefugeeSystem createCamp + duplicate rejection", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    REQUIRE(sys.createCamp("Alpha") != nullptr);
+    REQUIRE(sys.createCamp("Beta")  != nullptr);
+    REQUIRE(sys.createCamp("Alpha") == nullptr); // duplicate
+    REQUIRE(sys.campCount() == 2);
+}
+
+TEST_CASE("RefugeeSystem totalRefugees + totalSheltered + totalSettled", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    sys.createCamp("A", 10);
+    sys.createCamp("B", 10);
+
+    NF::Refugee r1; r1.id = "r1"; r1.status = NF::RefugeeStatus::Sheltered;
+    NF::Refugee r2; r2.id = "r2"; r2.status = NF::RefugeeStatus::Settled;
+    NF::Refugee r3; r3.id = "r3"; r3.status = NF::RefugeeStatus::InTransit;
+    sys.campByName("A")->addRefugee(r1);
+    sys.campByName("A")->addRefugee(r2);
+    sys.campByName("B")->addRefugee(r3);
+
+    REQUIRE(sys.totalRefugees()  == 3);
+    REQUIRE(sys.totalSheltered() == 1);
+    REQUIRE(sys.totalSettled()   == 1);
+}
+
+TEST_CASE("RefugeeSystem fullCampCount", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    sys.createCamp("Full", 1);
+    sys.createCamp("Empty", 10);
+
+    NF::Refugee r1; r1.id = "r1";
+    sys.campByName("Full")->addRefugee(r1);
+
+    REQUIRE(sys.fullCampCount() == 1);
+}
+
+TEST_CASE("RefugeeSystem tick propagates to camps", "[Game][G37][Refugee]") {
+    NF::RefugeeSystem sys;
+    sys.createCamp("Delta");
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.campByName("Delta")->tickCount() == 2);
+}
