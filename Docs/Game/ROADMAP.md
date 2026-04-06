@@ -77,7 +77,7 @@
 | **G45** — Drought System | DroughtType×8, DroughtIntensity×5, DroughtRegion, DroughtZone, DroughtSystem | ✅ Done |
 | **G46** — Epidemic System | EpidemicType×8, EpidemicPhase×5, EpidemicVector, EpidemicZone, EpidemicSystem | ✅ Done |
 | **G47** — Solar Flare System | SolarFlareClass×8, SolarFlareEffect×6, SolarFlareEvent, SolarFlareRegion, SolarFlareSystem | ✅ Done |
-| **G48** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G48** — Meteor Shower System | MeteorShowerClass×8, MeteorImpactType×6, MeteorEvent, MeteorShowerRegion, MeteorShowerSystem | ✅ Done |
 
 ---
 
@@ -136,7 +136,7 @@
 | **S26** — Command Palette | CommandPaletteCategory×8, CommandPaletteState×4, PaletteCommand, PaletteCommandGroup, CommandPalette | ✅ Done |
 | **S27** — Theme Manager | ThemeMode×4, ThemeColor×8, ThemeToken, Theme, ThemeManager | ✅ Done |
 | **S28** — Keyframe Animation Editor | KeyframeInterpolation×8, AnimationTrackType×8, Keyframe, AnimationTrack, KeyframeAnimationEditor | ✅ Done |
-| **S29** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S29** — Curve Editor | CurveType×8, CurveHandleMode×4, CurveControlPoint, Curve, CurveEditorPanel | ✅ Done |
 
 ## Status Key
 

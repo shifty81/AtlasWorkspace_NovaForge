@@ -10195,4 +10195,167 @@ private:
     size_t                        m_tickCount = 0;
 };
 
+// ============================================================
+// G48 — Meteor Shower System
+// ============================================================
+
+enum class MeteorShowerClass : uint8_t {
+    Sporadic  = 0,
+    Minor     = 1,
+    Moderate  = 2,
+    Major     = 3,
+    Annual    = 4,
+    Periodic  = 5,
+    Storm     = 6,
+    Outburst  = 7
+};
+
+inline const char* meteorShowerClassName(MeteorShowerClass c) {
+    switch (c) {
+        case MeteorShowerClass::Sporadic:  return "Sporadic";
+        case MeteorShowerClass::Minor:     return "Minor";
+        case MeteorShowerClass::Moderate:  return "Moderate";
+        case MeteorShowerClass::Major:     return "Major";
+        case MeteorShowerClass::Annual:    return "Annual";
+        case MeteorShowerClass::Periodic:  return "Periodic";
+        case MeteorShowerClass::Storm:     return "Storm";
+        case MeteorShowerClass::Outburst:  return "Outburst";
+        default:                           return "Unknown";
+    }
+}
+
+enum class MeteorImpactType : uint8_t {
+    Airburst      = 0,
+    CraterFormation = 1,
+    Graze         = 2,
+    Ablation      = 3,
+    Penetrating   = 4,
+    Fragmentation = 5
+};
+
+inline const char* meteorImpactTypeName(MeteorImpactType t) {
+    switch (t) {
+        case MeteorImpactType::Airburst:       return "Airburst";
+        case MeteorImpactType::CraterFormation:return "CraterFormation";
+        case MeteorImpactType::Graze:          return "Graze";
+        case MeteorImpactType::Ablation:       return "Ablation";
+        case MeteorImpactType::Penetrating:    return "Penetrating";
+        case MeteorImpactType::Fragmentation:  return "Fragmentation";
+        default:                               return "Unknown";
+    }
+}
+
+struct MeteorEvent {
+    std::string       id;
+    MeteorShowerClass showerClass = MeteorShowerClass::Minor;
+    float             intensity   = 1.f;
+    float             duration    = 1.f;
+    MeteorImpactType  impactType  = MeteorImpactType::Ablation;
+    bool              active      = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isMinor() const {
+        return static_cast<uint8_t>(showerClass) < static_cast<uint8_t>(MeteorShowerClass::Moderate);
+    }
+
+    [[nodiscard]] bool isMajor() const {
+        return static_cast<uint8_t>(showerClass) >= static_cast<uint8_t>(MeteorShowerClass::Major);
+    }
+
+    [[nodiscard]] float radiationFlux() const { return intensity * duration; }
+};
+
+class MeteorShowerRegion {
+public:
+    explicit MeteorShowerRegion(const std::string& name) : m_name(name) {}
+
+    bool addEvent(const MeteorEvent& ev) {
+        for (auto& existing : m_events) if (existing.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] MeteorEvent* findEvent(const std::string& id) {
+        for (auto& ev : m_events) if (ev.id == id) return &ev;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& ev : m_events) ev.activate();   }
+    void deactivateAll() { for (auto& ev : m_events) ev.deactivate(); }
+
+    [[nodiscard]] size_t eventCount() const { return m_events.size(); }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& ev : m_events) if (ev.active) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorCount() const {
+        size_t c = 0;
+        for (auto& ev : m_events) if (ev.isMajor()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string              m_name;
+    std::vector<MeteorEvent> m_events;
+    size_t                   m_tickCount = 0;
+};
+
+class MeteorShowerSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    MeteorShowerRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] MeteorShowerRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& r : m_regions) r.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size();  }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount;        }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.majorCount();
+        return c;
+    }
+
+private:
+    std::vector<MeteorShowerRegion> m_regions;
+    size_t                          m_tickCount = 0;
+};
+
 } // namespace NF

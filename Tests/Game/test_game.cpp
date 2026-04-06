@@ -8099,3 +8099,134 @@ TEST_CASE("SolarFlareSystem activeEventCount, majorEventCount and tick", "[Game]
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+TEST_CASE("MeteorShowerClass names cover all 8 values", "[Game][G48][MeteorShower]") {
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Sporadic))  == "Sporadic");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Minor))     == "Minor");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Moderate))  == "Moderate");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Major))     == "Major");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Annual))    == "Annual");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Periodic))  == "Periodic");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Storm))     == "Storm");
+    REQUIRE(std::string(NF::meteorShowerClassName(NF::MeteorShowerClass::Outburst))  == "Outburst");
+}
+
+TEST_CASE("MeteorImpactType names cover all 6 values", "[Game][G48][MeteorShower]") {
+    REQUIRE(std::string(NF::meteorImpactTypeName(NF::MeteorImpactType::Airburst))        == "Airburst");
+    REQUIRE(std::string(NF::meteorImpactTypeName(NF::MeteorImpactType::CraterFormation)) == "CraterFormation");
+    REQUIRE(std::string(NF::meteorImpactTypeName(NF::MeteorImpactType::Graze))           == "Graze");
+    REQUIRE(std::string(NF::meteorImpactTypeName(NF::MeteorImpactType::Ablation))        == "Ablation");
+    REQUIRE(std::string(NF::meteorImpactTypeName(NF::MeteorImpactType::Penetrating))     == "Penetrating");
+    REQUIRE(std::string(NF::meteorImpactTypeName(NF::MeteorImpactType::Fragmentation))   == "Fragmentation");
+}
+
+TEST_CASE("MeteorEvent isMajor and isMinor thresholds", "[Game][G48][MeteorShower]") {
+    NF::MeteorEvent ev;
+    ev.id = "ev1"; ev.showerClass = NF::MeteorShowerClass::Minor;
+
+    REQUIRE(ev.isMinor());
+    REQUIRE_FALSE(ev.isMajor());
+
+    ev.showerClass = NF::MeteorShowerClass::Major;
+    REQUIRE_FALSE(ev.isMinor());
+    REQUIRE(ev.isMajor());
+
+    ev.showerClass = NF::MeteorShowerClass::Storm;
+    REQUIRE(ev.isMajor());
+}
+
+TEST_CASE("MeteorEvent radiationFlux calculation", "[Game][G48][MeteorShower]") {
+    NF::MeteorEvent ev;
+    ev.id = "ev2"; ev.intensity = 3.0f; ev.duration = 4.0f;
+
+    REQUIRE(ev.radiationFlux() == Catch::Approx(12.0f));
+}
+
+TEST_CASE("MeteorEvent activate and deactivate toggle active", "[Game][G48][MeteorShower]") {
+    NF::MeteorEvent ev;
+    ev.id = "ev3";
+
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("MeteorShowerRegion addEvent and duplicate rejection", "[Game][G48][MeteorShower]") {
+    NF::MeteorShowerRegion region("region-1");
+
+    NF::MeteorEvent a; a.id = "ev-a";
+    NF::MeteorEvent b; b.id = "ev-b";
+    NF::MeteorEvent dup; dup.id = "ev-a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("MeteorShowerRegion activateAll and deactivateAll", "[Game][G48][MeteorShower]") {
+    NF::MeteorShowerRegion region("region-2");
+
+    NF::MeteorEvent a; a.id = "a";
+    NF::MeteorEvent b; b.id = "b";
+    region.addEvent(a);
+    region.addEvent(b);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("MeteorShowerRegion activeCount and majorCount", "[Game][G48][MeteorShower]") {
+    NF::MeteorShowerRegion region("region-3");
+
+    NF::MeteorEvent major; major.id = "maj"; major.showerClass = NF::MeteorShowerClass::Major; major.activate();
+    NF::MeteorEvent minor; minor.id = "min"; minor.showerClass = NF::MeteorShowerClass::Minor;
+
+    region.addEvent(major);
+    region.addEvent(minor);
+
+    REQUIRE(region.activeCount() == 1);
+    REQUIRE(region.majorCount()  == 1);
+}
+
+TEST_CASE("MeteorShowerSystem createRegion and duplicate rejection", "[Game][G48][MeteorShower]") {
+    NF::MeteorShowerSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("MeteorShowerSystem tick propagates to all regions", "[Game][G48][MeteorShower]") {
+    NF::MeteorShowerSystem sys;
+    sys.createRegion("r1");
+    sys.createRegion("r2");
+
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 3);
+    REQUIRE(sys.byName("r1")->tickCount() == 3);
+    REQUIRE(sys.byName("r2")->tickCount() == 3);
+}
+
+TEST_CASE("MeteorShowerSystem activeEventCount and majorEventCount", "[Game][G48][MeteorShower]") {
+    NF::MeteorShowerSystem sys;
+    sys.createRegion("r1");
+    sys.createRegion("r2");
+
+    NF::MeteorEvent ae; ae.id = "ae1"; ae.showerClass = NF::MeteorShowerClass::Storm; ae.activate();
+    NF::MeteorEvent me; me.id = "me1"; me.showerClass = NF::MeteorShowerClass::Outburst;
+
+    sys.byName("r1")->addEvent(ae);
+    sys.byName("r2")->addEvent(me);
+
+    REQUIRE(sys.activeEventCount() == 1);
+    REQUIRE(sys.majorEventCount()  == 2); // Storm and Outburst are both Major
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
