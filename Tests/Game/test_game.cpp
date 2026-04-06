@@ -9604,3 +9604,211 @@ TEST_CASE("GeoStormSystem aggregate event counts", "[Game][G60][GeoStorm]") {
     REQUIRE(sys.mainPhaseEventCount() == 1); // only x (y=Onset, z inactive)
     REQUIRE(sys.globalEventCount()    == 1); // only x (y=5%, z inactive)
 }
+
+// ── G61 — Cosmic Ray System ────────────────────────────────────
+
+TEST_CASE("CosmicRayType names cover all 5 values", "[Game][G61][CosmicRay]") {
+    REQUIRE(std::string(NF::cosmicRayTypeName(NF::CosmicRayType::Proton))   == "Proton");
+    REQUIRE(std::string(NF::cosmicRayTypeName(NF::CosmicRayType::Alpha))    == "Alpha");
+    REQUIRE(std::string(NF::cosmicRayTypeName(NF::CosmicRayType::HeavyIon)) == "HeavyIon");
+    REQUIRE(std::string(NF::cosmicRayTypeName(NF::CosmicRayType::Electron)) == "Electron");
+    REQUIRE(std::string(NF::cosmicRayTypeName(NF::CosmicRayType::Positron)) == "Positron");
+}
+
+TEST_CASE("CosmicRayIntensity names cover all 5 values", "[Game][G61][CosmicRay]") {
+    REQUIRE(std::string(NF::cosmicRayIntensityName(NF::CosmicRayIntensity::Background)) == "Background");
+    REQUIRE(std::string(NF::cosmicRayIntensityName(NF::CosmicRayIntensity::Elevated))   == "Elevated");
+    REQUIRE(std::string(NF::cosmicRayIntensityName(NF::CosmicRayIntensity::High))       == "High");
+    REQUIRE(std::string(NF::cosmicRayIntensityName(NF::CosmicRayIntensity::Severe))     == "Severe");
+    REQUIRE(std::string(NF::cosmicRayIntensityName(NF::CosmicRayIntensity::Extreme))    == "Extreme");
+}
+
+TEST_CASE("CosmicRayEvent isSevere threshold is Severe+", "[Game][G61][CosmicRay]") {
+    NF::CosmicRayEvent ev; ev.id = "cr1";
+    ev.intensity = NF::CosmicRayIntensity::High;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.intensity = NF::CosmicRayIntensity::Severe;
+    REQUIRE(ev.isSevere());
+
+    ev.intensity = NF::CosmicRayIntensity::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("CosmicRayEvent isHighEnergy and isWidespread", "[Game][G61][CosmicRay]") {
+    NF::CosmicRayEvent ev; ev.id = "cr2";
+    ev.type     = NF::CosmicRayType::Electron;
+    ev.coverage = 20.0f;
+    REQUIRE_FALSE(ev.isHighEnergy());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.type     = NF::CosmicRayType::Alpha;
+    ev.coverage = 70.0f;
+    REQUIRE(ev.isHighEnergy());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("CosmicRayEvent hazardScore calculation", "[Game][G61][CosmicRay]") {
+    NF::CosmicRayEvent ev; ev.id = "cr3";
+    // Severe (uint8=3): (3+1) * 50 / 10 = 20.0
+    ev.intensity = NF::CosmicRayIntensity::Severe;
+    ev.coverage  = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(20.0f));
+}
+
+TEST_CASE("CosmicRayEvent activate and deactivate", "[Game][G61][CosmicRay]") {
+    NF::CosmicRayEvent ev; ev.id = "cr4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("CosmicRayRegion severeCount, highEnergyCount, widespreadCount", "[Game][G61][CosmicRay]") {
+    NF::CosmicRayRegion region("outerBelt");
+
+    NF::CosmicRayEvent a; a.id = "a"; a.type = NF::CosmicRayType::Proton;   a.intensity = NF::CosmicRayIntensity::Extreme; a.coverage = 80.0f; a.activate();
+    NF::CosmicRayEvent b; b.id = "b"; b.type = NF::CosmicRayType::Electron; b.intensity = NF::CosmicRayIntensity::Elevated; b.coverage = 10.0f; b.activate();
+    NF::CosmicRayEvent c; c.id = "c"; c.type = NF::CosmicRayType::Alpha;    c.intensity = NF::CosmicRayIntensity::Severe;   c.coverage = 60.0f; // inactive
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()     == 1); // only a (b=Elevated, c inactive)
+    REQUIRE(region.highEnergyCount() == 1); // only a (b=Electron, c inactive)
+    REQUIRE(region.widespreadCount() == 1); // only a (b=10%, c inactive)
+}
+
+TEST_CASE("CosmicRaySystem createRegion and tick propagation", "[Game][G61][CosmicRay]") {
+    NF::CosmicRaySystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("CosmicRaySystem aggregate event counts", "[Game][G61][CosmicRay]") {
+    NF::CosmicRaySystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::CosmicRayEvent x; x.id = "x"; x.type = NF::CosmicRayType::HeavyIon; x.intensity = NF::CosmicRayIntensity::Extreme; x.coverage = 75.0f; x.activate();
+    NF::CosmicRayEvent y; y.id = "y"; y.type = NF::CosmicRayType::Positron;  y.intensity = NF::CosmicRayIntensity::Elevated; y.coverage = 5.0f;  y.activate();
+    NF::CosmicRayEvent z; z.id = "z"; z.type = NF::CosmicRayType::Proton;    z.intensity = NF::CosmicRayIntensity::Severe;   z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Elevated, z inactive)
+    REQUIRE(sys.highEnergyEventCount() == 1); // only x (y=Positron, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
+
+// ── G62 — Solar Wind System ────────────────────────────────────
+
+TEST_CASE("SolarWindType names cover all 5 values", "[Game][G62][SolarWind]") {
+    REQUIRE(std::string(NF::solarWindTypeName(NF::SolarWindType::Slow))           == "Slow");
+    REQUIRE(std::string(NF::solarWindTypeName(NF::SolarWindType::Fast))           == "Fast");
+    REQUIRE(std::string(NF::solarWindTypeName(NF::SolarWindType::Transient))      == "Transient");
+    REQUIRE(std::string(NF::solarWindTypeName(NF::SolarWindType::Coronal))        == "Coronal");
+    REQUIRE(std::string(NF::solarWindTypeName(NF::SolarWindType::Interplanetary)) == "Interplanetary");
+}
+
+TEST_CASE("SolarWindIntensity names cover all 5 values", "[Game][G62][SolarWind]") {
+    REQUIRE(std::string(NF::solarWindIntensityName(NF::SolarWindIntensity::Calm))     == "Calm");
+    REQUIRE(std::string(NF::solarWindIntensityName(NF::SolarWindIntensity::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::solarWindIntensityName(NF::SolarWindIntensity::Strong))   == "Strong");
+    REQUIRE(std::string(NF::solarWindIntensityName(NF::SolarWindIntensity::Violent))  == "Violent");
+    REQUIRE(std::string(NF::solarWindIntensityName(NF::SolarWindIntensity::Extreme))  == "Extreme");
+}
+
+TEST_CASE("SolarWindEvent isSevere threshold is Violent+", "[Game][G62][SolarWind]") {
+    NF::SolarWindEvent ev; ev.id = "sw1";
+    ev.intensity = NF::SolarWindIntensity::Strong;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.intensity = NF::SolarWindIntensity::Violent;
+    REQUIRE(ev.isSevere());
+
+    ev.intensity = NF::SolarWindIntensity::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("SolarWindEvent isFastStream and isWidespread", "[Game][G62][SolarWind]") {
+    NF::SolarWindEvent ev; ev.id = "sw2";
+    ev.type     = NF::SolarWindType::Slow;
+    ev.coverage = 20.0f;
+    REQUIRE_FALSE(ev.isFastStream());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.type     = NF::SolarWindType::Fast;
+    ev.coverage = 70.0f;
+    REQUIRE(ev.isFastStream());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("SolarWindEvent hazardScore calculation", "[Game][G62][SolarWind]") {
+    NF::SolarWindEvent ev; ev.id = "sw3";
+    // Violent (uint8=3): (3+1) * 50 / 10 = 20.0
+    ev.intensity = NF::SolarWindIntensity::Violent;
+    ev.coverage  = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(20.0f));
+}
+
+TEST_CASE("SolarWindEvent activate and deactivate", "[Game][G62][SolarWind]") {
+    NF::SolarWindEvent ev; ev.id = "sw4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("SolarWindRegion severeCount, fastStreamCount, widespreadCount", "[Game][G62][SolarWind]") {
+    NF::SolarWindRegion region("heliosphere");
+
+    NF::SolarWindEvent a; a.id = "a"; a.type = NF::SolarWindType::Fast;    a.intensity = NF::SolarWindIntensity::Extreme; a.coverage = 80.0f; a.activate();
+    NF::SolarWindEvent b; b.id = "b"; b.type = NF::SolarWindType::Slow;    b.intensity = NF::SolarWindIntensity::Moderate; b.coverage = 10.0f; b.activate();
+    NF::SolarWindEvent c; c.id = "c"; c.type = NF::SolarWindType::Transient; c.intensity = NF::SolarWindIntensity::Violent; c.coverage = 60.0f; // inactive
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()     == 1); // only a (b=Moderate, c inactive)
+    REQUIRE(region.fastStreamCount() == 1); // only a (b=Slow, c inactive)
+    REQUIRE(region.widespreadCount() == 1); // only a (b=10%, c inactive)
+}
+
+TEST_CASE("SolarWindSystem createRegion and tick propagation", "[Game][G62][SolarWind]") {
+    NF::SolarWindSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("SolarWindSystem aggregate event counts", "[Game][G62][SolarWind]") {
+    NF::SolarWindSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::SolarWindEvent x; x.id = "x"; x.type = NF::SolarWindType::Transient; x.intensity = NF::SolarWindIntensity::Extreme; x.coverage = 75.0f; x.activate();
+    NF::SolarWindEvent y; y.id = "y"; y.type = NF::SolarWindType::Coronal;    y.intensity = NF::SolarWindIntensity::Moderate; y.coverage = 5.0f;  y.activate();
+    NF::SolarWindEvent z; z.id = "z"; z.type = NF::SolarWindType::Fast;       z.intensity = NF::SolarWindIntensity::Violent;  z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Moderate, z inactive)
+    REQUIRE(sys.fastStreamEventCount() == 1); // only x (y=Coronal not fast/transient, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
