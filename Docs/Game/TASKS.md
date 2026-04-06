@@ -3071,3 +3071,59 @@ Total: 2014 tests, 0 failures (1991 existing + 14 S42 + 10 G61 = 2015 — note: 
 ## Build Verification ✅
 
 Total: 2037 tests, 0 failures (2014 existing + 14 S43 + 10 G62 = 2038 — note: 1 offset = 2037).
+
+## M1-C — Asset Editors (full 3D viewport via NFRenderViewport) ✅
+
+- [x] NFRenderViewport base class — standardized FPS cam, gizmo overlay, render modes (Wireframe/Solid/Lit/Textured/Unlit)
+  - ViewportRenderMode enum ×5, ViewportGizmoMode enum ×4, ViewportCameraMode enum ×5
+  - Camera position/target, FOV, near/far, move speed, look sensitivity, sprint multiplier
+  - Grid overlay, aspect ratio, frame tick counter, resize
+- [x] MeshViewerPanel — orbit + FPS cam, display modes (Wireframe/Solid/Lit/UV/Normals)
+  - MeshDisplayMode enum ×5, MeshViewerAsset (vertex/triangle counts, LOD, normals, UVs)
+  - isHighPoly (>=100K tris), isMultiLOD, isComplete
+  - addMesh, removeMesh, findMesh, setActiveMesh, MAX_MESHES=256
+  - highPolyCount, loadedCount, multiLODCount, completeCount
+- [x] MaterialEditorPanel — PBR property sliders + live preview via NFRenderViewport
+  - MaterialPreviewShape enum ×5 (Sphere/Cube/Cylinder/Plane/Custom)
+  - Live preview, auto-recompile, PBR count tracking
+  - addMaterial, removeMaterial, findMaterial, setActiveMaterial, MAX_MATERIALS=128
+  - dirtyCount, pbrCount
+- [x] SkeletalEditorPanel (NEW) — FPS viewport + bone hierarchy tree + weight paint mode
+  - BoneDisplayMode enum ×5, WeightPaintMode enum ×6
+  - SkeletalBone (parent index, length, selected, locked, isRoot)
+  - SkeletalAsset (bone list, loaded, dirty, isComplex >= 50 bones)
+  - addSkeleton, removeSkeleton, findSkeleton, setActiveSkeleton, openAsset, MAX_SKELETONS=128
+  - dirtyCount, loadedCount, complexCount, isPainting, brush radius/strength
+- [x] AnimationEditorPanel (NEW) — timeline, keyframe editor, blend tree view + NFRenderViewport
+  - AnimPlaybackState enum ×5, AnimBlendTreeType enum ×5
+  - AnimClipAsset (duration, frameRate, keyframeCount, looping, blendType, totalFrames, isLong, isDense, isReady)
+  - addClip, removeClip, findClip, setActiveClip, openAsset, MAX_CLIPS=256
+  - Playback controls: state, speed, currentFrame, timelineZoom, onionSkinning, showBlendTree
+  - dirtyCount, loadedCount, loopingClipCount, longClipCount, denseClipCount, countByBlendType
+- [x] ShipEditorPanel — wire to NFRenderViewport base
+  - ShipEditorTool enum ×5 (Select/PlaceModule/RotateModule/RemoveModule/WireConnect)
+  - ShipModuleEntry (category, slot, mass, powerDraw, placed, connected, isHeavy, isPowered, isOperational)
+  - addModule, removeModule, findModule, setActiveModule, MAX_MODULES=512
+  - placedCount, connectedCount, operationalCount, heavyCount, poweredCount, totalMass, totalPowerDraw
+  - Ship name, symmetry mode
+- [x] CharacterEditorPanel — wire to NFRenderViewport base
+  - CharacterEditorTab enum ×5 (Appearance/Skeleton/Equipment/Stats/Preview)
+  - CharacterSlot (equippedItem, locked, visible, isEmpty)
+  - CharacterPreset (meshPath, materialPath, slots, equippedCount, visibleSlotCount, isFullyEquipped)
+  - addPreset, removePreset, findPreset, setActivePreset, MAX_PRESETS=128
+  - dirtyCount, loadedCount, fullyEquippedCount, activeTab, autoRotate
+- [x] PrefabEditorPanel — scene-in-a-box, wire to NFRenderViewport
+  - PrefabEditMode enum ×5 (View/Place/Delete/Transform/Connect)
+  - PrefabInstance (prefabSource, position, scale, visible, locked, overridden, isModified, isScaled)
+  - addInstance, removeInstance, findInstance, setActiveInstance, MAX_INSTANCES=512
+  - visibleCount, lockedCount, overriddenCount, scaledCount
+  - Snap-to-grid, snap size, isolation mode
+- [x] 38 new editor tests (test_m1c_editor.cpp), all passing
+
+## M1-C Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2075 tests, 0 failures (2037 existing + 38 M1-C = 2075).
