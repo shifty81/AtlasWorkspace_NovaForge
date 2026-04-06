@@ -2421,3 +2421,49 @@ Total: 1648 tests, 0 failures (1624 existing + 14 S27 + 10 G46 = 1648).
 ## Build Verification ✅
 
 Total: 1673 tests, 0 failures (1648 existing + 14 S28 + 11 G47 = 1673).
+
+---
+
+## S29 — Curve Editor ✅
+
+- [x] CurveType enum ×8 (Linear, Bezier, Hermite, CatmullRom, Step, Sine, Cosine, Custom)
+  - curveTypeName() for all 8 types
+- [x] CurveHandleMode enum ×4 (Free, Aligned, Vector, Auto)
+  - curveHandleModeName() for all 4 modes
+- [x] CurveControlPoint struct (time, value, handleL, handleR, mode, selected)
+  - select, deselect, setTime, setValue
+- [x] Curve class — named collection of CurveControlPoints
+  - addPoint (duplicate time rejected), removePoint, findPoint
+  - pointCount, selectedCount, selectAll, deselectAll, duration, name, type
+- [x] CurveEditorPanel class — multi-curve editor (max 32 curves)
+  - addCurve (duplicate/full rejected), removeCurve, findCurve
+  - curveCount, setActiveCurve, activeCurve, isLooping, setLooping
+  - selectAllPoints, deselectAllPoints
+- [x] 14 new editor tests (test_s29_editor.cpp), all passing
+
+## S29 Complete ✅
+
+---
+
+## G48 — Meteor Shower System ✅
+
+- [x] MeteorShowerClass enum ×8 (Sporadic, Minor, Moderate, Major, Annual, Periodic, Storm, Outburst)
+  - meteorShowerClassName() for all 8 classes
+- [x] MeteorImpactType enum ×6 (Airburst, CraterFormation, Graze, Ablation, Penetrating, Fragmentation)
+  - meteorImpactTypeName() for all 6 types
+- [x] MeteorEvent struct (id, showerClass, intensity, duration, impactType, active)
+  - activate, deactivate, isMinor (< Moderate), isMajor (>= Major), radiationFlux
+- [x] MeteorShowerRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, majorCount
+  - name, tick, tickCount
+- [x] MeteorShowerSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, majorEventCount
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1699 tests, 0 failures (1673 existing + 14 S29 + 12 G48 = 1699).
