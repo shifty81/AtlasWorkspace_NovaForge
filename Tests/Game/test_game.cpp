@@ -7169,3 +7169,119 @@ TEST_CASE("EarthquakeSystem tick propagates to faults and increments tickCount",
     REQUIRE(sys.faultByName("F1")->tickCount() == 2);
     REQUIRE(sys.faultByName("F2")->tickCount() == 2);
 }
+
+// ============================================================
+// G40 — Volcano System tests
+// ============================================================
+
+TEST_CASE("VolcanoActivity names cover all 8 values", "[Game][G40][Volcano]") {
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Dormant))      == "Dormant");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Restless))     == "Restless");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Elevated))     == "Elevated");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Unrest))       == "Unrest");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Major))        == "Major");
+    REQUIRE(std::string(NF::volcanoActivityName(NF::VolcanoActivity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("Volcano status transitions", "[Game][G40][Volcano]") {
+    NF::Volcano v("Vesuvius");
+    REQUIRE(v.isInactive());
+
+    v.monitor();
+    REQUIRE(v.status() == NF::VolcanoStatus::Monitoring);
+
+    v.startEruption();
+    REQUIRE(v.isErupting());
+
+    v.beginSubsiding();
+    REQUIRE(v.isSubsiding());
+}
+
+TEST_CASE("Volcano beginSubsiding only from Erupting", "[Game][G40][Volcano]") {
+    NF::Volcano v("Etna");
+    v.monitor();
+    v.beginSubsiding(); // not erupting — should be no-op
+    REQUIRE(v.status() == NF::VolcanoStatus::Monitoring);
+}
+
+TEST_CASE("Volcano isMajor via setActivity", "[Game][G40][Volcano]") {
+    NF::Volcano v("Fuji");
+    v.setActivity(NF::VolcanoActivity::Moderate);
+    REQUIRE_FALSE(v.activity() >= NF::VolcanoActivity::Major);
+
+    v.setActivity(NF::VolcanoActivity::Major);
+    REQUIRE(v.activity() >= NF::VolcanoActivity::Major);
+}
+
+TEST_CASE("VolcanicEvent addEvent + duplicate rejection", "[Game][G40][Volcano]") {
+    NF::Volcano v("Krakatau");
+    NF::VolcanicEvent ev; ev.id = "ev1"; ev.activity = NF::VolcanoActivity::Major;
+    NF::VolcanicEvent dup; dup.id = "ev1";
+
+    REQUIRE(v.addEvent(ev));
+    REQUIRE_FALSE(v.addEvent(dup));
+    REQUIRE(v.eventCount() == 1);
+}
+
+TEST_CASE("Volcano majorEvents count", "[Game][G40][Volcano]") {
+    NF::Volcano v("Pinatubo");
+    NF::VolcanicEvent e1; e1.id = "e1"; e1.activity = NF::VolcanoActivity::Major;
+    NF::VolcanicEvent e2; e2.id = "e2"; e2.activity = NF::VolcanoActivity::Minor;
+    NF::VolcanicEvent e3; e3.id = "e3"; e3.activity = NF::VolcanoActivity::Catastrophic;
+    v.addEvent(e1); v.addEvent(e2); v.addEvent(e3);
+
+    REQUIRE(v.majorEvents() == 2); // Major + Catastrophic
+}
+
+TEST_CASE("VolcanicEvent isCatastrophic predicate", "[Game][G40][Volcano]") {
+    NF::VolcanicEvent ev; ev.id = "e1";
+    ev.activity = NF::VolcanoActivity::Major;
+    REQUIRE_FALSE(ev.isCatastrophic());
+    ev.activity = NF::VolcanoActivity::Catastrophic;
+    REQUIRE(ev.isCatastrophic());
+}
+
+TEST_CASE("VolcanoSystem createVolcano + duplicate rejection", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    REQUIRE(sys.createVolcano("Tambora") != nullptr);
+    REQUIRE(sys.createVolcano("Stromboli") != nullptr);
+    REQUIRE(sys.createVolcano("Tambora") == nullptr); // duplicate
+    REQUIRE(sys.volcanoCount() == 2);
+}
+
+TEST_CASE("VolcanoSystem addEvent + bad-volcano rejection", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    sys.createVolcano("MaunaLoa");
+
+    NF::VolcanicEvent ev; ev.id = "e1"; ev.activity = NF::VolcanoActivity::Minor;
+    REQUIRE(sys.addEvent("MaunaLoa", ev));
+    REQUIRE(sys.eventCount() == 1);
+
+    NF::VolcanicEvent bad; bad.id = "e2";
+    REQUIRE_FALSE(sys.addEvent("Nowhere", bad));
+}
+
+TEST_CASE("VolcanoSystem eruptingCount + majorEventCount", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    sys.createVolcano("V1");
+    sys.createVolcano("V2");
+    sys.byName("V1")->startEruption();
+
+    NF::VolcanicEvent ev; ev.id = "e1"; ev.activity = NF::VolcanoActivity::Catastrophic;
+    sys.addEvent("V2", ev);
+
+    REQUIRE(sys.eruptingCount()   == 1);
+    REQUIRE(sys.majorEventCount() == 1);
+}
+
+TEST_CASE("VolcanoSystem tick propagates to volcanoes and increments tickCount", "[Game][G40][Volcano]") {
+    NF::VolcanoSystem sys;
+    sys.createVolcano("A");
+    sys.createVolcano("B");
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.byName("A")->tickCount() == 2);
+    REQUIRE(sys.byName("B")->tickCount() == 2);
+}

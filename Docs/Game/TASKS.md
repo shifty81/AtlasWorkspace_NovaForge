@@ -2036,3 +2036,49 @@ Total: 1454 tests, 0 failures (1427 existing + 14 S19 + 13 G38 = 1454).
 ## Build Verification ✅
 
 Total: 1480 tests, 0 failures (1454 existing + 14 S20 + 12 G39 = 1480).
+
+---
+
+## S21 — Editor Event Bus System ✅
+
+- [x] EditorEventPriority enum ×8 (Lowest, Low, Normal, High, Highest, System, Critical, Realtime)
+  - editorEventPriorityName() for all 8 priorities
+- [x] EditorBusState enum ×4 (Idle, Posting, Flushing, Suspended)
+- [x] EditorBusEvent struct (topic, payload, priority, timestamp, consumed)
+  - consume/isConsumed, isHighPrio (≥High), isCritical (≥Critical)
+- [x] EditorEventSubscription — per-handler wrapper with priority filter
+  - deliver (rejected if cancelled or below minPriority), cancel, callCount
+- [x] EditorEventBus — topic-based message bus
+  - subscribe, post (blocked when suspended), flush routes to matching subscribers
+  - wildcard "*" subscription receives all topics
+  - suspend/resume, clearQueue, queueSize, subscriptionCount
+  - flush returns total dispatch count (events × matching subscribers)
+- [x] 14 new editor tests (test_s21_editor.cpp), all passing
+
+## S21 Complete ✅
+
+---
+
+## G40 — Volcano System ✅
+
+- [x] VolcanoActivity enum ×8 (Dormant, Restless, Elevated, Unrest, Minor, Moderate, Major, Catastrophic)
+  - volcanoActivityName() for all 8 activity levels
+- [x] VolcanoStatus enum ×4 (Inactive, Monitoring, Erupting, Subsiding)
+- [x] VolcanicEvent struct (id, activity, duration, ashfall, resolved)
+  - resolve, isResolved, isMajor (≥Major), isCatastrophic
+- [x] Volcano class — per-volcano state machine + event list
+  - monitor, startEruption, beginSubsiding (guarded: Active→Subsiding only), deactivate
+  - addEvent (no duplicates), findEvent, eventCount, majorEvents
+  - setActivity, tick
+- [x] VolcanoSystem — multi-volcano coordinator (max 64 volcanoes / 512 events)
+  - createVolcano, byName, addEvent (routes to volcano by name)
+  - eruptingCount, majorEventCount, tick propagation
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G40 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1504 tests, 0 failures (1480 existing + 14 S21 + 10 G40 = 1504).

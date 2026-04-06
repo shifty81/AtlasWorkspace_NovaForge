@@ -9088,4 +9088,152 @@ private:
     size_t                 m_eqCount   = 0;
 };
 
+// ============================================================
+// G40 — Volcano System
+// ============================================================
+
+enum class VolcanoActivity : uint8_t {
+    Dormant      = 0,
+    Restless     = 1,
+    Elevated     = 2,
+    Unrest       = 3,
+    Minor        = 4,
+    Moderate     = 5,
+    Major        = 6,
+    Catastrophic = 7,
+};
+
+inline const char* volcanoActivityName(VolcanoActivity a) {
+    switch (a) {
+        case VolcanoActivity::Dormant:      return "Dormant";
+        case VolcanoActivity::Restless:     return "Restless";
+        case VolcanoActivity::Elevated:     return "Elevated";
+        case VolcanoActivity::Unrest:       return "Unrest";
+        case VolcanoActivity::Minor:        return "Minor";
+        case VolcanoActivity::Moderate:     return "Moderate";
+        case VolcanoActivity::Major:        return "Major";
+        case VolcanoActivity::Catastrophic: return "Catastrophic";
+        default:                            return "Unknown";
+    }
+}
+
+enum class VolcanoStatus : uint8_t {
+    Inactive  = 0,
+    Monitoring = 1,
+    Erupting  = 2,
+    Subsiding = 3,
+};
+
+struct VolcanicEvent {
+    std::string     id;
+    VolcanoActivity activity = VolcanoActivity::Minor;
+    uint32_t        duration = 0;    // ticks
+    uint32_t        ashfall  = 0;    // km radius
+    bool            resolved = false;
+
+    void resolve() { resolved = true; }
+    [[nodiscard]] bool isResolved()     const { return resolved;                          }
+    [[nodiscard]] bool isMajor()        const { return activity >= VolcanoActivity::Major; }
+    [[nodiscard]] bool isCatastrophic() const { return activity == VolcanoActivity::Catastrophic; }
+};
+
+class Volcano {
+public:
+    explicit Volcano(std::string name) : m_name(std::move(name)) {}
+
+    [[nodiscard]] const std::string& name()    const { return m_name;    }
+    [[nodiscard]] VolcanoStatus      status()   const { return m_status;  }
+    [[nodiscard]] VolcanoActivity    activity() const { return m_activity; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+    void setActivity(VolcanoActivity a) { m_activity = a; }
+    void startEruption()  { m_status = VolcanoStatus::Erupting;   }
+    void beginSubsiding() { if (m_status == VolcanoStatus::Erupting) m_status = VolcanoStatus::Subsiding; }
+    void deactivate()     { m_status = VolcanoStatus::Inactive;   }
+    void monitor()        { m_status = VolcanoStatus::Monitoring;  }
+
+    [[nodiscard]] bool isErupting()  const { return m_status == VolcanoStatus::Erupting;  }
+    [[nodiscard]] bool isInactive()  const { return m_status == VolcanoStatus::Inactive;  }
+    [[nodiscard]] bool isSubsiding() const { return m_status == VolcanoStatus::Subsiding; }
+
+    bool addEvent(const VolcanicEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] VolcanicEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t eventCount()   const { return m_events.size(); }
+    [[nodiscard]] size_t majorEvents()  const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.isMajor()) c++;
+        return c;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string               m_name;
+    VolcanoStatus             m_status   = VolcanoStatus::Inactive;
+    VolcanoActivity           m_activity = VolcanoActivity::Dormant;
+    std::vector<VolcanicEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class VolcanoSystem {
+public:
+    static constexpr size_t MAX_VOLCANOES = 64;
+    static constexpr size_t MAX_EVENTS    = 512;
+
+    Volcano* createVolcano(const std::string& name) {
+        if (m_volcanoes.size() >= MAX_VOLCANOES) return nullptr;
+        for (auto& v : m_volcanoes) if (v.name() == name) return nullptr;
+        m_volcanoes.emplace_back(name);
+        return &m_volcanoes.back();
+    }
+
+    [[nodiscard]] Volcano* byName(const std::string& name) {
+        for (auto& v : m_volcanoes) if (v.name() == name) return &v;
+        return nullptr;
+    }
+
+    bool addEvent(const std::string& volcanoName, const VolcanicEvent& ev) {
+        if (m_eventCount >= MAX_EVENTS) return false;
+        auto* v = byName(volcanoName);
+        if (!v) return false;
+        if (v->addEvent(ev)) { m_eventCount++; return true; }
+        return false;
+    }
+
+    void tick() {
+        for (auto& v : m_volcanoes) v.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t volcanoCount()  const { return m_volcanoes.size(); }
+    [[nodiscard]] size_t eventCount()    const { return m_eventCount;       }
+    [[nodiscard]] size_t tickCount()     const { return m_tickCount;        }
+
+    [[nodiscard]] size_t eruptingCount() const {
+        size_t c = 0;
+        for (auto& v : m_volcanoes) if (v.isErupting()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEventCount() const {
+        size_t c = 0;
+        for (auto& v : m_volcanoes) c += v.majorEvents();
+        return c;
+    }
+
+private:
+    std::vector<Volcano> m_volcanoes;
+    size_t               m_tickCount  = 0;
+    size_t               m_eventCount = 0;
+};
+
 } // namespace NF

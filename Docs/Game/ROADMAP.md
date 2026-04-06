@@ -69,7 +69,8 @@
 | **G37** — Refugee System | RefugeeOrigin×8, RefugeeStatus×5, Refugee, RefugeeCamp, RefugeeSystem | ✅ Done |
 | **G38** — Storm System | StormType×8, StormSeverity×5, Storm, StormRegion, StormSystem | ✅ Done |
 | **G39** — Earthquake System | EarthquakeScale×8, EarthquakeStatus×4, Earthquake, FaultLine, EarthquakeSystem | ✅ Done |
-| **G40** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G40** — Volcano System | VolcanoActivity×8, VolcanoStatus×4, VolcanicEvent, Volcano, VolcanoSystem | ✅ Done |
+| **G41** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -120,7 +121,8 @@
 | **S18** — Build Configuration System | BuildTarget×8, BuildPlatform×5, BuildConfig, BuildProfile, BuildConfigurationSystem | ✅ Done |
 | **S19** — Scene Snapshot System | SceneSnapshotType×8, SceneSnapshotState×4, SceneSnapshotFrame, SceneSnapshotHistory, SceneSnapshotSystem | ✅ Done |
 | **S20** — Resource Monitor System | ResourceMonitorMetric×8, ResourceMonitorLevel×4, ResourceMonitorSample, ResourceMonitorChannel, ResourceMonitorSystem | ✅ Done |
-| **S21** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S21** — Editor Event Bus System | EditorEventPriority×8, EditorBusState×4, EditorBusEvent, EditorEventSubscription, EditorEventBus | ✅ Done |
+| **S22** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
