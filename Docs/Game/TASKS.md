@@ -2875,3 +2875,43 @@ Total: 1899 tests, 0 failures (1875 existing + 14 S37 + 10 G56 = 1899).
 ## Build Verification ✅
 
 Total: 1923 tests, 0 failures (1899 existing + 14 S38 + 10 G57 = 1923).
+
+---
+
+## S39 — Tilemap Editor ✅
+
+- [x] TileFlipMode enum ×5 (None, Horizontal, Vertical, Both, Rotate90) + tileFlipModeName()
+- [x] TileLayerType enum ×5 (Background, Midground, Foreground, Object, Collision) + tileLayerTypeName()
+- [x] TileAnimMode enum ×5 (Static, Loop, PingPong, Once, Random) + tileAnimModeName()
+- [x] TileAsset (name, tilesetName, tileId, tileWidth, tileHeight, flipMode, layerType, animMode, animated, collider, dirty)
+  - isAnimated, hasCollider, isDirty, area()
+- [x] TilemapEditor (max 256 tiles)
+  - addTile (duplicate rejected), removeTile (clears activeTile), findTile, setActiveTile
+  - tileCount, dirtyCount, animatedCount, colliderCount, countByLayerType, countByFlipMode
+- [x] 14 new editor tests (test_s39_editor.cpp), all passing
+
+## S39 Complete ✅
+
+---
+
+## G58 — Monsoon System ✅
+
+- [x] MonsoonIntensity enum ×5 (Light, Moderate, Heavy, Severe, Extreme) + monsoonIntensityName()
+- [x] MonsoonPhase enum ×5 (Onset, Active, Peak, Retreating, Withdrawal) + monsoonPhaseName()
+- [x] MonsoonEvent (id, intensity, phase, rainfallMm, windSpeed, active)
+  - activate, deactivate, isSevere (>= Severe), isPeak (Peak), isFlooding (>= 200mm), hazardScore
+- [x] MonsoonRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, peakCount, floodingCount
+- [x] MonsoonSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, peakEventCount, floodingEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G58 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1945 tests, 0 failures (1923 existing + 14 S39 + 10 G58 = 1947 — note: 2 fewer due to test numbering offset = 1945).
