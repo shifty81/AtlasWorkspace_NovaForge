@@ -9689,9 +9689,9 @@ public:
     void setType(LandslideType t)         { m_type = t;     }
     void setSeverity(LandslideSeverity s) { m_severity = s; }
 
-    bool addFlow(LandslideDebrisFlow f) {
+    bool addFlow(const LandslideDebrisFlow& f) {
         for (auto& existing : m_flows) if (existing.id == f.id) return false;
-        m_flows.push_back(std::move(f));
+        m_flows.push_back(f);
         return true;
     }
 

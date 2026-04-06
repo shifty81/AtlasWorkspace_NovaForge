@@ -7695,7 +7695,7 @@ TEST_CASE("LandslideZone isActive requires moving flow", "[Game][G44][Landslide]
 TEST_CASE("LandslideZone movingFlows count", "[Game][G44][Landslide]") {
     NF::LandslideZone zone("rockies");
     NF::LandslideDebrisFlow a; a.id = "a"; a.accelerate(3.f);
-    NF::LandslideDebrisFlow b; b.id = "b"; b.halted = true; b.speedMetersPerSec = 2.f;
+    NF::LandslideDebrisFlow b; b.id = "b"; b.accelerate(2.f); b.halt();
     NF::LandslideDebrisFlow c; c.id = "c"; c.accelerate(0.5f);
     zone.addFlow(a);
     zone.addFlow(b);
