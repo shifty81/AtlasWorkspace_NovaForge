@@ -9394,3 +9394,107 @@ TEST_CASE("MonsoonSystem aggregate event counts", "[Game][G58][Monsoon]") {
     REQUIRE(sys.peakEventCount()     == 1); // only x (y=Onset, z inactive)
     REQUIRE(sys.floodingEventCount() == 1); // only x (y=10mm, z inactive)
 }
+
+// ── G59 — Lightning Storm System ────────────────────────────────
+
+TEST_CASE("LightningIntensity names cover all 5 values", "[Game][G59][Lightning]") {
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Scattered)) == "Scattered");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Moderate))  == "Moderate");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Frequent))  == "Frequent");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Severe))    == "Severe");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Extreme))   == "Extreme");
+}
+
+TEST_CASE("LightningStormPhase names cover all 5 values", "[Game][G59][Lightning]") {
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Building))    == "Building");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Active))      == "Active");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Peak))        == "Peak");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Weakening))   == "Weakening");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Dissipating)) == "Dissipating");
+}
+
+TEST_CASE("LightningEvent isSevere threshold is Severe+", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l1";
+    ev.intensity = NF::LightningIntensity::Frequent;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.intensity = NF::LightningIntensity::Severe;
+    REQUIRE(ev.isSevere());
+
+    ev.intensity = NF::LightningIntensity::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("LightningEvent isPeak and isWidespread", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l2";
+    ev.phase    = NF::LightningStormPhase::Active;
+    ev.coverage = 100.0f;
+    REQUIRE_FALSE(ev.isPeak());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.phase    = NF::LightningStormPhase::Peak;
+    ev.coverage = 400.0f;
+    REQUIRE(ev.isPeak());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("LightningEvent hazardScore calculation", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l3";
+    // Severe (uint8=3): (3+1) * 50 / 10 = 20.0
+    ev.intensity  = NF::LightningIntensity::Severe;
+    ev.strikeRate = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(20.0f));
+}
+
+TEST_CASE("LightningEvent activate and deactivate", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("LightningRegion severeCount and widespreadCount", "[Game][G59][Lightning]") {
+    NF::LightningRegion region("plains");
+
+    NF::LightningEvent a; a.id = "a"; a.intensity = NF::LightningIntensity::Extreme; a.phase = NF::LightningStormPhase::Peak; a.coverage = 500.0f; a.activate();
+    NF::LightningEvent b; b.id = "b"; b.intensity = NF::LightningIntensity::Moderate; b.phase = NF::LightningStormPhase::Active; b.coverage = 50.0f; b.activate();
+    NF::LightningEvent c; c.id = "c"; c.intensity = NF::LightningIntensity::Severe; c.coverage = 350.0f; // inactive
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()     == 1); // only a (c is inactive)
+    REQUIRE(region.peakCount()       == 1); // only a
+    REQUIRE(region.widespreadCount() == 1); // only a (coverage >= 300)
+}
+
+TEST_CASE("LightningSystem createRegion and tick propagation", "[Game][G59][Lightning]") {
+    NF::LightningSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("LightningSystem aggregate event counts", "[Game][G59][Lightning]") {
+    NF::LightningSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::LightningEvent x; x.id = "x"; x.intensity = NF::LightningIntensity::Extreme; x.phase = NF::LightningStormPhase::Peak; x.coverage = 500.0f; x.strikeRate = 80.0f; x.activate();
+    NF::LightningEvent y; y.id = "y"; y.intensity = NF::LightningIntensity::Scattered; y.phase = NF::LightningStormPhase::Building; y.coverage = 10.0f; y.activate();
+    NF::LightningEvent z; z.id = "z"; z.intensity = NF::LightningIntensity::Severe; z.phase = NF::LightningStormPhase::Peak; z.coverage = 400.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Scattered, z inactive)
+    REQUIRE(sys.peakEventCount()       == 1); // only x (y=Building, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=10km², z inactive)
+}

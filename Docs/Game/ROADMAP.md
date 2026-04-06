@@ -88,6 +88,7 @@
 | **G56** — Hail Storm System | HailSize×5, HailStormPhase×5, HailStormEvent, HailStormRegion, HailStormSystem | ✅ Done |
 | **G57** — Ice Storm System | IceThickness×5, IceStormPhase×5, IceStormEvent, IceStormRegion, IceStormSystem | ✅ Done |
 | **G58** — Monsoon System | MonsoonIntensity×5, MonsoonPhase×5, MonsoonEvent, MonsoonRegion, MonsoonSystem | ✅ Done |
+| **G59** — Lightning Storm System | LightningIntensity×5, LightningStormPhase×5, LightningEvent, LightningRegion, LightningSystem | ✅ Done |
 
 ---
 
@@ -157,6 +158,7 @@
 | **S37** — Icon Editor | IconSize×5, IconTheme×4, IconState×5, IconAsset, IconEditor | ✅ Done |
 | **S38** — Sprite Editor | SpriteOrigin×5, SpriteBlendMode×5, SpriteAnimState×5, SpriteAsset, SpriteEditor | ✅ Done |
 | **S39** — Tilemap Editor | TileFlipMode×5, TileLayerType×5, TileAnimMode×5, TileAsset, TilemapEditor | ✅ Done |
+| **S40** — Audio Clip Editor | AudioClipFormat×5, AudioClipState×5, AudioLoopMode×5, AudioClipAsset, AudioClipEditor | ✅ Done |
 
 ## Status Key
 

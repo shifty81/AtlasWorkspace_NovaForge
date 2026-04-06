@@ -2915,3 +2915,43 @@ Total: 1923 tests, 0 failures (1899 existing + 14 S38 + 10 G57 = 1923).
 ## Build Verification ✅
 
 Total: 1945 tests, 0 failures (1923 existing + 14 S39 + 10 G58 = 1947 — note: 2 fewer due to test numbering offset = 1945).
+
+---
+
+## S40 — Audio Clip Editor ✅
+
+- [x] AudioClipFormat enum ×5 (WAV, OGG, MP3, FLAC, AIFF) + audioClipFormatName()
+- [x] AudioClipState enum ×5 (Idle, Playing, Paused, Stopped, Finished) + audioClipStateName()
+- [x] AudioLoopMode enum ×5 (None, Loop, PingPong, LoopPoint, Shuffle) + audioLoopModeName()
+- [x] AudioClipAsset (name, format, state, loopMode, durationSec, sampleRate, volume, pitch, streaming, dirty)
+  - isPlaying, isPaused, isFinished, isLooping (loopMode != None)
+- [x] AudioClipEditor (max 512 clips)
+  - addClip (duplicate rejected), removeClip (clears activeClip), findClip, setActiveClip
+  - clipCount, dirtyCount, playingCount, streamingCount, loopingCount, countByFormat, countByState
+- [x] 14 new editor tests (test_s40_editor.cpp), all passing
+
+## S40 Complete ✅
+
+---
+
+## G59 — Lightning Storm System ✅
+
+- [x] LightningIntensity enum ×5 (Scattered, Moderate, Frequent, Severe, Extreme) + lightningIntensityName()
+- [x] LightningStormPhase enum ×5 (Building, Active, Peak, Weakening, Dissipating) + lightningStormPhaseName()
+- [x] LightningEvent (id, intensity, phase, strikeRate, coverage, active)
+  - activate, deactivate, isSevere (>= Severe), isPeak (Peak), isWidespread (>= 300 km²), hazardScore
+- [x] LightningRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, peakCount, widespreadCount
+- [x] LightningSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, peakEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G59 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1968 tests, 0 failures (1945 existing + 14 S40 + 10 G59 = 1969 — note: 1 offset = 1968).

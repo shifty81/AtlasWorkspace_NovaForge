@@ -11775,4 +11775,137 @@ private:
     size_t                     m_tickCount = 0;
 };
 
+// ── G59 — Lightning Storm System ────────────────────────────────
+
+enum class LightningIntensity : uint8_t {
+    Scattered, Moderate, Frequent, Severe, Extreme
+};
+inline const char* lightningIntensityName(LightningIntensity l) {
+    switch (l) {
+        case LightningIntensity::Scattered: return "Scattered";
+        case LightningIntensity::Moderate:  return "Moderate";
+        case LightningIntensity::Frequent:  return "Frequent";
+        case LightningIntensity::Severe:    return "Severe";
+        case LightningIntensity::Extreme:   return "Extreme";
+    }
+    return "Unknown";
+}
+
+enum class LightningStormPhase : uint8_t {
+    Building, Active, Peak, Weakening, Dissipating
+};
+inline const char* lightningStormPhaseName(LightningStormPhase p) {
+    switch (p) {
+        case LightningStormPhase::Building:    return "Building";
+        case LightningStormPhase::Active:      return "Active";
+        case LightningStormPhase::Peak:        return "Peak";
+        case LightningStormPhase::Weakening:   return "Weakening";
+        case LightningStormPhase::Dissipating: return "Dissipating";
+    }
+    return "Unknown";
+}
+
+struct LightningEvent {
+    std::string          id;
+    LightningIntensity   intensity    = LightningIntensity::Scattered;
+    LightningStormPhase  phase        = LightningStormPhase::Building;
+    float                strikeRate   = 0.0f;  // strikes per minute
+    float                coverage     = 0.0f;  // km²
+    bool                 active       = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()     const { return intensity >= LightningIntensity::Severe; }
+    [[nodiscard]] bool isPeak()       const { return phase == LightningStormPhase::Peak; }
+    [[nodiscard]] bool isWidespread() const { return coverage >= 300.0f; }
+    [[nodiscard]] float hazardScore() const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * strikeRate / 10.0f;
+    }
+};
+
+class LightningRegion {
+public:
+    explicit LightningRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const LightningEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] LightningEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t eventCount()   const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()    const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                     ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())     ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isPeak())       ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread()) ++c; return c;
+    }
+
+private:
+    std::string                m_name;
+    std::vector<LightningEvent> m_events;
+    size_t                     m_tickCount = 0;
+};
+
+class LightningSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    LightningRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] LightningRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();     return c;
+    }
+    [[nodiscard]] size_t severeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();     return c;
+    }
+    [[nodiscard]] size_t peakEventCount()       const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount();       return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount(); return c;
+    }
+
+private:
+    std::vector<LightningRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
 } // namespace NF
