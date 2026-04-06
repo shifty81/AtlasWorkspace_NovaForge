@@ -1,8 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "NF/UI/GLFWWindowProvider.h"
-#include "NF/UI/ImGuiLayer.h"
-#include "NF/UI/ImGuiBackend.h"
 #include "NF/UI/GLFWInputAdapter.h"
+#include "NF/UI/OpenGLBackend.h"
 #include "NF/UI/UI.h"
 #include "NF/Input/Input.h"
 
@@ -91,122 +90,14 @@ TEST_CASE("GLFWWindowProvider nativeHandle is null in stub", "[UI][M1][GLFW]") {
     window.shutdown();
 }
 
-// ── ImGuiLayer ───────────────────────────────────────────────────
+// ── OpenGLBackend ────────────────────────────────────────────────
 
-TEST_CASE("ImGuiLayer init and shutdown", "[UI][M1][ImGui]") {
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig wCfg;
-    window.init(wCfg);
-
-    NF::ImGuiLayer layer;
-    REQUIRE_FALSE(layer.isInitialized());
-    REQUIRE(layer.init(window));
-    REQUIRE(layer.isInitialized());
-
-    layer.shutdown();
-    REQUIRE_FALSE(layer.isInitialized());
-
-    window.shutdown();
-}
-
-TEST_CASE("ImGuiLayer fails with uninitialized window", "[UI][M1][ImGui]") {
-    NF::GLFWWindowProvider window; // not initialized
-    NF::ImGuiLayer layer;
-    REQUIRE_FALSE(layer.init(window));
-    REQUIRE_FALSE(layer.isInitialized());
-}
-
-TEST_CASE("ImGuiLayer frame lifecycle", "[UI][M1][ImGui]") {
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig wCfg;
-    window.init(wCfg);
-
-    NF::ImGuiLayer layer;
-    layer.init(window);
-
-    REQUIRE(layer.frameCount() == 0);
-    layer.beginFrame();
-    layer.endFrame();
-    REQUIRE(layer.frameCount() == 1);
-    layer.beginFrame();
-    layer.endFrame();
-    REQUIRE(layer.frameCount() == 2);
-
-    layer.shutdown();
-    window.shutdown();
-}
-
-TEST_CASE("ImGuiLayer docking", "[UI][M1][ImGui]") {
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig wCfg;
-    window.init(wCfg);
-
-    NF::ImGuiLayer layer;
-    layer.init(window);
-
-    layer.beginDockSpace("TestDock");
-    REQUIRE(layer.activeDockSpace() == "TestDock");
-    layer.endDockSpace();
-    REQUIRE(layer.activeDockSpace().empty());
-
-    layer.shutdown();
-    window.shutdown();
-}
-
-TEST_CASE("ImGuiLayer panel open and close", "[UI][M1][ImGui]") {
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig wCfg;
-    window.init(wCfg);
-
-    NF::ImGuiLayer layer;
-    layer.init(window);
-
-    REQUIRE(layer.beginPanel("Properties"));
-    REQUIRE(layer.activePanel() == "Properties");
-    layer.endPanel();
-    REQUIRE(layer.activePanel().empty());
-
-    // Panel with open=false
-    bool open = false;
-    REQUIRE_FALSE(layer.beginPanel("Closed", &open));
-
-    layer.shutdown();
-    window.shutdown();
-}
-
-TEST_CASE("ImGuiLayer viewport clear", "[UI][M1][ImGui]") {
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig wCfg;
-    window.init(wCfg);
-
-    NF::ImGuiLayer layer;
-    layer.init(window);
-
-    // Should not crash — stub is a no-op
-    layer.renderViewportClear(0.1f, 0.2f, 0.3f, 1.0f);
-    REQUIRE(layer.isInitialized());
-
-    layer.shutdown();
-    window.shutdown();
-}
-
-TEST_CASE("ImGuiLayer config defaults", "[UI][M1][ImGui]") {
-    NF::ImGuiLayer::ImGuiConfig cfg;
-    REQUIRE(cfg.dockingEnabled == true);
-    REQUIRE(cfg.viewportsEnabled == false);
-    REQUIRE(cfg.fontSize == 14.f);
-    REQUIRE(cfg.fontPath.empty());
-    REQUIRE(cfg.darkTheme == true);
-}
-
-// ── ImGuiBackend ─────────────────────────────────────────────────
-
-TEST_CASE("ImGuiBackend as UIBackend", "[UI][M1][Backend]") {
-    NF::ImGuiBackend backend;
+TEST_CASE("OpenGLBackend as UIBackend", "[UI][M1][Backend]") {
+    NF::OpenGLBackend backend;
     NF::UIBackend* base = &backend;
 
     REQUIRE(base->init(1280, 800));
-    REQUIRE(std::string(base->backendName()) == "ImGui");
+    REQUIRE(std::string(base->backendName()) == "OpenGL");
     REQUIRE(base->isGPUAccelerated());
 
     base->beginFrame(1280, 800);
@@ -214,8 +105,8 @@ TEST_CASE("ImGuiBackend as UIBackend", "[UI][M1][Backend]") {
     base->shutdown();
 }
 
-TEST_CASE("ImGuiBackend flush records stats", "[UI][M1][Backend]") {
-    NF::ImGuiBackend backend;
+TEST_CASE("OpenGLBackend flush records stats", "[UI][M1][Backend]") {
+    NF::OpenGLBackend backend;
     backend.init(800, 600);
 
     NF::UIVertex verts[4] = {};
@@ -230,8 +121,8 @@ TEST_CASE("ImGuiBackend flush records stats", "[UI][M1][Backend]") {
     backend.shutdown();
 }
 
-TEST_CASE("ImGuiBackend flush with zero vertices is no-op", "[UI][M1][Backend]") {
-    NF::ImGuiBackend backend;
+TEST_CASE("OpenGLBackend flush with zero vertices is no-op", "[UI][M1][Backend]") {
+    NF::OpenGLBackend backend;
     backend.init(800, 600);
 
     backend.beginFrame(800, 600);
@@ -241,25 +132,6 @@ TEST_CASE("ImGuiBackend flush with zero vertices is no-op", "[UI][M1][Backend]")
     backend.endFrame();
 
     backend.shutdown();
-}
-
-TEST_CASE("ImGuiBackend setImGuiLayer", "[UI][M1][Backend]") {
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig wCfg;
-    window.init(wCfg);
-
-    NF::ImGuiLayer layer;
-    layer.init(window);
-
-    NF::ImGuiBackend backend;
-    backend.init(1280, 800);
-    backend.setImGuiLayer(&layer);
-    // Verify no crash; layer pointer is stored
-    REQUIRE(backend.isGPUAccelerated());
-
-    backend.shutdown();
-    layer.shutdown();
-    window.shutdown();
 }
 
 // ── GLFWInputAdapter ─────────────────────────────────────────────
@@ -346,9 +218,9 @@ TEST_CASE("GLFWInputAdapter attach requires initialized window", "[UI][M1][Input
     input.shutdown();
 }
 
-// ── Full M1 Integration ──────────────────────────────────────────
+// ── Full M1 Integration (Atlas UI — no ImGui) ────────────────────
 
-TEST_CASE("M1 integration: window, layer, backend, adapter", "[UI][M1][Integration]") {
+TEST_CASE("M1 integration: window, OpenGL backend, adapter", "[UI][M1][Integration]") {
     // 1. Window
     NF::GLFWWindowProvider window;
     NF::GLFWWindowProvider::WindowConfig wCfg;
@@ -357,23 +229,16 @@ TEST_CASE("M1 integration: window, layer, backend, adapter", "[UI][M1][Integrati
     wCfg.title  = "Integration Test";
     REQUIRE(window.init(wCfg));
 
-    // 2. ImGui layer
-    NF::ImGuiLayer layer;
-    NF::ImGuiLayer::ImGuiConfig iCfg;
-    iCfg.dockingEnabled = true;
-    REQUIRE(layer.init(window, iCfg));
-
-    // 3. Backend
-    NF::ImGuiBackend backend;
+    // 2. OpenGL Backend (Atlas UI — no ImGui)
+    NF::OpenGLBackend backend;
     REQUIRE(backend.init(wCfg.width, wCfg.height));
-    backend.setImGuiLayer(&layer);
 
-    // 4. UIRenderer with backend
+    // 3. UIRenderer with backend
     NF::UIRenderer renderer;
     renderer.init();
     renderer.setBackend(&backend);
 
-    // 5. Input
+    // 4. Input
     NF::InputSystem input;
     input.init();
     NF::GLFWInputAdapter adapter(input);
@@ -383,14 +248,6 @@ TEST_CASE("M1 integration: window, layer, backend, adapter", "[UI][M1][Integrati
     REQUIRE_FALSE(window.shouldClose());
     window.pollEvents();
 
-    layer.beginFrame();
-    layer.beginDockSpace();
-
-    layer.beginPanel("Scene");
-    layer.endPanel();
-
-    layer.endDockSpace();
-
     backend.beginFrame(window.width(), window.height());
     renderer.beginFrame(static_cast<float>(window.width()),
                         static_cast<float>(window.height()));
@@ -398,9 +255,6 @@ TEST_CASE("M1 integration: window, layer, backend, adapter", "[UI][M1][Integrati
     renderer.endFrame();
     backend.endFrame();
 
-    layer.endFrame();
-
-    REQUIRE(layer.frameCount() == 1);
     REQUIRE(backend.lastVertexCount() == 4);
     REQUIRE(backend.lastIndexCount() == 6);
 
@@ -415,7 +269,6 @@ TEST_CASE("M1 integration: window, layer, backend, adapter", "[UI][M1][Integrati
     adapter.detach();
     renderer.shutdown();
     backend.shutdown();
-    layer.shutdown();
     window.shutdown();
     input.shutdown();
 }
