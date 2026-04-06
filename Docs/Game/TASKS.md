@@ -2226,3 +2226,51 @@ Total: 1552 tests, 0 failures (1528 existing + 14 S23 + 10 G42 = 1552).
 ## Build Verification ✅
 
 Total: 1576 tests, 0 failures (1552 existing + 14 S24 + 10 G43 = 1576).
+
+---
+
+## S25 — Undo/Redo System ✅
+
+- [x] UndoActionType enum ×8 (Create, Delete, Move, Resize, Rename, Modify, Group, Ungroup)
+  - undoActionTypeName() for all 8 types
+- [x] UndoActionState enum ×4 (Pending, Applied, Undone, Invalid)
+  - undoActionStateName() for all 4 states
+- [x] UndoAction struct (id, description, type, state)
+  - apply (sets Applied), undo (sets Undone only if Applied), invalidate (sets Invalid)
+  - isApplied, isUndone, isValid (state != Invalid), canUndo (isApplied), canRedo (isUndone)
+- [x] UndoGroup — named group of UndoActions
+  - addAction (duplicate id rejected), removeAction, find
+  - applyAll, undoAll (only Applied actions), actionCount, appliedCount, name
+- [x] UndoRedoSystem — stack-based undo/redo manager (max 64 groups)
+  - pushGroup (clears redo stack, rejects if full), undo, redo
+  - canUndo, canRedo, undoDepth, redoDepth, clear
+- [x] 14 new editor tests (test_s25_editor.cpp), all passing
+
+## S25 Complete ✅
+
+---
+
+## G44 — Landslide System ✅
+
+- [x] LandslideType enum ×8 (Debris, Rockfall, Mudflow, Slump, Creep, Avalanche, Earthflow, Topple)
+  - landslideTypeName() for all 8 types
+- [x] LandslideSeverity enum ×5 (Minor, Moderate, Significant, Major, Catastrophic)
+  - landslideSeverityName() for all 5 severities
+- [x] LandslideDebrisFlow struct (id, volumeCubicMeters, speedMetersPerSec, halted)
+  - halt, accelerate(speed), isMoving (speed > 0 and not halted)
+  - isDangerous (volume >= 1000m³), isCatastrophic (volume >= 100000m³)
+- [x] LandslideZone class — per-zone state + debris flow list
+  - setType, setSeverity, addFlow (duplicate id rejected), haltAll
+  - flowCount, movingFlows, name, type, severity, isActive, tick
+- [x] LandslideSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, activeCount, catastrophicCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G44 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1600 tests, 0 failures (1576 existing + 14 S25 + 10 G44 = 1600).

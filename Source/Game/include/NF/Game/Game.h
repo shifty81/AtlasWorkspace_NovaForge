@@ -9635,4 +9635,134 @@ private:
     size_t                 m_tickCount = 0;
 };
 
+// ============================================================
+// G44 — Landslide System
+// ============================================================
+
+enum class LandslideType : uint8_t { Debris, Rockfall, Mudflow, Slump, Creep, Avalanche, Earthflow, Topple };
+
+inline const char* landslideTypeName(LandslideType t) {
+    switch (t) {
+        case LandslideType::Debris:    return "Debris";
+        case LandslideType::Rockfall:  return "Rockfall";
+        case LandslideType::Mudflow:   return "Mudflow";
+        case LandslideType::Slump:     return "Slump";
+        case LandslideType::Creep:     return "Creep";
+        case LandslideType::Avalanche: return "Avalanche";
+        case LandslideType::Earthflow: return "Earthflow";
+        case LandslideType::Topple:    return "Topple";
+        default:                       return "Unknown";
+    }
+}
+
+enum class LandslideSeverity : uint8_t { Minor, Moderate, Significant, Major, Catastrophic };
+
+inline const char* landslideSeverityName(LandslideSeverity s) {
+    switch (s) {
+        case LandslideSeverity::Minor:        return "Minor";
+        case LandslideSeverity::Moderate:     return "Moderate";
+        case LandslideSeverity::Significant:  return "Significant";
+        case LandslideSeverity::Major:        return "Major";
+        case LandslideSeverity::Catastrophic: return "Catastrophic";
+        default:                              return "Unknown";
+    }
+}
+
+struct LandslideDebrisFlow {
+    std::string id;
+    float       volumeCubicMeters  = 0.f;
+    float       speedMetersPerSec  = 0.f;
+    bool        halted             = false;
+
+    void halt()                    { halted = true; }
+    void accelerate(float speed)   { speedMetersPerSec = speed; }
+
+    [[nodiscard]] bool isMoving()       const { return speedMetersPerSec > 0.f && !halted; }
+    [[nodiscard]] bool isDangerous()    const { return volumeCubicMeters >= 1000.f;         }
+    [[nodiscard]] bool isCatastrophic() const { return volumeCubicMeters >= 100000.f;       }
+};
+
+class LandslideZone {
+public:
+    explicit LandslideZone(const std::string& name) : m_name(name) {}
+
+    void setType(LandslideType t)         { m_type = t;     }
+    void setSeverity(LandslideSeverity s) { m_severity = s; }
+
+    bool addFlow(LandslideDebrisFlow f) {
+        for (auto& existing : m_flows) if (existing.id == f.id) return false;
+        m_flows.push_back(std::move(f));
+        return true;
+    }
+
+    void haltAll() { for (auto& f : m_flows) f.halt(); }
+
+    [[nodiscard]] size_t flowCount() const { return m_flows.size(); }
+
+    [[nodiscard]] size_t movingFlows() const {
+        size_t c = 0;
+        for (auto& f : m_flows) if (f.isMoving()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string&  name()     const { return m_name;     }
+    [[nodiscard]] LandslideType       type()     const { return m_type;     }
+    [[nodiscard]] LandslideSeverity   severity() const { return m_severity; }
+
+    [[nodiscard]] bool isActive() const {
+        for (auto& f : m_flows) if (f.isMoving()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                      m_name;
+    LandslideType                    m_type      = LandslideType::Debris;
+    LandslideSeverity                m_severity  = LandslideSeverity::Minor;
+    std::vector<LandslideDebrisFlow> m_flows;
+    size_t                           m_tickCount = 0;
+};
+
+class LandslideSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    LandslideZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] LandslideZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.severity() == LandslideSeverity::Catastrophic) c++;
+        return c;
+    }
+
+private:
+    std::vector<LandslideZone> m_zones;
+    size_t                     m_tickCount = 0;
+};
+
 } // namespace NF

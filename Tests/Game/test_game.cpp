@@ -7604,3 +7604,126 @@ TEST_CASE("FloodSystem floodingCount and tick", "[Game][G43][Flood]") {
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+// ============================================================
+// G44 — Landslide System
+// ============================================================
+
+TEST_CASE("LandslideType names cover all 8 values", "[Game][G44][Landslide]") {
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Debris))    == "Debris");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Rockfall))  == "Rockfall");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Mudflow))   == "Mudflow");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Slump))     == "Slump");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Creep))     == "Creep");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Avalanche)) == "Avalanche");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Earthflow)) == "Earthflow");
+    REQUIRE(std::string(NF::landslideTypeName(NF::LandslideType::Topple))    == "Topple");
+}
+
+TEST_CASE("LandslideSeverity names cover all 5 values", "[Game][G44][Landslide]") {
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Significant))  == "Significant");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Major))        == "Major");
+    REQUIRE(std::string(NF::landslideSeverityName(NF::LandslideSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("LandslideDebrisFlow isMoving and halt", "[Game][G44][Landslide]") {
+    NF::LandslideDebrisFlow flow;
+    flow.id = "flow-1";
+
+    REQUIRE_FALSE(flow.isMoving());
+    flow.accelerate(5.0f);
+    REQUIRE(flow.isMoving());
+    flow.halt();
+    REQUIRE_FALSE(flow.isMoving());
+}
+
+TEST_CASE("LandslideDebrisFlow isDangerous and isCatastrophic thresholds", "[Game][G44][Landslide]") {
+    NF::LandslideDebrisFlow flow;
+    flow.id = "flow-2";
+
+    flow.volumeCubicMeters = 500.f;
+    REQUIRE_FALSE(flow.isDangerous());
+    REQUIRE_FALSE(flow.isCatastrophic());
+
+    flow.volumeCubicMeters = 1000.f;
+    REQUIRE(flow.isDangerous());
+    REQUIRE_FALSE(flow.isCatastrophic());
+
+    flow.volumeCubicMeters = 100000.f;
+    REQUIRE(flow.isDangerous());
+    REQUIRE(flow.isCatastrophic());
+}
+
+TEST_CASE("LandslideZone addFlow and duplicate rejection", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("alps-north");
+    NF::LandslideDebrisFlow f1; f1.id = "f1"; f1.accelerate(3.f);
+    NF::LandslideDebrisFlow f2; f2.id = "f2"; f2.accelerate(1.f);
+    NF::LandslideDebrisFlow dup; dup.id = "f1";
+
+    REQUIRE(zone.addFlow(f1));
+    REQUIRE(zone.addFlow(f2));
+    REQUIRE_FALSE(zone.addFlow(dup));
+    REQUIRE(zone.flowCount() == 2);
+}
+
+TEST_CASE("LandslideZone haltAll stops all flows", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("pyrenees");
+    NF::LandslideDebrisFlow a; a.id = "a"; a.accelerate(4.f);
+    NF::LandslideDebrisFlow b; b.id = "b"; b.accelerate(2.f);
+    zone.addFlow(a);
+    zone.addFlow(b);
+
+    REQUIRE(zone.movingFlows() == 2);
+    zone.haltAll();
+    REQUIRE(zone.movingFlows() == 0);
+}
+
+TEST_CASE("LandslideZone isActive requires moving flow", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("andes");
+    REQUIRE_FALSE(zone.isActive());
+
+    NF::LandslideDebrisFlow f; f.id = "f1"; f.accelerate(1.5f);
+    zone.addFlow(f);
+    REQUIRE(zone.isActive());
+
+    zone.haltAll();
+    REQUIRE_FALSE(zone.isActive());
+}
+
+TEST_CASE("LandslideZone movingFlows count", "[Game][G44][Landslide]") {
+    NF::LandslideZone zone("rockies");
+    NF::LandslideDebrisFlow a; a.id = "a"; a.accelerate(3.f);
+    NF::LandslideDebrisFlow b; b.id = "b"; b.halted = true; b.speedMetersPerSec = 2.f;
+    NF::LandslideDebrisFlow c; c.id = "c"; c.accelerate(0.5f);
+    zone.addFlow(a);
+    zone.addFlow(b);
+    zone.addFlow(c);
+
+    REQUIRE(zone.movingFlows() == 2);
+}
+
+TEST_CASE("LandslideSystem createZone and duplicate rejection", "[Game][G44][Landslide]") {
+    NF::LandslideSystem sys;
+    REQUIRE(sys.createZone("zone-a") != nullptr);
+    REQUIRE(sys.createZone("zone-b") != nullptr);
+    REQUIRE(sys.createZone("zone-a") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("LandslideSystem activeCount and tick", "[Game][G44][Landslide]") {
+    NF::LandslideSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::LandslideDebrisFlow f; f.id = "f1"; f.accelerate(2.f);
+    sys.byName("z1")->addFlow(f);
+    sys.byName("z2")->setSeverity(NF::LandslideSeverity::Catastrophic);
+
+    REQUIRE(sys.activeCount()        == 1);
+    REQUIRE(sys.catastrophicCount()  == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}

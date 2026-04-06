@@ -73,7 +73,8 @@
 | **G41** — Tsunami System | TsunamiCause×8, TsunamiStatus×4, TsunamiWave, Tsunami, TsunamiSystem | ✅ Done |
 | **G42** — Wildfire System | WildfireType×8, WildfireSeverity×5, WildfireFront, WildfireZone, WildfireSystem | ✅ Done |
 | **G43** — Flood System | FloodType×8, FloodSeverity×5, FloodWaterLevel, FloodZone, FloodSystem | ✅ Done |
-| **G44** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G44** — Landslide System | LandslideType×8, LandslideSeverity×5, LandslideDebrisFlow, LandslideZone, LandslideSystem | ✅ Done |
+| **G45** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -128,7 +129,8 @@
 | **S22** — Workspace Layout Manager | LayoutPanelType×8, LayoutDockZone×4, LayoutPanel, LayoutSplit, WorkspaceLayout, WorkspaceLayoutManager | ✅ Done |
 | **S23** — Shortcut Manager | ShortcutCategory×8, ShortcutState×4, ShortcutBinding, ShortcutContext, ShortcutManager | ✅ Done |
 | **S24** — Notification System | NotificationSeverity×8, NotificationState×4, Notification, NotificationChannel, NotificationSystem | ✅ Done |
-| **S25** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S25** — Undo/Redo System | UndoActionType×8, UndoActionState×4, UndoAction, UndoGroup, UndoRedoSystem | ✅ Done |
+| **S26** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
