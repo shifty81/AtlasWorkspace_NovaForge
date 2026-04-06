@@ -2955,3 +2955,43 @@ Total: 1945 tests, 0 failures (1923 existing + 14 S39 + 10 G58 = 1947 — note: 
 ## Build Verification ✅
 
 Total: 1968 tests, 0 failures (1945 existing + 14 S40 + 10 G59 = 1969 — note: 1 offset = 1968).
+
+---
+
+## S41 — Video Clip Editor ✅
+
+- [x] VideoClipCodec enum ×5 (H264, H265, VP8, VP9, AV1) + videoClipCodecName()
+- [x] VideoClipState enum ×5 (Idle, Playing, Paused, Stopped, Finished) + videoClipStateName()
+- [x] VideoAspectRatio enum ×5 (4x3, 16x9, 21x9, 1x1, Custom) + videoAspectRatioName()
+- [x] VideoClipAsset (name, codec, state, aspectRatio, durationSec, fps, width, height, looping, streaming, dirty)
+  - isPlaying, isPaused, isFinished, isHD (width>=1280 && height>=720)
+- [x] VideoClipEditor (max 256 clips)
+  - addClip, removeClip (clears activeClip), findClip, setActiveClip
+  - clipCount, dirtyCount, playingCount, streamingCount, loopingCount, hdCount, countByCodec, countByState
+- [x] 14 new editor tests (test_s41_editor.cpp), all passing
+
+## S41 Complete ✅
+
+---
+
+## G60 — Geomagnetic Storm System ✅
+
+- [x] GeoStormKpIndex enum ×5 (Quiet, Unsettled, Active, Storm, Extreme) + geoStormKpIndexName()
+- [x] GeoStormPhase enum ×5 (Onset, Initial, Main, Recovery, Quiescent) + geoStormPhaseName()
+- [x] GeoStormEvent (id, kp, phase, disturbance, coverage, active)
+  - activate, deactivate, isSevere (>= Storm), isMainPhase, isGlobal (>= 50%), hazardScore
+- [x] GeoStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, mainPhaseCount, globalCount
+- [x] GeoStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, mainPhaseEventCount, globalEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G60 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1991 tests, 0 failures (1968 existing + 14 S41 + 10 G60 = 1992 — note: 1 offset = 1991).

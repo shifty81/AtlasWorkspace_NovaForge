@@ -89,6 +89,7 @@
 | **G57** — Ice Storm System | IceThickness×5, IceStormPhase×5, IceStormEvent, IceStormRegion, IceStormSystem | ✅ Done |
 | **G58** — Monsoon System | MonsoonIntensity×5, MonsoonPhase×5, MonsoonEvent, MonsoonRegion, MonsoonSystem | ✅ Done |
 | **G59** — Lightning Storm System | LightningIntensity×5, LightningStormPhase×5, LightningEvent, LightningRegion, LightningSystem | ✅ Done |
+| **G60** — Geomagnetic Storm System | GeoStormKpIndex×5, GeoStormPhase×5, GeoStormEvent, GeoStormRegion, GeoStormSystem | ✅ Done |
 
 ---
 
@@ -159,6 +160,7 @@
 | **S38** — Sprite Editor | SpriteOrigin×5, SpriteBlendMode×5, SpriteAnimState×5, SpriteAsset, SpriteEditor | ✅ Done |
 | **S39** — Tilemap Editor | TileFlipMode×5, TileLayerType×5, TileAnimMode×5, TileAsset, TilemapEditor | ✅ Done |
 | **S40** — Audio Clip Editor | AudioClipFormat×5, AudioClipState×5, AudioLoopMode×5, AudioClipAsset, AudioClipEditor | ✅ Done |
+| **S41** — Video Clip Editor | VideoClipCodec×5, VideoClipState×5, VideoAspectRatio×5, VideoClipAsset, VideoClipEditor | ✅ Done |
 
 ## Status Key
 
