@@ -79,6 +79,7 @@
 | **G47** — Solar Flare System | SolarFlareClass×8, SolarFlareEffect×6, SolarFlareEvent, SolarFlareRegion, SolarFlareSystem | ✅ Done |
 | **G48** — Meteor Shower System | MeteorShowerClass×8, MeteorImpactType×6, MeteorEvent, MeteorShowerRegion, MeteorShowerSystem | ✅ Done |
 | **G49** — Aurora System | AuroraType×8, AuroraIntensity×6, AuroraEvent, AuroraRegion, AuroraSystem | ✅ Done |
+| **G50** — Heatwave System | HeatwaveType×8, HeatwaveSeverity×6, HeatwaveEvent, HeatwaveRegion, HeatwaveSystem | ✅ Done |
 
 ---
 
@@ -139,6 +140,7 @@
 | **S28** — Keyframe Animation Editor | KeyframeInterpolation×8, AnimationTrackType×8, Keyframe, AnimationTrack, KeyframeAnimationEditor | ✅ Done |
 | **S29** — Curve Editor | CurveType×8, CurveHandleMode×4, CurveControlPoint, Curve, CurveEditorPanel | ✅ Done |
 | **S30** — Gradient Editor | GradientType×8, GradientInterpolation×4, GradientColorStop, GradientRamp, GradientEditorPanel | ✅ Done |
+| **S31** — Timeline Editor | TimelineEventType×8, TimelineTrackKind×4, TimelineEvent, TimelineTrack, TimelineEditorPanel | ✅ Done |
 
 ## Status Key
 

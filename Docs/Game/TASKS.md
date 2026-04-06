@@ -2515,3 +2515,52 @@ Total: 1699 tests, 0 failures (1673 existing + 14 S29 + 12 G48 = 1699).
 ## Build Verification ✅
 
 Total: 1725 tests, 0 failures (1699 existing + 14 S30 + 12 G49 = 1725).
+
+---
+
+## S31 — Timeline Editor ✅
+
+- [x] TimelineEventType enum ×8 (Keyframe, Marker, Clip, Trigger, Label, Camera, Audio, Custom)
+  - timelineEventTypeName() for all 8 types
+- [x] TimelineTrackKind enum ×4 (Animation, Audio, Event, Camera)
+  - timelineTrackKindName() for all 4 kinds
+- [x] TimelineEvent struct (id, type, time, duration, selected)
+  - select, deselect, setTime, setDuration
+- [x] TimelineTrack class — named collection of TimelineEvents (max 128 events)
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - eventCount, selectedCount, selectAll, deselectAll, duration, muted, setMuted, name, kind
+- [x] TimelineEditorPanel class — multi-track timeline editor (max 64 tracks)
+  - addTrack (duplicate/full rejected), removeTrack, findTrack
+  - trackCount, setActiveTrack, activeTrack
+  - play, pause, stop, isPlaying, setPlayhead, playhead
+  - selectAllEvents, deselectAllEvents
+- [x] 14 new editor tests (test_s31_editor.cpp), all passing
+
+## S31 Complete ✅
+
+---
+
+## G50 — Heatwave System ✅
+
+- [x] HeatwaveType enum ×8 (Regional, Urban, Coastal, Continental, Desert, Tropical, Polar, Custom)
+  - heatwaveTypeName() for all 8 types
+- [x] HeatwaveSeverity enum ×6 (Mild, Moderate, Severe, Extreme, Catastrophic, Unprecedented)
+  - heatwaveSeverityName() for all 6 levels
+- [x] HeatwaveEvent struct (id, type, severity, duration, peakTemp, active)
+  - activate, deactivate, isDangerous (>= Severe), isExtreme (>= Extreme), heatIndex
+- [x] HeatwaveRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, extremeCount
+  - name, tick, tickCount
+- [x] HeatwaveSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, extremeEventCount
+- [x] 14 new game tests (in test_game.cpp), all passing
+
+## G50 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1753 tests, 0 failures (1725 existing + 14 S31 + 14 G50 = 1753).

@@ -10500,4 +10500,146 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// G50 — Heatwave System
+
+enum class HeatwaveType : uint8_t {
+    Regional, Urban, Coastal, Continental, Desert, Tropical, Polar, Custom
+};
+
+inline const char* heatwaveTypeName(HeatwaveType t) {
+    switch (t) {
+        case HeatwaveType::Regional:     return "Regional";
+        case HeatwaveType::Urban:        return "Urban";
+        case HeatwaveType::Coastal:      return "Coastal";
+        case HeatwaveType::Continental:  return "Continental";
+        case HeatwaveType::Desert:       return "Desert";
+        case HeatwaveType::Tropical:     return "Tropical";
+        case HeatwaveType::Polar:        return "Polar";
+        case HeatwaveType::Custom:       return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class HeatwaveSeverity : uint8_t {
+    Mild, Moderate, Severe, Extreme, Catastrophic, Unprecedented
+};
+
+inline const char* heatwaveSeverityName(HeatwaveSeverity s) {
+    switch (s) {
+        case HeatwaveSeverity::Mild:          return "Mild";
+        case HeatwaveSeverity::Moderate:      return "Moderate";
+        case HeatwaveSeverity::Severe:        return "Severe";
+        case HeatwaveSeverity::Extreme:       return "Extreme";
+        case HeatwaveSeverity::Catastrophic:  return "Catastrophic";
+        case HeatwaveSeverity::Unprecedented: return "Unprecedented";
+    }
+    return "Unknown";
+}
+
+struct HeatwaveEvent {
+    std::string      id;
+    HeatwaveType     type       = HeatwaveType::Regional;
+    HeatwaveSeverity severity   = HeatwaveSeverity::Mild;
+    float            duration   = 1.0f;
+    float            peakTemp   = 30.0f;
+    bool             active     = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isDangerous() const {
+        return static_cast<uint8_t>(severity) >= static_cast<uint8_t>(HeatwaveSeverity::Severe);
+    }
+    [[nodiscard]] bool isExtreme() const {
+        return static_cast<uint8_t>(severity) >= static_cast<uint8_t>(HeatwaveSeverity::Extreme);
+    }
+    [[nodiscard]] float heatIndex() const {
+        return (static_cast<float>(static_cast<uint8_t>(severity)) + 1.0f) * peakTemp;
+    }
+};
+
+class HeatwaveRegion {
+public:
+    explicit HeatwaveRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const HeatwaveEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] HeatwaveEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()     const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t extremeCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isExtreme()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<HeatwaveEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class HeatwaveSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    HeatwaveRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] HeatwaveRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t extremeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.extremeCount();
+        return c;
+    }
+
+private:
+    std::vector<HeatwaveRegion> m_regions;
+    size_t                      m_tickCount = 0;
+};
+
 } // namespace NF

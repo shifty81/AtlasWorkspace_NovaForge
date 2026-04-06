@@ -8369,3 +8369,142 @@ TEST_CASE("AuroraSystem activeEventCount and stormEventCount", "[Game][G49][Auro
     sys.tick();
     REQUIRE(sys.tickCount() == 1);
 }
+
+// ── G50 — Heatwave System ─────────────────────────────────────────
+
+TEST_CASE("HeatwaveType names cover all 8 values", "[Game][G50][Heatwave]") {
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Regional))    == "Regional");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Urban))       == "Urban");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Coastal))     == "Coastal");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Continental)) == "Continental");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Desert))      == "Desert");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Tropical))    == "Tropical");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Polar))       == "Polar");
+    REQUIRE(std::string(NF::heatwaveTypeName(NF::HeatwaveType::Custom))      == "Custom");
+}
+
+TEST_CASE("HeatwaveSeverity names cover all 6 values", "[Game][G50][Heatwave]") {
+    REQUIRE(std::string(NF::heatwaveSeverityName(NF::HeatwaveSeverity::Mild))          == "Mild");
+    REQUIRE(std::string(NF::heatwaveSeverityName(NF::HeatwaveSeverity::Moderate))      == "Moderate");
+    REQUIRE(std::string(NF::heatwaveSeverityName(NF::HeatwaveSeverity::Severe))        == "Severe");
+    REQUIRE(std::string(NF::heatwaveSeverityName(NF::HeatwaveSeverity::Extreme))       == "Extreme");
+    REQUIRE(std::string(NF::heatwaveSeverityName(NF::HeatwaveSeverity::Catastrophic))  == "Catastrophic");
+    REQUIRE(std::string(NF::heatwaveSeverityName(NF::HeatwaveSeverity::Unprecedented)) == "Unprecedented");
+}
+
+TEST_CASE("HeatwaveEvent isDangerous and isExtreme thresholds", "[Game][G50][Heatwave]") {
+    NF::HeatwaveEvent ev;
+    ev.id = "hw1"; ev.severity = NF::HeatwaveSeverity::Mild;
+    REQUIRE_FALSE(ev.isDangerous());
+    REQUIRE_FALSE(ev.isExtreme());
+
+    ev.severity = NF::HeatwaveSeverity::Severe;
+    REQUIRE(ev.isDangerous());
+    REQUIRE_FALSE(ev.isExtreme());
+
+    ev.severity = NF::HeatwaveSeverity::Extreme;
+    REQUIRE(ev.isDangerous());
+    REQUIRE(ev.isExtreme());
+
+    ev.severity = NF::HeatwaveSeverity::Unprecedented;
+    REQUIRE(ev.isDangerous());
+    REQUIRE(ev.isExtreme());
+}
+
+TEST_CASE("HeatwaveEvent heatIndex calculation", "[Game][G50][Heatwave]") {
+    NF::HeatwaveEvent ev;
+    ev.severity = NF::HeatwaveSeverity::Severe; // index 2 → (2+1)*peakTemp
+    ev.peakTemp = 40.0f;
+    REQUIRE(ev.heatIndex() == Catch::Approx(120.0f));
+}
+
+TEST_CASE("HeatwaveEvent activate and deactivate toggle active", "[Game][G50][Heatwave]") {
+    NF::HeatwaveEvent ev; ev.id = "hw-1";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("HeatwaveRegion addEvent and duplicate rejection", "[Game][G50][Heatwave]") {
+    NF::HeatwaveRegion region("sahara");
+
+    NF::HeatwaveEvent a; a.id = "ev-a";
+    NF::HeatwaveEvent b; b.id = "ev-b";
+    NF::HeatwaveEvent dup; dup.id = "ev-a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("HeatwaveRegion activateAll and deactivateAll", "[Game][G50][Heatwave]") {
+    NF::HeatwaveRegion region("mediterranean");
+
+    NF::HeatwaveEvent a; a.id = "a";
+    NF::HeatwaveEvent b; b.id = "b";
+    region.addEvent(a);
+    region.addEvent(b);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("HeatwaveRegion activeCount and extremeCount", "[Game][G50][Heatwave]") {
+    NF::HeatwaveRegion region("asia-pacific");
+
+    NF::HeatwaveEvent extreme; extreme.id = "e1"; extreme.severity = NF::HeatwaveSeverity::Extreme; extreme.activate();
+    NF::HeatwaveEvent mild;    mild.id    = "m1"; mild.severity    = NF::HeatwaveSeverity::Mild;    mild.activate();
+    NF::HeatwaveEvent idle;    idle.id    = "i1"; idle.severity    = NF::HeatwaveSeverity::Moderate;
+
+    region.addEvent(extreme);
+    region.addEvent(mild);
+    region.addEvent(idle);
+
+    REQUIRE(region.activeCount()  == 2);
+    REQUIRE(region.extremeCount() == 1);
+}
+
+TEST_CASE("HeatwaveSystem createRegion and duplicate rejection", "[Game][G50][Heatwave]") {
+    NF::HeatwaveSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("HeatwaveSystem tick propagates to all regions", "[Game][G50][Heatwave]") {
+    NF::HeatwaveSystem sys;
+    sys.createRegion("a");
+    sys.createRegion("b");
+
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()              == 3);
+    REQUIRE(sys.byName("a")->tickCount() == 3);
+    REQUIRE(sys.byName("b")->tickCount() == 3);
+}
+
+TEST_CASE("HeatwaveSystem activeEventCount and extremeEventCount", "[Game][G50][Heatwave]") {
+    NF::HeatwaveSystem sys;
+    sys.createRegion("reg1");
+    sys.createRegion("reg2");
+
+    NF::HeatwaveEvent ae; ae.id = "ae1"; ae.severity = NF::HeatwaveSeverity::Catastrophic; ae.activate();
+    NF::HeatwaveEvent xe; xe.id = "xe1"; xe.severity = NF::HeatwaveSeverity::Extreme;      xe.activate();
+    NF::HeatwaveEvent ie; ie.id = "ie1"; ie.severity = NF::HeatwaveSeverity::Mild;
+
+    sys.byName("reg1")->addEvent(ae);
+    sys.byName("reg1")->addEvent(ie);
+    sys.byName("reg2")->addEvent(xe);
+
+    REQUIRE(sys.activeEventCount()  == 2); // ae and xe are active
+    REQUIRE(sys.extremeEventCount() == 2); // Catastrophic and Extreme both >= Extreme
+
+    sys.tick();
+    REQUIRE(sys.tickCount() == 1);
+}
