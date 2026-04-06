@@ -1705,3 +1705,78 @@ G34 (Insurgency System) fully delivered:
 ## Build Verification ✅
 
 Total: 1349 tests, 0 failures (1322 existing + 15 S15 + 12 G34 = 1349).
+
+---
+
+## S16 — Hot-Reload System ✅
+
+- [x] HotReloadAssetType enum ×8 (Script, Shader, Texture, Mesh, Audio, Config, Level, Material)
+  - hotReloadAssetTypeName() for all 8 types
+- [x] HotReloadStatus enum ×5 (Idle, Pending, Reloading, Success, Failed)
+- [x] HotReloadEntry struct (assetPath, assetType, status, reloadCount, errorMessage)
+  - isPending(), isReloading(), hasError(), isSuccess()
+  - markPending/markSuccess/markFailed lifecycle
+- [x] HotReloadWatcher class — asset watch registry
+  - watch/unwatch (max 256, no duplicates), findEntry
+  - triggerReload, pendingCount
+- [x] HotReloadDispatcher class — flush pending reloads to success
+  - dispatchPending, totalDispatched
+- [x] HotReloadSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - watch/unwatch/triggerReload delegation
+  - tick dispatches pending reloads
+  - watchedCount, pendingCount, totalDispatched
+- [x] 14 new editor tests (test_s16_editor.cpp), all passing
+
+## S16 Complete ✅
+
+S16 (Hot-Reload System) fully delivered:
+- HotReloadAssetType×8 with name helpers
+- HotReloadStatus×5 for full lifecycle tracking
+- HotReloadEntry with pending/success/failed state management
+- HotReloadWatcher with asset registration and trigger support
+- HotReloadDispatcher that flushes pending reloads
+- HotReloadSystem as top-level coordinator with tick-based dispatch
+- 14 new editor tests, all passing
+
+---
+
+## G35 — Plague System ✅
+
+- [x] PlagueType enum ×8 (Bacterial, Viral, Fungal, Parasitic, Prion, Genetic, Chemical, Radiation)
+  - plagueTypeName() for all 8 types
+- [x] InfectionStatus enum ×5 (Healthy, Exposed, Infected, Recovering, Immune)
+- [x] PlagueCarrier struct (id, name, status, infectivity, immunity, daysInfected)
+  - isHealthy/isExposed/isInfected/isRecovering/isImmune predicates
+  - expose/infect/recover/becomeImmune lifecycle transitions
+  - fully-immune carriers block exposure
+- [x] PlagueStat struct (id, region, type, transmissionRate, mortalityRate, incubationDays, contained)
+  - isLethal(), isContained(), isSpreading()
+  - contain/release lifecycle
+- [x] PlagueRegion class — carrier population per region
+  - addCarrier/removeCarrier (max 512, no duplicates), findCarrier
+  - infectedCount, immuneCount, healthyCount
+  - tick propagation
+- [x] PlagueSystem class — multi-region coordinator
+  - createRegion (max 32, unique names), regionByName
+  - addPlagueStat (max 16, no duplicates), findPlague
+  - tick propagates to all regions
+  - totalInfected, totalImmune, activePlagueCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G35 Complete ✅
+
+G35 (Plague System) fully delivered:
+- PlagueType×8 with name helpers
+- InfectionStatus×5 for full epidemic state tracking
+- PlagueCarrier with guarded status transitions and immunity model
+- PlagueStat with transmission/mortality parameters and containment state
+- PlagueRegion with population management and aggregate counts
+- PlagueSystem as multi-region coordinator with plague tracking
+- 11 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1374 tests, 0 failures (1349 existing + 14 S16 + 11 G35 = 1374).

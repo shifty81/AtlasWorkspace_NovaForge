@@ -8228,4 +8228,217 @@ private:
     size_t                          m_tickCount = 0;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G35 — Plague System
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class PlagueType : uint8_t {
+    Bacterial = 0,
+    Viral     = 1,
+    Fungal    = 2,
+    Parasitic = 3,
+    Prion     = 4,
+    Genetic   = 5,
+    Chemical  = 6,
+    Radiation = 7
+};
+
+inline const char* plagueTypeName(PlagueType t) {
+    switch (t) {
+        case PlagueType::Bacterial: return "Bacterial";
+        case PlagueType::Viral:     return "Viral";
+        case PlagueType::Fungal:    return "Fungal";
+        case PlagueType::Parasitic: return "Parasitic";
+        case PlagueType::Prion:     return "Prion";
+        case PlagueType::Genetic:   return "Genetic";
+        case PlagueType::Chemical:  return "Chemical";
+        case PlagueType::Radiation: return "Radiation";
+        default:                    return "Unknown";
+    }
+}
+
+enum class InfectionStatus : uint8_t {
+    Healthy    = 0,
+    Exposed    = 1,
+    Infected   = 2,
+    Recovering = 3,
+    Immune     = 4
+};
+
+struct PlagueCarrier {
+    std::string     id;
+    std::string     name;
+    InfectionStatus status        = InfectionStatus::Healthy;
+    float           infectivity   = 0.f;  // 0–1
+    float           immunity      = 0.f;  // 0–1
+    int             daysInfected  = 0;
+
+    [[nodiscard]] bool isHealthy()    const { return status == InfectionStatus::Healthy; }
+    [[nodiscard]] bool isExposed()    const { return status == InfectionStatus::Exposed; }
+    [[nodiscard]] bool isInfected()   const { return status == InfectionStatus::Infected; }
+    [[nodiscard]] bool isRecovering() const { return status == InfectionStatus::Recovering; }
+    [[nodiscard]] bool isImmune()     const { return status == InfectionStatus::Immune; }
+
+    bool expose() {
+        if (status != InfectionStatus::Healthy) return false;
+        if (immunity >= 1.f) return false; // fully immune, cannot be exposed
+        status = InfectionStatus::Exposed;
+        return true;
+    }
+
+    bool infect() {
+        if (status != InfectionStatus::Exposed) return false;
+        status = InfectionStatus::Infected;
+        return true;
+    }
+
+    bool recover() {
+        if (status != InfectionStatus::Infected && status != InfectionStatus::Recovering) return false;
+        status = InfectionStatus::Recovering;
+        return true;
+    }
+
+    bool becomeImmune() {
+        if (status == InfectionStatus::Healthy || status == InfectionStatus::Recovering
+            || status == InfectionStatus::Immune) {
+            status = InfectionStatus::Immune;
+            immunity = 1.f;
+            return true;
+        }
+        return false;
+    }
+};
+
+struct PlagueStat {
+    std::string id;
+    std::string region;
+    PlagueType  type            = PlagueType::Viral;
+    float       transmissionRate = 0.f;  // R0 factor
+    float       mortalityRate    = 0.f;  // 0–1
+    float       incubationDays   = 0.f;
+    bool        contained        = false;
+
+    [[nodiscard]] bool isLethal()    const { return mortalityRate > 0.f; }
+    [[nodiscard]] bool isContained() const { return contained; }
+    [[nodiscard]] bool isSpreading() const { return !contained && transmissionRate > 1.f; }
+
+    void contain()  { contained = true; }
+    void release()  { contained = false; }
+};
+
+class PlagueRegion {
+public:
+    static constexpr size_t kMaxCarriers = 512;
+
+    explicit PlagueRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    bool addCarrier(const PlagueCarrier& carrier) {
+        if (m_carriers.size() >= kMaxCarriers) return false;
+        for (const auto& c : m_carriers) { if (c.id == carrier.id) return false; }
+        m_carriers.push_back(carrier);
+        return true;
+    }
+
+    bool removeCarrier(const std::string& carrierId) {
+        for (auto it = m_carriers.begin(); it != m_carriers.end(); ++it) {
+            if (it->id == carrierId) { m_carriers.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] PlagueCarrier* findCarrier(const std::string& carrierId) {
+        for (auto& c : m_carriers) { if (c.id == carrierId) return &c; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t carrierCount()   const { return m_carriers.size(); }
+    [[nodiscard]] size_t infectedCount()  const {
+        size_t n = 0;
+        for (const auto& c : m_carriers) { if (c.isInfected()) ++n; }
+        return n;
+    }
+    [[nodiscard]] size_t immuneCount() const {
+        size_t n = 0;
+        for (const auto& c : m_carriers) { if (c.isImmune()) ++n; }
+        return n;
+    }
+    [[nodiscard]] size_t healthyCount() const {
+        size_t n = 0;
+        for (const auto& c : m_carriers) { if (c.isHealthy()) ++n; }
+        return n;
+    }
+
+    void tick(float /*dt*/) { m_tickCount++; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<PlagueCarrier> m_carriers;
+    size_t                    m_tickCount = 0;
+};
+
+class PlagueSystem {
+public:
+    static constexpr size_t kMaxRegions = 32;
+    static constexpr size_t kMaxPlagueStats = 16;
+
+    PlagueRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= kMaxRegions) return nullptr;
+        for (const auto& r : m_regions) { if (r.name() == name) return nullptr; }
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] PlagueRegion* regionByName(const std::string& name) {
+        for (auto& r : m_regions) { if (r.name() == name) return &r; }
+        return nullptr;
+    }
+
+    bool addPlagueStat(const PlagueStat& stat) {
+        if (m_plagues.size() >= kMaxPlagueStats) return false;
+        for (const auto& p : m_plagues) { if (p.id == stat.id) return false; }
+        m_plagues.push_back(stat);
+        return true;
+    }
+
+    [[nodiscard]] PlagueStat* findPlague(const std::string& id) {
+        for (auto& p : m_plagues) { if (p.id == id) return &p; }
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& r : m_regions) r.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount()     const { return m_regions.size(); }
+    [[nodiscard]] size_t plagueCount()     const { return m_plagues.size(); }
+    [[nodiscard]] size_t tickCount()       const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalInfected() const {
+        size_t n = 0;
+        for (const auto& r : m_regions) n += r.infectedCount();
+        return n;
+    }
+
+    [[nodiscard]] size_t totalImmune() const {
+        size_t n = 0;
+        for (const auto& r : m_regions) n += r.immuneCount();
+        return n;
+    }
+
+    [[nodiscard]] size_t activePlagueCount() const {
+        size_t n = 0;
+        for (const auto& p : m_plagues) { if (!p.isContained()) ++n; }
+        return n;
+    }
+
+private:
+    std::vector<PlagueRegion> m_regions;
+    std::vector<PlagueStat>   m_plagues;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF
