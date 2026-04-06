@@ -126,7 +126,7 @@ TEST_CASE("CommandPalette registerCommand and duplicate rejection", "[Editor][S2
     CommandPalette palette;
 
     PaletteCommand a; a.id = "new-file";  a.label = "New File";
-    PaletteCommand b; a.id = "new-file";  b.label = "New File Dup";
+    PaletteCommand b; b.id = "new-file";  b.label = "New File Dup";
     PaletteCommand c; c.id = "open-file"; c.label = "Open File";
 
     REQUIRE(palette.registerCommand(a));
