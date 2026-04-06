@@ -6815,4 +6815,277 @@ private:
     size_t m_discoveries = 0;
 };
 
+// ── G29 — Diplomacy System ──────────────────────────────────────
+
+enum class DiplomacyAction : uint8_t {
+    TradeAgreement,
+    NonAggression,
+    MilitaryAlliance,
+    TechSharing,
+    TerritoryExchange,
+    Embargo,
+    WarDeclaration,
+    PeaceTreaty
+};
+
+inline const char* diplomacyActionName(DiplomacyAction a) noexcept {
+    switch (a) {
+        case DiplomacyAction::TradeAgreement:    return "TradeAgreement";
+        case DiplomacyAction::NonAggression:     return "NonAggression";
+        case DiplomacyAction::MilitaryAlliance:  return "MilitaryAlliance";
+        case DiplomacyAction::TechSharing:       return "TechSharing";
+        case DiplomacyAction::TerritoryExchange: return "TerritoryExchange";
+        case DiplomacyAction::Embargo:           return "Embargo";
+        case DiplomacyAction::WarDeclaration:    return "WarDeclaration";
+        case DiplomacyAction::PeaceTreaty:       return "PeaceTreaty";
+        default:                                  return "Unknown";
+    }
+}
+
+enum class DiplomaticStance : uint8_t {
+    Hostile,
+    Unfriendly,
+    Neutral,
+    Friendly,
+    Allied
+};
+
+inline const char* diplomaticStanceName(DiplomaticStance s) noexcept {
+    switch (s) {
+        case DiplomaticStance::Hostile:    return "Hostile";
+        case DiplomaticStance::Unfriendly: return "Unfriendly";
+        case DiplomaticStance::Neutral:    return "Neutral";
+        case DiplomaticStance::Friendly:   return "Friendly";
+        case DiplomaticStance::Allied:     return "Allied";
+        default:                            return "Unknown";
+    }
+}
+
+struct DiplomaticRelation {
+    std::string factionA;
+    std::string factionB;
+    float opinion = 0.f;
+    DiplomaticStance stance = DiplomaticStance::Neutral;
+    size_t treatiesCount = 0;
+    bool atWar = false;
+
+    void adjustOpinion(float delta) {
+        opinion = std::max(-100.f, std::min(100.f, opinion + delta));
+        updateStance();
+    }
+
+    void updateStance() {
+        if (opinion <= -51.f)       stance = DiplomaticStance::Hostile;
+        else if (opinion <= -1.f)   stance = DiplomaticStance::Unfriendly;
+        else if (opinion <= 24.f)   stance = DiplomaticStance::Neutral;
+        else if (opinion <= 74.f)   stance = DiplomaticStance::Friendly;
+        else                        stance = DiplomaticStance::Allied;
+    }
+
+    void declareWar() { atWar = true; opinion = -100.f; stance = DiplomaticStance::Hostile; }
+    void declarePeace() { atWar = false; adjustOpinion(20.f); }
+
+    [[nodiscard]] bool isHostile() const { return stance == DiplomaticStance::Hostile; }
+    [[nodiscard]] bool isAllied() const { return stance == DiplomaticStance::Allied; }
+};
+
+struct Treaty {
+    std::string id;
+    DiplomacyAction action;
+    std::string factionA;
+    std::string factionB;
+    float durationSeconds = 0.f;
+    float elapsedSeconds = 0.f;
+    bool active = true;
+    bool expired = false;
+
+    void tick(float dt) {
+        if (!active || expired) return;
+        elapsedSeconds += dt;
+        if (durationSeconds > 0.f && elapsedSeconds >= durationSeconds) {
+            expired = true;
+            active = false;
+        }
+    }
+
+    [[nodiscard]] bool isActive() const { return active && !expired; }
+    [[nodiscard]] float remainingSeconds() const {
+        if (durationSeconds <= 0.f) return -1.f;
+        return std::max(0.f, durationSeconds - elapsedSeconds);
+    }
+    [[nodiscard]] bool isPermanent() const { return durationSeconds <= 0.f; }
+    void revoke() { active = false; }
+};
+
+class DiplomaticChannel {
+public:
+    explicit DiplomaticChannel(const std::string& ownerFaction)
+        : m_owner(ownerFaction) {}
+
+    bool addRelation(const std::string& otherFaction, float initialOpinion = 0.f) {
+        if (otherFaction == m_owner || m_relations.size() >= kMaxRelations) return false;
+        for (const auto& r : m_relations) {
+            if (r.factionB == otherFaction) return false;
+        }
+        DiplomaticRelation rel;
+        rel.factionA = m_owner;
+        rel.factionB = otherFaction;
+        rel.adjustOpinion(initialOpinion);
+        m_relations.push_back(rel);
+        return true;
+    }
+
+    [[nodiscard]] DiplomaticRelation* findRelation(const std::string& otherFaction) {
+        for (auto& r : m_relations) {
+            if (r.factionB == otherFaction) return &r;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const DiplomaticRelation* findRelation(const std::string& otherFaction) const {
+        for (const auto& r : m_relations) {
+            if (r.factionB == otherFaction) return &r;
+        }
+        return nullptr;
+    }
+
+    bool proposeTreaty(const std::string& otherFaction, DiplomacyAction action,
+                       float duration = 0.f) {
+        auto* rel = findRelation(otherFaction);
+        if (!rel) return false;
+        if (rel->atWar && action != DiplomacyAction::PeaceTreaty) return false;
+        if (m_treaties.size() >= kMaxTreaties) return false;
+
+        Treaty treaty;
+        treaty.id = "treaty_" + std::to_string(m_nextTreatyId++);
+        treaty.action = action;
+        treaty.factionA = m_owner;
+        treaty.factionB = otherFaction;
+        treaty.durationSeconds = duration;
+        m_treaties.push_back(treaty);
+        rel->treatiesCount++;
+
+        switch (action) {
+            case DiplomacyAction::TradeAgreement:    rel->adjustOpinion(10.f); break;
+            case DiplomacyAction::NonAggression:     rel->adjustOpinion(15.f); break;
+            case DiplomacyAction::MilitaryAlliance:  rel->adjustOpinion(25.f); break;
+            case DiplomacyAction::TechSharing:       rel->adjustOpinion(10.f); break;
+            case DiplomacyAction::TerritoryExchange: rel->adjustOpinion(5.f);  break;
+            case DiplomacyAction::Embargo:           rel->adjustOpinion(-20.f); break;
+            case DiplomacyAction::WarDeclaration:    rel->declareWar(); break;
+            case DiplomacyAction::PeaceTreaty:       rel->declarePeace(); break;
+        }
+        return true;
+    }
+
+    void tickTreaties(float dt) {
+        for (auto& t : m_treaties) t.tick(dt);
+    }
+
+    [[nodiscard]] size_t activeTreatyCount() const {
+        size_t count = 0;
+        for (const auto& t : m_treaties) {
+            if (t.isActive()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t relationCount() const { return m_relations.size(); }
+    [[nodiscard]] const std::string& owner() const { return m_owner; }
+    [[nodiscard]] const std::vector<DiplomaticRelation>& relations() const { return m_relations; }
+    [[nodiscard]] const std::vector<Treaty>& treaties() const { return m_treaties; }
+
+    [[nodiscard]] size_t alliedCount() const {
+        size_t count = 0;
+        for (const auto& r : m_relations) {
+            if (r.isAllied()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t hostileCount() const {
+        size_t count = 0;
+        for (const auto& r : m_relations) {
+            if (r.isHostile()) ++count;
+        }
+        return count;
+    }
+
+    static constexpr size_t kMaxRelations = 32;
+    static constexpr size_t kMaxTreaties = 64;
+
+private:
+    std::string m_owner;
+    std::vector<DiplomaticRelation> m_relations;
+    std::vector<Treaty> m_treaties;
+    size_t m_nextTreatyId = 1;
+};
+
+class DiplomacySystem {
+public:
+    int createChannel(const std::string& factionName) {
+        if (m_channels.size() >= kMaxChannels) return -1;
+        for (const auto& ch : m_channels) {
+            if (ch.owner() == factionName) return -1;
+        }
+        m_channels.emplace_back(factionName);
+        return static_cast<int>(m_channels.size()) - 1;
+    }
+
+    [[nodiscard]] DiplomaticChannel* channel(int index) {
+        if (index < 0 || index >= static_cast<int>(m_channels.size())) return nullptr;
+        return &m_channels[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] DiplomaticChannel* channelByName(const std::string& factionName) {
+        for (auto& ch : m_channels) {
+            if (ch.owner() == factionName) return &ch;
+        }
+        return nullptr;
+    }
+
+    bool establishRelation(const std::string& factionA, const std::string& factionB,
+                           float initialOpinion = 0.f) {
+        auto* chA = channelByName(factionA);
+        auto* chB = channelByName(factionB);
+        if (!chA || !chB) return false;
+        bool a = chA->addRelation(factionB, initialOpinion);
+        bool b = chB->addRelation(factionA, initialOpinion);
+        return a && b;
+    }
+
+    bool proposeTreaty(const std::string& from, const std::string& to,
+                       DiplomacyAction action, float duration = 0.f) {
+        auto* ch = channelByName(from);
+        if (!ch) return false;
+        return ch->proposeTreaty(to, action, duration);
+    }
+
+    void tick(float dt) {
+        for (auto& ch : m_channels) ch.tickTreaties(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t channelCount() const { return m_channels.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalActiveTreaties() const {
+        size_t count = 0;
+        for (const auto& ch : m_channels) count += ch.activeTreatyCount();
+        return count;
+    }
+
+    [[nodiscard]] size_t totalAlliances() const {
+        size_t count = 0;
+        for (const auto& ch : m_channels) count += ch.alliedCount();
+        return count;
+    }
+
+    static constexpr size_t kMaxChannels = 16;
+
+private:
+    std::vector<DiplomaticChannel> m_channels;
+    size_t m_tickCount = 0;
+};
+
 } // namespace NF
