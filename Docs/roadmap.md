@@ -112,15 +112,16 @@ All source repos migrated. Outstanding cleanup items carried forward to Phase 1-
 - [ ] `GraphEditorPanel` — node/pin rendering, drag-to-connect, compile → `GraphVM::compile()`
 - [ ] `IDEPanel` — `ProjectIndexer` scan of `Source/`, symbol search, go-to-definition
 
-### M1-C — Asset Editors (full 3D viewport via NFRenderViewport)
-- [ ] `MeshViewerPanel` — orbit + FPS cam, wireframe/solid/lit toggle
-- [ ] `MaterialEditorPanel` — PBR property sliders + live preview in `NFRenderViewport`
-- [ ] `SkeletalEditorPanel` — **NEW** — FPS viewport + bone hierarchy tree + weight paint mode
+### M1-C — Asset Editors (full 3D viewport via NFRenderViewport) ✅
+- [x] `NFRenderViewport` base class — standardized FPS cam, gizmo, render modes for all 3D editors
+- [x] `MeshViewerPanel` — orbit + FPS cam, wireframe/solid/lit toggle
+- [x] `MaterialEditorPanel` — PBR property sliders + live preview in `NFRenderViewport`
+- [x] `SkeletalEditorPanel` — **NEW** — FPS viewport + bone hierarchy tree + weight paint mode
   - Opening a skeletal asset from workspace prompt opens this panel with the file pre-loaded
-- [ ] `AnimationEditorPanel` — **NEW** — timeline, keyframe editor, blend tree view + `NFRenderViewport`
-- [ ] `ShipEditorPanel` — already substantial (22KB) ✅, wire to `NFRenderViewport` base
-- [ ] `CharacterEditorPanel` — already substantial (7KB) ✅, wire to `NFRenderViewport` base
-- [ ] `PrefabEditorPanel` — scene-in-a-box, wire to `NFRenderViewport`
+- [x] `AnimationEditorPanel` — **NEW** — timeline, keyframe editor, blend tree view + `NFRenderViewport`
+- [x] `ShipEditorPanel` — wired to `NFRenderViewport` base
+- [x] `CharacterEditorPanel` — wired to `NFRenderViewport` base
+- [x] `PrefabEditorPanel` — scene-in-a-box, wired to `NFRenderViewport`
 
 ### M1-D — Project Workspace & Selector
 - [ ] `ProjectPickerPanel` — scan `Project/` dir, list `.atlas.json` projects, select to load
@@ -251,19 +252,19 @@ These are **future decisions only**. Do not create these repos until Phase 5 arc
 |----------------------------------------|----------|----------|--------------------------------------------------------------|
 | `Editor.cpp` is 62-byte stub           | HIGH     | M1-A     | Full `NF::EditorApp` init needed                             |
 | `ViewportPanel` is shell only          | HIGH     | M1-B     | Needs framebuffer + FPS cam wiring                           |
-| `NFRenderViewport` base class missing  | HIGH     | M1-B     | All 3D editors need standardized FPS viewport                |
+| `NFRenderViewport` base class done   | ✅       | M1-B/C   | All 3D editors now inherit standardized FPS viewport         |
 | FPS camera not universal               | HIGH     | M1-B     | Right-click+WASD must be standard for all rendering editors  |
 | PIE mode not implemented               | HIGH     | M1-E     | PlayInEditor tool exists but not wired                       |
 | Live game mirror missing               | HIGH     | M1-F     | No LiveUpdateService or file-watch mechanism                 |
-| `SkeletalEditorPanel` missing          | HIGH     | M1-C     | Not yet created                                              |
-| `AnimationEditorPanel` missing         | HIGH     | M1-C     | Not yet created                                              |
+| `SkeletalEditorPanel` done           | ✅       | M1-C     | Implemented with NFRenderViewport base                       |
+| `AnimationEditorPanel` done          | ✅       | M1-C     | Implemented with NFRenderViewport base                       |
 | `GraphEditorPanel` is shell            | HIGH     | M1-B     | No node/pin rendering or GraphVM compile wiring              |
 | `ProjectPickerPanel` is stub           | HIGH     | M1-D     | 1.4KB, not functional                                        |
 | `.novaforge/pipeline/` empty           | HIGH     | M1-G     | No ChangeEvent infrastructure                                |
 | `AtlasAssistantPanel` not wired        | HIGH     | M1-G     | No SwissAgent routing                                        |
 | `Source/AI/` completely empty          | MED      | Phase 4  | No C++ AI runtime stubs                                      |
 | `WorldGraphPanel` is stub              | MED      | Phase 3  | 1.2KB, not functional                                        |
-| `MaterialEditorPanel` is stub          | MED      | M1-C     | 1.1KB only                                                   |
+| `MaterialEditorPanel` enhanced       | ✅       | M1-C     | Now includes NFRenderViewport + live preview + PBR sliders   |
 | `SoundEditorPanel` missing             | MED      | Phase 4-C| Not yet created                                              |
 | `ParticleEditorPanel` missing          | MED      | Phase 4-C| Not yet created                                              |
 | `TerrainEditorPanel` missing           | MED      | Phase 3  | Not yet created                                              |
