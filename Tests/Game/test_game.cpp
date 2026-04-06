@@ -5153,3 +5153,218 @@ TEST_CASE("PowerGridSystem restore all", "[Game][G26][Power]") {
     REQUIRE(restored >= 0);
     REQUIRE(g->findNode("c1")->online);
 }
+
+// ---------------------------------------------------------------------------
+// G27 — Vehicle System Tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("VehicleType names cover all 8 types", "[Game][G27][Vehicle]") {
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Rover))     == "Rover");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Hoverbike)) == "Hoverbike");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Mech))      == "Mech");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Shuttle))   == "Shuttle");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Crawler))   == "Crawler");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Speeder))   == "Speeder");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Tank))      == "Tank");
+    REQUIRE(std::string(NF::vehicleTypeName(NF::VehicleType::Dropship))  == "Dropship");
+}
+
+TEST_CASE("VehicleSeat enter and exit", "[Game][G27][Vehicle]") {
+    NF::VehicleSeat seat;
+    seat.id = "driver";
+    seat.label = "Driver";
+    seat.isDriver = true;
+
+    REQUIRE_FALSE(seat.occupied);
+    seat.enter("player_1");
+    REQUIRE(seat.occupied);
+    REQUIRE(seat.occupantId == "player_1");
+
+    seat.exit();
+    REQUIRE_FALSE(seat.occupied);
+    REQUIRE(seat.occupantId.empty());
+}
+
+TEST_CASE("VehicleComponent damage and repair", "[Game][G27][Vehicle]") {
+    NF::VehicleComponent comp;
+    comp.id = "engine";
+    comp.name = "Engine";
+
+    REQUIRE(comp.healthFraction() == Catch::Approx(1.f));
+    comp.applyDamage(30.f);
+    REQUIRE(comp.health == Catch::Approx(70.f));
+    REQUIRE(comp.functional);
+
+    comp.repair(10.f);
+    REQUIRE(comp.health == Catch::Approx(80.f));
+}
+
+TEST_CASE("VehicleComponent destroyed state", "[Game][G27][Vehicle]") {
+    NF::VehicleComponent comp;
+    comp.id = "wheel";
+    comp.name = "Wheel";
+
+    comp.applyDamage(150.f);
+    REQUIRE(comp.isDestroyed());
+    REQUIRE_FALSE(comp.functional);
+
+    comp.repair(50.f);
+    REQUIRE_FALSE(comp.isDestroyed());
+    REQUIRE(comp.functional);
+}
+
+TEST_CASE("Vehicle add and remove seats", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat s1; s1.id = "s1"; s1.label = "Driver"; s1.isDriver = true;
+    NF::VehicleSeat s2; s2.id = "s2"; s2.label = "Passenger";
+
+    REQUIRE(v.addSeat(s1));
+    REQUIRE(v.addSeat(s2));
+    REQUIRE(v.seatCount() == 2);
+
+    REQUIRE(v.removeSeat("s1"));
+    REQUIRE(v.seatCount() == 1);
+    REQUIRE(v.findSeat("s1") == nullptr);
+    REQUIRE(v.findSeat("s2") != nullptr);
+}
+
+TEST_CASE("Vehicle seat duplicate rejection", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat s; s.id = "s1"; s.label = "Driver";
+    REQUIRE(v.addSeat(s));
+    REQUIRE_FALSE(v.addSeat(s));
+    REQUIRE(v.seatCount() == 1);
+}
+
+TEST_CASE("Vehicle max seats", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    for (size_t i = 0; i < NF::Vehicle::kMaxSeats; ++i) {
+        NF::VehicleSeat s; s.id = "seat_" + std::to_string(i);
+        REQUIRE(v.addSeat(s));
+    }
+    REQUIRE(v.seatCount() == NF::Vehicle::kMaxSeats);
+
+    NF::VehicleSeat extra; extra.id = "extra";
+    REQUIRE_FALSE(v.addSeat(extra));
+}
+
+TEST_CASE("Vehicle add and remove components", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleComponent c1; c1.id = "engine"; c1.name = "Engine";
+    NF::VehicleComponent c2; c2.id = "wheel";  c2.name = "Wheel";
+
+    REQUIRE(v.addComponent(c1));
+    REQUIRE(v.addComponent(c2));
+    REQUIRE(v.componentCount() == 2);
+
+    REQUIRE(v.removeComponent("engine"));
+    REQUIRE(v.componentCount() == 1);
+    REQUIRE(v.findComponent("engine") == nullptr);
+}
+
+TEST_CASE("Vehicle occupant count", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat s1; s1.id = "s1"; s1.label = "Driver"; s1.isDriver = true;
+    NF::VehicleSeat s2; s2.id = "s2"; s2.label = "Passenger";
+    v.addSeat(s1);
+    v.addSeat(s2);
+
+    REQUIRE(v.occupantCount() == 0);
+    v.findSeat("s1")->enter("p1");
+    REQUIRE(v.occupantCount() == 1);
+    v.findSeat("s2")->enter("p2");
+    REQUIRE(v.occupantCount() == 2);
+}
+
+TEST_CASE("Vehicle has driver", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat driver; driver.id = "d"; driver.label = "Driver"; driver.isDriver = true;
+    NF::VehicleSeat passenger; passenger.id = "p"; passenger.label = "Passenger";
+    v.addSeat(driver);
+    v.addSeat(passenger);
+
+    REQUIRE_FALSE(v.hasDriver());
+    v.findSeat("p")->enter("p1");
+    REQUIRE_FALSE(v.hasDriver());
+    v.findSeat("d")->enter("p2");
+    REQUIRE(v.hasDriver());
+}
+
+TEST_CASE("Vehicle fuel consumption", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    v.setFuel(100.f);
+    v.setMaxFuel(100.f);
+    REQUIRE(v.hasFuel());
+    REQUIRE(v.fuelFraction() == Catch::Approx(1.f));
+
+    v.consumeFuel(40.f);
+    REQUIRE(v.fuel() == Catch::Approx(60.f));
+
+    v.consumeFuel(200.f);
+    REQUIRE(v.fuel() == Catch::Approx(0.f));
+    REQUIRE_FALSE(v.hasFuel());
+}
+
+TEST_CASE("Vehicle canOperate requires fuel engine operational driver", "[Game][G27][Vehicle]") {
+    NF::Vehicle v;
+    NF::VehicleSeat driver; driver.id = "d"; driver.isDriver = true;
+    v.addSeat(driver);
+    NF::VehicleComponent eng; eng.id = "eng"; eng.name = "Engine";
+    v.addComponent(eng);
+
+    REQUIRE_FALSE(v.canOperate()); // no engine active, no driver
+
+    v.setEngineActive(true);
+    REQUIRE_FALSE(v.canOperate()); // no driver
+
+    v.findSeat("d")->enter("player");
+    REQUIRE(v.canOperate());
+
+    v.setFuel(0.f);
+    REQUIRE_FALSE(v.canOperate()); // no fuel
+}
+
+TEST_CASE("VehicleSystem create vehicle", "[Game][G27][Vehicle]") {
+    NF::VehicleSystem sys;
+    int idx = sys.createVehicle("Rover Alpha", NF::VehicleType::Rover);
+    REQUIRE(idx == 0);
+    REQUIRE(sys.vehicleCount() == 1);
+
+    auto* v = sys.vehicle(idx);
+    REQUIRE(v != nullptr);
+    REQUIRE(v->name() == "Rover Alpha");
+    REQUIRE(v->type() == NF::VehicleType::Rover);
+}
+
+TEST_CASE("VehicleSystem max vehicles", "[Game][G27][Vehicle]") {
+    NF::VehicleSystem sys;
+    for (size_t i = 0; i < NF::VehicleSystem::kMaxVehicles; ++i) {
+        int idx = sys.createVehicle("V" + std::to_string(i), NF::VehicleType::Mech);
+        REQUIRE(idx >= 0);
+    }
+    REQUIRE(sys.vehicleCount() == NF::VehicleSystem::kMaxVehicles);
+    int overflow = sys.createVehicle("Extra", NF::VehicleType::Tank);
+    REQUIRE(overflow == -1);
+}
+
+TEST_CASE("VehicleSystem tick physics moves position", "[Game][G27][Vehicle]") {
+    NF::VehicleSystem sys;
+    int idx = sys.createVehicle("Speeder", NF::VehicleType::Speeder);
+    auto* v = sys.vehicle(idx);
+
+    // Set up a fully operable vehicle
+    NF::VehicleSeat driver; driver.id = "d"; driver.isDriver = true;
+    v->addSeat(driver);
+    v->findSeat("d")->enter("pilot");
+    NF::VehicleComponent eng; eng.id = "eng"; eng.name = "Engine";
+    v->addComponent(eng);
+    v->setEngineActive(true);
+    v->setFuel(100.f);
+    v->setSpeed(10.f);
+
+    float startX = v->position().x;
+    sys.tickVehicle(idx, 1.f);
+
+    REQUIRE(v->position().x > startX);
+    REQUIRE(v->fuel() < 100.f);
+}

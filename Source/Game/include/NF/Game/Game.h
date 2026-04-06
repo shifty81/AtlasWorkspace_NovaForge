@@ -6292,4 +6292,276 @@ private:
     std::vector<std::string> m_gridNames;
 };
 
+// ---------------------------------------------------------------------------
+// G27 — Vehicle System
+// ---------------------------------------------------------------------------
+
+enum class VehicleType : uint8_t {
+    Rover, Hoverbike, Mech, Shuttle, Crawler, Speeder, Tank, Dropship
+};
+
+inline const char* vehicleTypeName(VehicleType t) {
+    switch (t) {
+        case VehicleType::Rover:     return "Rover";
+        case VehicleType::Hoverbike: return "Hoverbike";
+        case VehicleType::Mech:      return "Mech";
+        case VehicleType::Shuttle:   return "Shuttle";
+        case VehicleType::Crawler:   return "Crawler";
+        case VehicleType::Speeder:   return "Speeder";
+        case VehicleType::Tank:      return "Tank";
+        case VehicleType::Dropship:  return "Dropship";
+    }
+    return "Unknown";
+}
+
+struct VehicleSeat {
+    std::string id;
+    std::string label;
+    bool isDriver = false;
+    bool occupied = false;
+    std::string occupantId;
+
+    void enter(const std::string& entityId) {
+        occupantId = entityId;
+        occupied = true;
+    }
+
+    void exit() {
+        occupantId.clear();
+        occupied = false;
+    }
+};
+
+struct VehicleComponent {
+    std::string id;
+    std::string name;
+    float health = 100.f;
+    float maxHealth = 100.f;
+    bool functional = true;
+
+    [[nodiscard]] float healthFraction() const { return maxHealth > 0.f ? health / maxHealth : 0.f; }
+
+    bool applyDamage(float amount) {
+        health = std::max(0.f, health - amount);
+        if (health <= 0.f) functional = false;
+        return functional;
+    }
+
+    void repair(float amount) {
+        health = std::min(maxHealth, health + amount);
+        if (health > 0.f) functional = true;
+    }
+
+    [[nodiscard]] bool isDestroyed() const { return health <= 0.f; }
+};
+
+class Vehicle {
+public:
+    void setId(const std::string& vid) { m_id = vid; }
+    [[nodiscard]] const std::string& id() const { return m_id; }
+
+    void setName(const std::string& n) { m_name = n; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void setType(VehicleType type) { m_type = type; }
+    [[nodiscard]] VehicleType type() const { return m_type; }
+
+    // --- Seats (max 8) ---
+    static constexpr size_t kMaxSeats = 8;
+
+    bool addSeat(const VehicleSeat& seat) {
+        if (m_seats.size() >= kMaxSeats) return false;
+        for (const auto& s : m_seats) {
+            if (s.id == seat.id) return false;
+        }
+        m_seats.push_back(seat);
+        return true;
+    }
+
+    bool removeSeat(const std::string& sid) {
+        for (auto it = m_seats.begin(); it != m_seats.end(); ++it) {
+            if (it->id == sid) { m_seats.erase(it); return true; }
+        }
+        return false;
+    }
+
+    VehicleSeat* findSeat(const std::string& sid) {
+        for (auto& s : m_seats) { if (s.id == sid) return &s; }
+        return nullptr;
+    }
+
+    const VehicleSeat* findSeat(const std::string& sid) const {
+        for (const auto& s : m_seats) { if (s.id == sid) return &s; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t seatCount() const { return m_seats.size(); }
+    [[nodiscard]] const std::vector<VehicleSeat>& seats() const { return m_seats; }
+
+    [[nodiscard]] size_t occupantCount() const {
+        size_t count = 0;
+        for (const auto& s : m_seats) { if (s.occupied) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] bool hasDriver() const {
+        for (const auto& s : m_seats) {
+            if (s.isDriver && s.occupied) return true;
+        }
+        return false;
+    }
+
+    // --- Components (max 16) ---
+    static constexpr size_t kMaxComponents = 16;
+
+    bool addComponent(const VehicleComponent& comp) {
+        if (m_components.size() >= kMaxComponents) return false;
+        for (const auto& c : m_components) {
+            if (c.id == comp.id) return false;
+        }
+        m_components.push_back(comp);
+        return true;
+    }
+
+    bool removeComponent(const std::string& cid) {
+        for (auto it = m_components.begin(); it != m_components.end(); ++it) {
+            if (it->id == cid) { m_components.erase(it); return true; }
+        }
+        return false;
+    }
+
+    VehicleComponent* findComponent(const std::string& cid) {
+        for (auto& c : m_components) { if (c.id == cid) return &c; }
+        return nullptr;
+    }
+
+    const VehicleComponent* findComponent(const std::string& cid) const {
+        for (const auto& c : m_components) { if (c.id == cid) return &c; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t componentCount() const { return m_components.size(); }
+    [[nodiscard]] const std::vector<VehicleComponent>& components() const { return m_components; }
+    std::vector<VehicleComponent>& componentsMutable() { return m_components; }
+
+    [[nodiscard]] bool isOperational() const {
+        for (const auto& c : m_components) {
+            if (!c.functional) return false;
+        }
+        return true;
+    }
+
+    // --- Fuel ---
+    void setFuel(float fuel) { m_fuel = std::max(0.f, fuel); }
+    void setMaxFuel(float maxFuel) { m_maxFuel = std::max(0.f, maxFuel); }
+    [[nodiscard]] float fuel() const { return m_fuel; }
+    [[nodiscard]] float maxFuel() const { return m_maxFuel; }
+    [[nodiscard]] float fuelFraction() const { return m_maxFuel > 0.f ? m_fuel / m_maxFuel : 0.f; }
+    void consumeFuel(float amount) { m_fuel = std::max(0.f, m_fuel - amount); }
+    [[nodiscard]] bool hasFuel() const { return m_fuel > 0.f; }
+
+    // --- Speed / physics ---
+    void setSpeed(float speed) { m_speed = speed; }
+    [[nodiscard]] float speed() const { return m_speed; }
+    void setMaxSpeed(float maxSpeed) { m_maxSpeed = maxSpeed; }
+    [[nodiscard]] float maxSpeed() const { return m_maxSpeed; }
+    [[nodiscard]] float speedFraction() const { return m_maxSpeed > 0.f ? m_speed / m_maxSpeed : 0.f; }
+
+    // --- Position ---
+    void setPosition(const Vec3& pos) { m_position = pos; }
+    [[nodiscard]] const Vec3& position() const { return m_position; }
+
+    // --- Engine ---
+    void setEngineActive(bool active) { m_engineActive = active; }
+    [[nodiscard]] bool engineActive() const { return m_engineActive; }
+
+    [[nodiscard]] bool canOperate() const {
+        return m_engineActive && hasFuel() && isOperational() && hasDriver();
+    }
+
+private:
+    std::string m_id;
+    std::string m_name;
+    VehicleType m_type = VehicleType::Rover;
+    std::vector<VehicleSeat> m_seats;
+    std::vector<VehicleComponent> m_components;
+    float m_fuel = 100.f;
+    float m_maxFuel = 100.f;
+    float m_speed = 0.f;
+    float m_maxSpeed = 50.f;
+    Vec3 m_position;
+    bool m_engineActive = false;
+};
+
+class VehicleSystem {
+public:
+    static constexpr size_t kMaxVehicles = 16;
+
+    int createVehicle(const std::string& vname, VehicleType type) {
+        if (m_vehicles.size() >= kMaxVehicles) return -1;
+        int idx = static_cast<int>(m_vehicles.size());
+        Vehicle v;
+        v.setId("vehicle_" + std::to_string(idx));
+        v.setName(vname);
+        v.setType(type);
+        m_vehicles.push_back(std::move(v));
+        return idx;
+    }
+
+    Vehicle* vehicle(int index) {
+        if (index < 0 || static_cast<size_t>(index) >= m_vehicles.size()) return nullptr;
+        return &m_vehicles[static_cast<size_t>(index)];
+    }
+
+    const Vehicle* vehicle(int index) const {
+        if (index < 0 || static_cast<size_t>(index) >= m_vehicles.size()) return nullptr;
+        return &m_vehicles[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] size_t vehicleCount() const { return m_vehicles.size(); }
+
+    void tickVehicle(int index, float dt) {
+        auto* v = vehicle(index);
+        if (!v || !v->canOperate()) return;
+        float fuelRate = 0.5f * (v->speed() / std::max(1.f, v->maxSpeed()));
+        v->consumeFuel(fuelRate * dt);
+        Vec3 pos = v->position();
+        pos.x += v->speed() * dt;
+        v->setPosition(pos);
+    }
+
+    int applyDamage(int index, float amount) {
+        auto* v = vehicle(index);
+        if (!v) return 0;
+        int damaged = 0;
+        for (auto& c : v->componentsMutable()) {
+            c.applyDamage(amount);
+            ++damaged;
+        }
+        return damaged;
+    }
+
+    int repairAll(int index, float amount) {
+        auto* v = vehicle(index);
+        if (!v) return 0;
+        int repaired = 0;
+        for (auto& c : v->componentsMutable()) {
+            c.repair(amount);
+            ++repaired;
+        }
+        return repaired;
+    }
+
+    [[nodiscard]] size_t operationalCount() const {
+        size_t count = 0;
+        for (const auto& v : m_vehicles) {
+            if (v.isOperational()) ++count;
+        }
+        return count;
+    }
+
+private:
+    std::vector<Vehicle> m_vehicles;
+};
+
 } // namespace NF
