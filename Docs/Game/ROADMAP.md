@@ -101,7 +101,8 @@
 | **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | ✅ Done |
 | **S9** — AtlasAI Integration | AIInsightType×8, AIAnalysisEngine, AIProactiveSuggester, AIPipelineBridge, AtlasAIIntegration | ✅ Done |
 | **S10** — Performance Profiler | ProfileMetricType×8, ProfileSample, ProfileSession, FrameProfiler, MemoryProfiler, ProfilerTimeline, PerformanceProfiler | ✅ Done |
-| **S11** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S11** — Live Collaboration | CollabUserRole×8, CollabEditType×8, CollabUser, CollabEditAction, CollabSession, CollabConflictResolver, LiveCollaborationSystem | ✅ Done |
+| **S12** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
