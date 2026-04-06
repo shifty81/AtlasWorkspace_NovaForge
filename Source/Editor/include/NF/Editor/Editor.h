@@ -8607,7 +8607,7 @@ private:
 // S24 — Notification System
 // ============================================================
 
-enum class NotificationSeverity { Info, Success, Warning, Error, Critical, Debug, Trace, System };
+enum class NotificationSeverity : uint8_t { Info, Success, Warning, Error, Critical, Debug, Trace, System };
 
 inline const char* notificationSeverityName(NotificationSeverity s) {
     switch (s) {
@@ -8623,7 +8623,7 @@ inline const char* notificationSeverityName(NotificationSeverity s) {
     }
 }
 
-enum class NotificationState { Pending, Shown, Dismissed, Expired };
+enum class NotificationState : uint8_t { Pending, Shown, Dismissed, Expired };
 
 inline const char* notificationStateName(NotificationState s) {
     switch (s) {

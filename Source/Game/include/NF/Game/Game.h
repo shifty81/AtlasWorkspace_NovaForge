@@ -9509,7 +9509,7 @@ private:
 // G43 — Flood System
 // ============================================================
 
-enum class FloodType { River, Coastal, Flash, Urban, Groundwater, Dam, Snowmelt, Tropical };
+enum class FloodType : uint8_t { River, Coastal, Flash, Urban, Groundwater, Dam, Snowmelt, Tropical };
 
 inline const char* floodTypeName(FloodType t) {
     switch (t) {
@@ -9525,7 +9525,7 @@ inline const char* floodTypeName(FloodType t) {
     }
 }
 
-enum class FloodSeverity { Minor, Moderate, Significant, Major, Catastrophic };
+enum class FloodSeverity : uint8_t { Minor, Moderate, Significant, Major, Catastrophic };
 
 inline const char* floodSeverityName(FloodSeverity s) {
     switch (s) {
