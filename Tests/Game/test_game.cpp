@@ -8508,3 +8508,141 @@ TEST_CASE("HeatwaveSystem activeEventCount and extremeEventCount", "[Game][G50][
     sys.tick();
     REQUIRE(sys.tickCount() == 1);
 }
+
+// ── G51 — Blizzard System ─────────────────────────────────────────
+
+TEST_CASE("BlizzardType names cover all 8 values", "[Game][G51][Blizzard]") {
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Arctic))    == "Arctic");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Alpine))    == "Alpine");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Coastal))   == "Coastal");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Prairie))   == "Prairie");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Lake))      == "Lake");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Polar))     == "Polar");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Nor_easter)) == "Nor'easter");
+    REQUIRE(std::string(NF::blizzardTypeName(NF::BlizzardType::Custom))    == "Custom");
+}
+
+TEST_CASE("BlizzardIntensity names cover all 6 values", "[Game][G51][Blizzard]") {
+    REQUIRE(std::string(NF::blizzardIntensityName(NF::BlizzardIntensity::Light))    == "Light");
+    REQUIRE(std::string(NF::blizzardIntensityName(NF::BlizzardIntensity::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::blizzardIntensityName(NF::BlizzardIntensity::Heavy))    == "Heavy");
+    REQUIRE(std::string(NF::blizzardIntensityName(NF::BlizzardIntensity::Severe))   == "Severe");
+    REQUIRE(std::string(NF::blizzardIntensityName(NF::BlizzardIntensity::Extreme))  == "Extreme");
+    REQUIRE(std::string(NF::blizzardIntensityName(NF::BlizzardIntensity::Whiteout)) == "Whiteout");
+}
+
+TEST_CASE("BlizzardEvent isSevere and isWhiteout thresholds", "[Game][G51][Blizzard]") {
+    NF::BlizzardEvent ev; ev.id = "bz1";
+
+    ev.intensity = NF::BlizzardIntensity::Light;
+    REQUIRE_FALSE(ev.isSevere());
+    REQUIRE_FALSE(ev.isWhiteout());
+
+    ev.intensity = NF::BlizzardIntensity::Severe;
+    REQUIRE(ev.isSevere());
+    REQUIRE_FALSE(ev.isWhiteout());
+
+    ev.intensity = NF::BlizzardIntensity::Whiteout;
+    REQUIRE(ev.isSevere());
+    REQUIRE(ev.isWhiteout());
+}
+
+TEST_CASE("BlizzardEvent visibilityIndex decreases with intensity", "[Game][G51][Blizzard]") {
+    NF::BlizzardEvent ev; ev.id = "bz2";
+
+    ev.intensity = NF::BlizzardIntensity::Light;    // Whiteout(5) - Light(0) = 5
+    REQUIRE(ev.visibilityIndex() == Catch::Approx(5.0f));
+
+    ev.intensity = NF::BlizzardIntensity::Whiteout; // 5 - 5 = 0
+    REQUIRE(ev.visibilityIndex() == Catch::Approx(0.0f));
+}
+
+TEST_CASE("BlizzardEvent activate and deactivate toggle active", "[Game][G51][Blizzard]") {
+    NF::BlizzardEvent ev; ev.id = "bz3";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("BlizzardRegion addEvent and duplicate rejection", "[Game][G51][Blizzard]") {
+    NF::BlizzardRegion region("greenland");
+
+    NF::BlizzardEvent a; a.id = "ev-a";
+    NF::BlizzardEvent b; b.id = "ev-b";
+    NF::BlizzardEvent dup; dup.id = "ev-a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("BlizzardRegion activateAll and deactivateAll", "[Game][G51][Blizzard]") {
+    NF::BlizzardRegion region("alaska");
+
+    NF::BlizzardEvent a; a.id = "a";
+    NF::BlizzardEvent b; b.id = "b";
+    region.addEvent(a);
+    region.addEvent(b);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("BlizzardRegion severeCount and whiteoutCount", "[Game][G51][Blizzard]") {
+    NF::BlizzardRegion region("siberia");
+
+    NF::BlizzardEvent wo; wo.id = "w1"; wo.intensity = NF::BlizzardIntensity::Whiteout; wo.activate();
+    NF::BlizzardEvent sv; sv.id = "s1"; sv.intensity = NF::BlizzardIntensity::Severe;   sv.activate();
+    NF::BlizzardEvent lt; lt.id = "l1"; lt.intensity = NF::BlizzardIntensity::Light;    lt.activate();
+
+    region.addEvent(wo);
+    region.addEvent(sv);
+    region.addEvent(lt);
+
+    REQUIRE(region.activeCount()   == 3);
+    REQUIRE(region.severeCount()   == 2); // Whiteout and Severe are both >= Severe
+    REQUIRE(region.whiteoutCount() == 1);
+}
+
+TEST_CASE("BlizzardSystem createRegion and duplicate rejection", "[Game][G51][Blizzard]") {
+    NF::BlizzardSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr);
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("BlizzardSystem tick propagates to all regions", "[Game][G51][Blizzard]") {
+    NF::BlizzardSystem sys;
+    sys.createRegion("a");
+    sys.createRegion("b");
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()              == 2);
+    REQUIRE(sys.byName("a")->tickCount() == 2);
+    REQUIRE(sys.byName("b")->tickCount() == 2);
+}
+
+TEST_CASE("BlizzardSystem activeEventCount, severeEventCount, whiteoutEventCount", "[Game][G51][Blizzard]") {
+    NF::BlizzardSystem sys;
+    sys.createRegion("region-a");
+    sys.createRegion("region-b");
+
+    NF::BlizzardEvent w1; w1.id = "w1"; w1.intensity = NF::BlizzardIntensity::Whiteout; w1.activate();
+    NF::BlizzardEvent s1; s1.id = "s1"; s1.intensity = NF::BlizzardIntensity::Severe;   s1.activate();
+    NF::BlizzardEvent l1; l1.id = "l1"; l1.intensity = NF::BlizzardIntensity::Light;
+
+    sys.byName("region-a")->addEvent(w1);
+    sys.byName("region-a")->addEvent(l1);
+    sys.byName("region-b")->addEvent(s1);
+
+    REQUIRE(sys.activeEventCount()   == 2); // w1 and s1 active
+    REQUIRE(sys.severeEventCount()   == 2); // both w1 and s1 >= Severe
+    REQUIRE(sys.whiteoutEventCount() == 1); // only w1 is whiteout
+}

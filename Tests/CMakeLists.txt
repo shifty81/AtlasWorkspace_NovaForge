@@ -141,6 +141,7 @@ add_executable(NF_EditorTests
     Editor/test_s29_editor.cpp
     Editor/test_s30_editor.cpp
     Editor/test_s31_editor.cpp
+    Editor/test_s32_editor.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE

@@ -10642,4 +10642,157 @@ private:
     size_t                      m_tickCount = 0;
 };
 
+// G51 — Blizzard System
+
+enum class BlizzardType : uint8_t {
+    Arctic, Alpine, Coastal, Prairie, Lake, Polar, Nor_easter, Custom
+};
+
+inline const char* blizzardTypeName(BlizzardType t) {
+    switch (t) {
+        case BlizzardType::Arctic:    return "Arctic";
+        case BlizzardType::Alpine:    return "Alpine";
+        case BlizzardType::Coastal:   return "Coastal";
+        case BlizzardType::Prairie:   return "Prairie";
+        case BlizzardType::Lake:      return "Lake";
+        case BlizzardType::Polar:     return "Polar";
+        case BlizzardType::Nor_easter: return "Nor'easter";
+        case BlizzardType::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class BlizzardIntensity : uint8_t {
+    Light, Moderate, Heavy, Severe, Extreme, Whiteout
+};
+
+inline const char* blizzardIntensityName(BlizzardIntensity i) {
+    switch (i) {
+        case BlizzardIntensity::Light:    return "Light";
+        case BlizzardIntensity::Moderate: return "Moderate";
+        case BlizzardIntensity::Heavy:    return "Heavy";
+        case BlizzardIntensity::Severe:   return "Severe";
+        case BlizzardIntensity::Extreme:  return "Extreme";
+        case BlizzardIntensity::Whiteout: return "Whiteout";
+    }
+    return "Unknown";
+}
+
+struct BlizzardEvent {
+    std::string       id;
+    BlizzardType      type      = BlizzardType::Arctic;
+    BlizzardIntensity intensity = BlizzardIntensity::Light;
+    float             duration  = 1.0f;
+    float             windSpeed = 0.0f;
+    bool              active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere() const {
+        return static_cast<uint8_t>(intensity) >= static_cast<uint8_t>(BlizzardIntensity::Severe);
+    }
+    [[nodiscard]] bool isWhiteout() const {
+        return intensity == BlizzardIntensity::Whiteout;
+    }
+    [[nodiscard]] float visibilityIndex() const {
+        float base = static_cast<float>(static_cast<uint8_t>(BlizzardIntensity::Whiteout)
+                                        - static_cast<uint8_t>(intensity));
+        return base;
+    }
+};
+
+class BlizzardRegion {
+public:
+    explicit BlizzardRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const BlizzardEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] BlizzardEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()   const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere()) ++c; return c;
+    }
+    [[nodiscard]] size_t whiteoutCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWhiteout()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<BlizzardEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class BlizzardSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    BlizzardRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] BlizzardRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t severeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.severeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t whiteoutEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.whiteoutCount();
+        return c;
+    }
+
+private:
+    std::vector<BlizzardRegion> m_regions;
+    size_t                      m_tickCount = 0;
+};
+
 } // namespace NF

@@ -2564,3 +2564,51 @@ Total: 1725 tests, 0 failures (1699 existing + 14 S30 + 12 G49 = 1725).
 ## Build Verification ✅
 
 Total: 1753 tests, 0 failures (1725 existing + 14 S31 + 14 G50 = 1753).
+
+---
+
+## S32 — Particle Effect Editor ✅
+
+- [x] ParticleEmitterShape enum ×8 (Point, Circle, Rectangle, Cone, Sphere, Ring, Line, Custom)
+  - particleEmitterShapeName() for all 8 shapes
+- [x] ParticleBlendMode enum ×4 (Additive, Alpha, Multiply, Screen)
+  - particleBlendModeName() for all 4 modes
+- [x] ParticleEmitterConfig struct (id, shape, blendMode, emitRate, lifetime, speed, size, looping)
+  - setEmitRate, setLifetime, setSpeed, setSize, isValid
+- [x] ParticleEffectLayer class — named emitter collection (max 64)
+  - addEmitter (duplicate id rejected), removeEmitter, findEmitter
+  - emitterCount, visible, setVisible, name
+- [x] ParticleEffectEditor class — multi-layer editor (max 32 layers)
+  - addLayer (duplicate/full rejected), removeLayer, findLayer
+  - layerCount, setActiveLayer, activeLayer, totalEmitterCount
+  - preview, stopPreview, isPreviewing
+- [x] 16 new editor tests (test_s32_editor.cpp), all passing
+
+## S32 Complete ✅
+
+---
+
+## G51 — Blizzard System ✅
+
+- [x] BlizzardType enum ×8 (Arctic, Alpine, Coastal, Prairie, Lake, Polar, Nor'easter, Custom)
+  - blizzardTypeName() for all 8 types
+- [x] BlizzardIntensity enum ×6 (Light, Moderate, Heavy, Severe, Extreme, Whiteout)
+  - blizzardIntensityName() for all 6 levels
+- [x] BlizzardEvent struct (id, type, intensity, duration, windSpeed, active)
+  - activate, deactivate, isSevere (>= Severe), isWhiteout, visibilityIndex
+- [x] BlizzardRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, severeCount, whiteoutCount
+  - name, tick, tickCount
+- [x] BlizzardSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, whiteoutEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G51 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1780 tests, 0 failures (1753 existing + 16 S32 + 11 G51 = 1780).
