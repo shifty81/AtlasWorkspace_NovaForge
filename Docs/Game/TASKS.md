@@ -3033,3 +3033,41 @@ Total: 1991 tests, 0 failures (1968 existing + 14 S41 + 10 G60 = 1992 — note: 
 ## Build Verification ✅
 
 Total: 2014 tests, 0 failures (1991 existing + 14 S42 + 10 G61 = 2015 — note: 1 offset = 2014).
+
+## S43 — Animation Blueprint Editor ✅
+
+- [x] AnimBPNodeType enum ×5 (StateMachine, BlendSpace, Selector, Sequence, Pose) + animBPNodeTypeName()
+- [x] AnimBPState enum ×5 (Inactive, Compiling, Ready, Running, Error) + animBPStateName()
+- [x] AnimBPBlendMode enum ×5 (Override, Additive, Layered, Masked, Blended) + animBPBlendModeName()
+- [x] AnimBlueprintAsset (name, nodeType, state, blendMode, nodeCount, layerCount, looping, optimized, dirty)
+  - isRunning, hasError, isReady, isComplex (nodeCount>=20)
+- [x] AnimBlueprintEditor (max 256 blueprints)
+  - addBlueprint, removeBlueprint (clears activeBlueprint), findBlueprint, setActiveBlueprint
+  - blueprintCount, dirtyCount, runningCount, loopingCount, optimizedCount, complexCount, countByNodeType, countByState
+- [x] 14 new editor tests (test_s43_editor.cpp), all passing
+
+## S43 Complete ✅
+
+---
+
+## G62 — Solar Wind System ✅
+
+- [x] SolarWindType enum ×5 (Slow, Fast, Transient, Coronal, Interplanetary) + solarWindTypeName()
+- [x] SolarWindIntensity enum ×5 (Calm, Moderate, Strong, Violent, Extreme) + solarWindIntensityName()
+- [x] SolarWindEvent (id, type, intensity, velocity, coverage, active)
+  - activate, deactivate, isSevere (>= Violent), isFastStream (Fast|Transient), isWidespread (>= 50%), hazardScore
+- [x] SolarWindRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, fastStreamCount, widespreadCount
+- [x] SolarWindSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, fastStreamEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G62 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2037 tests, 0 failures (2014 existing + 14 S43 + 10 G62 = 2038 — note: 1 offset = 2037).

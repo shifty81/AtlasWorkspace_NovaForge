@@ -91,6 +91,7 @@
 | **G59** — Lightning Storm System | LightningIntensity×5, LightningStormPhase×5, LightningEvent, LightningRegion, LightningSystem | ✅ Done |
 | **G60** — Geomagnetic Storm System | GeoStormKpIndex×5, GeoStormPhase×5, GeoStormEvent, GeoStormRegion, GeoStormSystem | ✅ Done |
 | **G61** — Cosmic Ray System | CosmicRayType×5, CosmicRayIntensity×5, CosmicRayEvent, CosmicRayRegion, CosmicRaySystem | ✅ Done |
+| **G62** — Solar Wind System | SolarWindType×5, SolarWindIntensity×5, SolarWindEvent, SolarWindRegion, SolarWindSystem | ✅ Done |
 
 ---
 
@@ -163,6 +164,7 @@
 | **S40** — Audio Clip Editor | AudioClipFormat×5, AudioClipState×5, AudioLoopMode×5, AudioClipAsset, AudioClipEditor | ✅ Done |
 | **S41** — Video Clip Editor | VideoClipCodec×5, VideoClipState×5, VideoAspectRatio×5, VideoClipAsset, VideoClipEditor | ✅ Done |
 | **S42** — Scene Prefab Editor | PrefabCategory×5, PrefabState×5, PrefabLOD×5, PrefabAsset, ScenePrefabEditor | ✅ Done |
+| **S43** — Animation Blueprint Editor | AnimBPNodeType×5, AnimBPState×5, AnimBPBlendMode×5, AnimBlueprintAsset, AnimBlueprintEditor | ✅ Done |
 
 ## Status Key
 

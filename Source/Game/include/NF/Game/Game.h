@@ -12174,4 +12174,137 @@ private:
     size_t                       m_tickCount = 0;
 };
 
+// ── G62 — Solar Wind System ─────────────────────────────────────
+
+enum class SolarWindType : uint8_t {
+    Slow, Fast, Transient, Coronal, Interplanetary
+};
+inline const char* solarWindTypeName(SolarWindType t) {
+    switch (t) {
+        case SolarWindType::Slow:           return "Slow";
+        case SolarWindType::Fast:           return "Fast";
+        case SolarWindType::Transient:      return "Transient";
+        case SolarWindType::Coronal:        return "Coronal";
+        case SolarWindType::Interplanetary: return "Interplanetary";
+    }
+    return "Unknown";
+}
+
+enum class SolarWindIntensity : uint8_t {
+    Calm, Moderate, Strong, Violent, Extreme
+};
+inline const char* solarWindIntensityName(SolarWindIntensity i) {
+    switch (i) {
+        case SolarWindIntensity::Calm:     return "Calm";
+        case SolarWindIntensity::Moderate: return "Moderate";
+        case SolarWindIntensity::Strong:   return "Strong";
+        case SolarWindIntensity::Violent:  return "Violent";
+        case SolarWindIntensity::Extreme:  return "Extreme";
+    }
+    return "Unknown";
+}
+
+struct SolarWindEvent {
+    std::string          id;
+    SolarWindType        type      = SolarWindType::Slow;
+    SolarWindIntensity   intensity = SolarWindIntensity::Calm;
+    float                velocity  = 0.0f;   // km/s
+    float                coverage  = 0.0f;   // % of area affected
+    bool                 active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()       const { return intensity >= SolarWindIntensity::Violent; }
+    [[nodiscard]] bool isFastStream()   const { return type == SolarWindType::Fast || type == SolarWindType::Transient; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float hazardScore()   const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * coverage / 10.0f;
+    }
+};
+
+class SolarWindRegion {
+public:
+    explicit SolarWindRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const SolarWindEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] SolarWindEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()           const { return m_name; }
+    [[nodiscard]] size_t eventCount()        const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                       ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())       ++c; return c;
+    }
+    [[nodiscard]] size_t fastStreamCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isFastStream())   ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())   ++c; return c;
+    }
+
+private:
+    std::string                   m_name;
+    std::vector<SolarWindEvent>   m_events;
+    size_t                        m_tickCount = 0;
+};
+
+class SolarWindSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    SolarWindRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] SolarWindRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()            const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()              const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()       const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();      return c;
+    }
+    [[nodiscard]] size_t severeEventCount()       const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();      return c;
+    }
+    [[nodiscard]] size_t fastStreamEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.fastStreamCount();  return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();  return c;
+    }
+
+private:
+    std::vector<SolarWindRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
 } // namespace NF
