@@ -1564,3 +1564,75 @@ G32 (Archaeology System) fully delivered:
 ## Build Verification ✅
 
 Total: 1303 tests, 0 failures (1245 existing + 15 S12 + 17 S13 + 14 G31 + 12 G32).
+
+---
+
+## S14 — Plugin System ✅
+
+- [x] PluginState enum ×8 (Unloaded, Loading, Loaded, Active, Suspended, Error, Disabled, Unloading)
+  - pluginStateName() for all 8 states
+- [x] PluginManifest struct (id, name, version, author, description, dependencies)
+  - isValid()
+- [x] PluginInstance struct (manifest, state, loadTime, errorMessage)
+  - isLoaded(), isActive(), hasError(), isDisabled()
+  - activate/suspend/disable lifecycle, setError
+- [x] PluginRegistry class — plugin registration and lookup
+  - registerPlugin/unregisterPlugin (max 64), findPlugin
+  - pluginsByState, enabledCount
+- [x] PluginLoader class — load/unload/reload lifecycle manager
+  - load/unload/reload, loadCount/unloadCount/errorCount
+- [x] PluginSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - registerPlugin (max 32), loadPlugin, unloadPlugin
+  - activatePlugin, suspendPlugin
+  - tick loop, activePluginCount, totalPluginCount
+  - autoActivateOnLoad config option
+- [x] 15 new editor tests (test_s14_editor.cpp), all passing
+
+## S14 Complete ✅
+
+S14 (Plugin System) fully delivered:
+- PluginState×8 with name helpers
+- PluginManifest and PluginInstance data structures with full lifecycle
+- PluginRegistry with state querying and enabled tracking
+- PluginLoader with load/unload/reload operations
+- PluginSystem as top-level coordinator with config support
+- 15 new editor tests, all passing
+
+---
+
+## G33 — Migration System ✅
+
+- [x] MigrationTrigger enum ×8 (Economic, Environmental, Political, Cultural, War, Famine, Disease, Opportunity)
+  - migrationTriggerName() for all 8 triggers
+- [x] Migrant struct (id, name, originRegion, destinationRegion, trigger, journeyProgress, arrived)
+  - isInTransit(), hasArrived()
+  - advance() with auto-arrival at 100%
+- [x] MigrationWave struct (id, origin, destination, trigger, totalMigrants, arrivedCount, speed)
+  - isComplete(), completionFraction()
+- [x] MigrationRoute class — migrant flow per origin/destination pair
+  - addMigrant/removeMigrant (max 256, no duplicates), findMigrant
+  - arrivedCount, inTransitCount
+  - tick advances all migrants
+- [x] MigrationSystem class — multi-route coordinator
+  - createRoute (max 32, unique endpoints), routeByEndpoints lookup
+  - addWave (max 16), waveById
+  - tick propagates to routes and waves
+  - completedWaveCount, totalMigrantsInTransit
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G33 Complete ✅
+
+G33 (Migration System) fully delivered:
+- MigrationTrigger×8 with name helpers
+- Migrant with journey progress and auto-arrival
+- MigrationWave with completion tracking
+- MigrationRoute with migrant lifecycle and transit counting
+- MigrationSystem as multi-route coordinator with wave management
+- 12 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1322 tests, 0 failures (1303 existing + 15 S14 + 12 G33 - 8 deduplicated = 1322).
