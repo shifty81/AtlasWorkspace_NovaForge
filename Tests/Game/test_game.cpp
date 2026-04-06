@@ -5911,3 +5911,302 @@ TEST_CASE("EspionageMission zero duration never completes via advance", "[Game][
     REQUIRE_FALSE(m.isComplete());
     REQUIRE(m.progressFraction() == Catch::Approx(0.f));
 }
+
+// ── G31 Colony Management Tests ─────────────────────────────────
+
+TEST_CASE("ColonyRole all 8 names", "[Game][G31][Colony]") {
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Governor))  == "Governor");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Engineer))  == "Engineer");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Scientist)) == "Scientist");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Miner))     == "Miner");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Farmer))    == "Farmer");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Guard))     == "Guard");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Medic))     == "Medic");
+    REQUIRE(std::string(NF::colonyRoleName(NF::ColonyRole::Explorer))  == "Explorer");
+}
+
+TEST_CASE("Colonist defaults and helpers", "[Game][G31][Colony]") {
+    NF::Colonist c;
+    REQUIRE(c.role == NF::ColonyRole::Farmer);
+    REQUIRE(c.isHealthy());
+    REQUIRE(c.isProductive());
+    REQUIRE(c.effectiveOutput() == Catch::Approx(1.f));
+
+    c.takeDamage(0.9f);
+    REQUIRE_FALSE(c.isHealthy());
+    REQUIRE_FALSE(c.isProductive());
+
+    c.heal(0.5f);
+    REQUIRE(c.isHealthy());
+}
+
+TEST_CASE("Colonist morale affects productivity", "[Game][G31][Colony]") {
+    NF::Colonist c;
+    c.reduceMorale(0.9f);
+    REQUIRE_FALSE(c.isProductive());
+    c.boostMorale(0.5f);
+    REQUIRE(c.isProductive());
+}
+
+TEST_CASE("ColonyBuilding operational checks", "[Game][G31][Colony]") {
+    NF::ColonyBuilding b;
+    b.id = "b1"; b.name = "Habitat"; b.capacity = 10;
+    REQUIRE(b.isOperational());
+    REQUIRE_FALSE(b.isFull());
+    REQUIRE(b.availableSlots() == 10);
+
+    b.damage();
+    REQUIRE_FALSE(b.isOperational()); // damaged
+    b.repair();
+    REQUIRE(b.isOperational());
+
+    b.powered = false;
+    REQUIRE_FALSE(b.isOperational()); // unpowered
+}
+
+TEST_CASE("Colony addColonist + duplicate rejection", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::Colonist c1; c1.id = "c1"; c1.name = "Alice";
+    NF::Colonist c2; c2.id = "c1"; c2.name = "Duplicate";
+
+    REQUIRE(colony.addColonist(c1));
+    REQUIRE(colony.population() == 1);
+    REQUIRE_FALSE(colony.addColonist(c2));
+    REQUIRE(colony.population() == 1);
+}
+
+TEST_CASE("Colony removeColonist", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::Colonist c; c.id = "c1";
+    colony.addColonist(c);
+    REQUIRE(colony.removeColonist("c1"));
+    REQUIRE(colony.population() == 0);
+    REQUIRE_FALSE(colony.removeColonist("nonexistent"));
+}
+
+TEST_CASE("Colony findColonist", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::Colonist c; c.id = "c1"; c.name = "Bob";
+    colony.addColonist(c);
+    REQUIRE(colony.findColonist("c1") != nullptr);
+    REQUIRE(colony.findColonist("c1")->name == "Bob");
+    REQUIRE(colony.findColonist("c2") == nullptr);
+}
+
+TEST_CASE("Colony addBuilding + removeBuilding", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::ColonyBuilding b; b.id = "b1"; b.name = "Lab"; b.capacity = 5;
+    REQUIRE(colony.addBuilding(b));
+    REQUIRE(colony.buildingCount() == 1);
+
+    REQUIRE(colony.removeBuilding("b1"));
+    REQUIRE(colony.buildingCount() == 0);
+}
+
+TEST_CASE("Colony removeBuilding fails if occupied", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::ColonyBuilding b; b.id = "b1"; b.capacity = 5; b.occupants = 3;
+    colony.addBuilding(b);
+    REQUIRE_FALSE(colony.removeBuilding("b1")); // occupied
+}
+
+TEST_CASE("Colony tick computes morale and output", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::Colonist c1; c1.id = "c1"; c1.morale = 0.8f;
+    NF::Colonist c2; c2.id = "c2"; c2.morale = 0.6f;
+    colony.addColonist(c1);
+    colony.addColonist(c2);
+
+    colony.tick(1.f);
+    REQUIRE(colony.averageMorale() == Catch::Approx(0.7f));
+    REQUIRE(colony.productiveCount() == 2);
+    REQUIRE(colony.resourceOutput() > 0.f);
+}
+
+TEST_CASE("Colony colonistsWithRole", "[Game][G31][Colony]") {
+    NF::Colony colony("Alpha");
+    NF::Colonist c1; c1.id = "c1"; c1.role = NF::ColonyRole::Miner;
+    NF::Colonist c2; c2.id = "c2"; c2.role = NF::ColonyRole::Miner;
+    NF::Colonist c3; c3.id = "c3"; c3.role = NF::ColonyRole::Scientist;
+    colony.addColonist(c1);
+    colony.addColonist(c2);
+    colony.addColonist(c3);
+    REQUIRE(colony.colonistsWithRole(NF::ColonyRole::Miner) == 2);
+    REQUIRE(colony.colonistsWithRole(NF::ColonyRole::Scientist) == 1);
+    REQUIRE(colony.colonistsWithRole(NF::ColonyRole::Governor) == 0);
+}
+
+TEST_CASE("ColonySystem createColony + duplicate rejection", "[Game][G31][Colony]") {
+    NF::ColonySystem sys;
+    REQUIRE(sys.createColony("Alpha") == 0);
+    REQUIRE(sys.createColony("Beta") == 1);
+    REQUIRE(sys.createColony("Alpha") == -1);
+    REQUIRE(sys.colonyCount() == 2);
+}
+
+TEST_CASE("ColonySystem colonyByName", "[Game][G31][Colony]") {
+    NF::ColonySystem sys;
+    sys.createColony("Alpha");
+    REQUIRE(sys.colonyByName("Alpha") != nullptr);
+    REQUIRE(sys.colonyByName("Alpha")->name() == "Alpha");
+    REQUIRE(sys.colonyByName("Gamma") == nullptr);
+}
+
+TEST_CASE("ColonySystem addColonistToColony + tick", "[Game][G31][Colony]") {
+    NF::ColonySystem sys;
+    sys.createColony("Alpha");
+
+    NF::Colonist c; c.id = "c1"; c.name = "Alice";
+    REQUIRE(sys.addColonistToColony("Alpha", c));
+    REQUIRE(sys.totalPopulation() == 1);
+
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.totalResourceOutput() > 0.f);
+}
+
+// ── G32 Archaeology System Tests ────────────────────────────────
+
+TEST_CASE("ArtifactRarity all 8 names", "[Game][G32][Archaeology]") {
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Common))    == "Common");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Uncommon))  == "Uncommon");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Rare))      == "Rare");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Epic))      == "Epic");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Legendary)) == "Legendary");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Ancient))   == "Ancient");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Mythic))    == "Mythic");
+    REQUIRE(std::string(NF::artifactRarityName(NF::ArtifactRarity::Unique))    == "Unique");
+}
+
+TEST_CASE("Artifact defaults and research", "[Game][G32][Archaeology]") {
+    NF::Artifact a;
+    REQUIRE_FALSE(a.isDecoded());
+    REQUIRE_FALSE(a.isResearching());
+    REQUIRE(a.progressFraction() == Catch::Approx(0.f));
+
+    a.advanceResearch(0.5f);
+    REQUIRE(a.isResearching());
+    REQUIRE(a.progressFraction() == Catch::Approx(0.5f));
+
+    a.advanceResearch(0.6f); // exceeds 1.0
+    REQUIRE(a.isDecoded());
+    REQUIRE(a.progressFraction() == Catch::Approx(1.f));
+}
+
+TEST_CASE("Artifact no research after decoded", "[Game][G32][Archaeology]") {
+    NF::Artifact a;
+    a.advanceResearch(1.f);
+    REQUIRE(a.isDecoded());
+
+    a.advanceResearch(0.5f); // should be no-op
+    REQUIRE(a.progressFraction() == Catch::Approx(1.f));
+}
+
+TEST_CASE("ExcavationSite lifecycle", "[Game][G32][Archaeology]") {
+    NF::ExcavationSite site;
+    site.id = "s1"; site.location = "Mars"; site.durationSeconds = 10.f;
+
+    REQUIRE_FALSE(site.isActive());
+    REQUIRE_FALSE(site.isComplete());
+
+    site.activate();
+    REQUIRE(site.isActive());
+
+    site.advance(5.f);
+    REQUIRE(site.progressFraction() == Catch::Approx(0.5f));
+
+    site.advance(6.f); // total 11 > 10
+    REQUIRE(site.isComplete());
+    REQUIRE(site.progress == Catch::Approx(1.f));
+}
+
+TEST_CASE("ExcavationSite inactive does not advance", "[Game][G32][Archaeology]") {
+    NF::ExcavationSite site;
+    site.durationSeconds = 10.f;
+    site.advance(5.f); // not activated
+    REQUIRE(site.progressFraction() == Catch::Approx(0.f));
+}
+
+TEST_CASE("ArtifactCollection addArtifact + duplicate rejection", "[Game][G32][Archaeology]") {
+    NF::ArtifactCollection coll("Player1");
+    NF::Artifact a1; a1.id = "a1"; a1.name = "Shard";
+    NF::Artifact a2; a2.id = "a1"; a2.name = "Duplicate";
+
+    REQUIRE(coll.addArtifact(a1));
+    REQUIRE(coll.artifactCount() == 1);
+    REQUIRE_FALSE(coll.addArtifact(a2));
+    REQUIRE(coll.artifactCount() == 1);
+}
+
+TEST_CASE("ArtifactCollection removeArtifact", "[Game][G32][Archaeology]") {
+    NF::ArtifactCollection coll("Player1");
+    NF::Artifact a; a.id = "a1";
+    coll.addArtifact(a);
+    REQUIRE(coll.removeArtifact("a1"));
+    REQUIRE(coll.artifactCount() == 0);
+    REQUIRE_FALSE(coll.removeArtifact("nonexistent"));
+}
+
+TEST_CASE("ArtifactCollection decodedCount + rarityCount", "[Game][G32][Archaeology]") {
+    NF::ArtifactCollection coll("Player1");
+    NF::Artifact a1; a1.id = "a1"; a1.rarity = NF::ArtifactRarity::Rare; a1.decoded = true;
+    NF::Artifact a2; a2.id = "a2"; a2.rarity = NF::ArtifactRarity::Rare;
+    NF::Artifact a3; a3.id = "a3"; a3.rarity = NF::ArtifactRarity::Epic; a3.decoded = true;
+    coll.addArtifact(a1);
+    coll.addArtifact(a2);
+    coll.addArtifact(a3);
+
+    REQUIRE(coll.decodedCount() == 2);
+    REQUIRE(coll.rarityCount(NF::ArtifactRarity::Rare) == 2);
+    REQUIRE(coll.rarityCount(NF::ArtifactRarity::Epic) == 1);
+    REQUIRE(coll.rarityCount(NF::ArtifactRarity::Common) == 0);
+}
+
+TEST_CASE("ArchaeologySystem createSite + duplicate rejection", "[Game][G32][Archaeology]") {
+    NF::ArchaeologySystem sys;
+    REQUIRE(sys.createSite("s1", "Mars", 10.f) == 0);
+    REQUIRE(sys.createSite("s2", "Europa", 20.f) == 1);
+    REQUIRE(sys.createSite("s1", "Venus", 5.f) == -1);
+    REQUIRE(sys.siteCount() == 2);
+}
+
+TEST_CASE("ArchaeologySystem activateSite + tick", "[Game][G32][Archaeology]") {
+    NF::ArchaeologySystem sys;
+    sys.createSite("s1", "Mars", 5.f);
+    REQUIRE(sys.activateSite("s1"));
+    REQUIRE(sys.activeSiteCount() == 1);
+
+    sys.tick(3.f);
+    REQUIRE(sys.activeSiteCount() == 1);
+    REQUIRE(sys.completedSiteCount() == 0);
+
+    sys.tick(3.f); // total 6 > 5
+    REQUIRE(sys.completedSiteCount() == 1);
+    REQUIRE(sys.totalArtifactsFound() == 1);
+}
+
+TEST_CASE("ArchaeologySystem addCollection + collectionByOwner", "[Game][G32][Archaeology]") {
+    NF::ArchaeologySystem sys;
+    REQUIRE(sys.addCollection("Player1"));
+    REQUIRE(sys.collectionCount() == 1);
+    REQUIRE_FALSE(sys.addCollection("Player1")); // duplicate
+
+    auto* coll = sys.collectionByOwner("Player1");
+    REQUIRE(coll != nullptr);
+    REQUIRE(coll->owner() == "Player1");
+    REQUIRE(sys.collectionByOwner("Player2") == nullptr);
+}
+
+TEST_CASE("ArchaeologySystem totalDecodedArtifacts", "[Game][G32][Archaeology]") {
+    NF::ArchaeologySystem sys;
+    sys.addCollection("Player1");
+    auto* coll = sys.collectionByOwner("Player1");
+
+    NF::Artifact a1; a1.id = "a1"; a1.decoded = true;
+    NF::Artifact a2; a2.id = "a2";
+    coll->addArtifact(a1);
+    coll->addArtifact(a2);
+
+    REQUIRE(sys.totalDecodedArtifacts() == 1);
+}

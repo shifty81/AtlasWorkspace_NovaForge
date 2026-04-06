@@ -1426,3 +1426,141 @@ S11 (Live Collaboration) fully delivered:
 - LiveCollaborationSystem as top-level coordinator with session management
 - 21 new editor tests, all passing
 Total: 1245 tests, 0 failures.
+
+---
+
+## S12 — Version Control Integration ✅
+
+- [x] VCSProviderType enum ×8 (Git, SVN, Perforce, Mercurial, Plastic, Fossil, Custom, None)
+  - vcsProviderTypeName() for all 8 types
+- [x] VCSFileStatus enum ×8 (Untracked, Added, Modified, Deleted, Renamed, Conflicted, Ignored, Unchanged)
+  - vcsFileStatusName() for all 8 statuses
+- [x] VCSCommitInfo struct (hash, author, message, timestamp, parentHash, fileCount)
+  - isValid(), isRoot(), hasMessage()
+- [x] VCSBranchInfo struct (name, isActive, isRemote, lastCommitHash, aheadCount, behindCount)
+  - isSynced(), isLocal(), hasCommits()
+- [x] VCSDiffEntry struct (filePath, status, additions, deletions, isBinary)
+  - totalChanges(), hasChanges()
+- [x] VCSRepository class — repository model with branch/commit/diff management
+  - addBranch/removeBranch (max 64), switchBranch, activeBranch, findBranch
+  - addCommit with validation (max 1024)
+  - trackFile + findDiff (max 512), modifiedFileCount
+- [x] VersionControlSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - openRepository (max 8), repositoryByName lookup
+  - tick loop, totalBranches, totalCommits, totalModifiedFiles
+- [x] 15 new editor tests (test_s12_editor.cpp), all passing
+
+## S12 Complete ✅
+
+S12 (Version Control Integration) fully delivered:
+- VCSProviderType×8 and VCSFileStatus×8 with name helpers
+- VCSCommitInfo, VCSBranchInfo, VCSDiffEntry data structures
+- VCSRepository with branch switching, commit tracking, file status management
+- VersionControlSystem as top-level coordinator with multi-repo support
+- 15 new editor tests, all passing
+
+---
+
+## S13 — Localization System ✅
+
+- [x] LocaleId enum ×8 (English, Spanish, French, German, Japanese, Chinese, Korean, Russian)
+  - localeIdName() for all 8 locales
+- [x] LocalizedString struct (key, value, locale, context, verified)
+  - isValid(), isVerified(), verify()
+- [x] TranslationEntry struct (key, context, translations map)
+  - set/get/has per locale, localeCount
+- [x] TranslationTable class — translation key management
+  - addEntry/removeEntry (max 4096), findEntry
+  - setTranslation, lookup by key+locale
+  - translatedCount, completionRate per locale
+- [x] LocaleManager class — locale switching with fallback
+  - active/fallback locale, resolve with fallback chain
+  - switchCount tracking
+- [x] LocalizationSystem class — top-level coordinator
+  - init/shutdown lifecycle
+  - createTable (max 16), tableByName lookup
+  - translate with locale fallback, setLocale/activeLocale
+  - tick loop, totalEntries, totalTranslated
+- [x] 17 new editor tests (test_s13_editor.cpp), all passing
+
+## S13 Complete ✅
+
+S13 (Localization System) fully delivered:
+- LocaleId×8 with name helpers
+- LocalizedString and TranslationEntry data structures
+- TranslationTable with key management and completion tracking
+- LocaleManager with active/fallback locale resolution
+- LocalizationSystem as top-level coordinator with multi-table support
+- 17 new editor tests, all passing
+
+---
+
+## G31 — Colony Management ✅
+
+- [x] ColonyRole enum ×8 (Governor, Engineer, Scientist, Miner, Farmer, Guard, Medic, Explorer)
+  - colonyRoleName() for all 8 roles
+- [x] Colonist struct (id, name, role, morale, health, productivity)
+  - isHealthy(), isProductive(), effectiveOutput()
+  - takeDamage/heal, boostMorale/reduceMorale
+- [x] ColonyBuilding struct (id, name, capacity, occupants, operationalLevel, powered, damaged)
+  - isOperational(), isFull(), availableSlots()
+  - damage/repair lifecycle
+- [x] Colony class — colony population and building management
+  - addColonist/removeColonist (max 128), findColonist
+  - addBuilding/removeBuilding (max 64, cannot remove if occupied), findBuilding
+  - tick computes averageMorale, productiveCount, resourceOutput
+  - colonistsWithRole, operationalBuildingCount
+- [x] ColonySystem class — multi-colony coordinator
+  - createColony (max 16), colonyByName lookup
+  - addColonistToColony delegation
+  - tick loop, totalPopulation, totalBuildings, totalResourceOutput
+- [x] 14 new game tests (in test_game.cpp), all passing
+
+## G31 Complete ✅
+
+G31 (Colony Management) fully delivered:
+- ColonyRole×8 with name helpers
+- Colonist with health/morale/productivity tracking
+- ColonyBuilding with operational state management
+- Colony with population and building lifecycle
+- ColonySystem as multi-colony coordinator with resource output tracking
+- 14 new game tests, all passing
+
+---
+
+## G32 — Archaeology System ✅
+
+- [x] ArtifactRarity enum ×8 (Common, Uncommon, Rare, Epic, Legendary, Ancient, Mythic, Unique)
+  - artifactRarityName() for all 8 rarities
+- [x] Artifact struct (id, name, rarity, origin, researchProgress, decoded)
+  - isDecoded(), isResearching(), progressFraction()
+  - advanceResearch with auto-decode at 100%
+- [x] ExcavationSite struct (id, location, difficulty, progress, durationSeconds)
+  - isActive(), isComplete(), progressFraction()
+  - activate/advance lifecycle
+- [x] ArtifactCollection class — artifact inventory per owner
+  - addArtifact/removeArtifact (max 256), findArtifact
+  - decodedCount, rarityCount queries
+- [x] ArchaeologySystem class — excavation and collection coordinator
+  - createSite (max 32), activateSite, findSite
+  - addCollection (max 8), collectionByOwner
+  - tick with auto-artifact discovery on site completion
+  - activeSiteCount, completedSiteCount, totalArtifactsFound, totalDecodedArtifacts
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G32 Complete ✅
+
+G32 (Archaeology System) fully delivered:
+- ArtifactRarity×8 with name helpers
+- Artifact with research progress and decoding lifecycle
+- ExcavationSite with activation and time-based excavation
+- ArtifactCollection with rarity and decode tracking
+- ArchaeologySystem as top-level coordinator with site and collection management
+- 12 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1303 tests, 0 failures (1245 existing + 15 S12 + 17 S13 + 14 G31 + 12 G32).
