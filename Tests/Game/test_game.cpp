@@ -4368,3 +4368,218 @@ TEST_CASE("WeatherSystem delayed forecast triggers when clear", "[Game][G22][Wea
     ws.tick(3.f);
     REQUIRE(ws.currentType() == NF::WeatherType::Storm);
 }
+
+// ── G23 Trading System Tests ──────────────────────────────────
+
+TEST_CASE("TradeGoodCategory names", "[Game][G23][Trading]") {
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Raw))        == "Raw");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Refined))    == "Refined");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Component))  == "Component");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Consumable)) == "Consumable");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Tech))       == "Tech");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Luxury))     == "Luxury");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Contraband)) == "Contraband");
+    REQUIRE(std::string(NF::tradeGoodCategoryName(NF::TradeGoodCategory::Data))       == "Data");
+}
+
+TEST_CASE("TradeGood contraband flag", "[Game][G23][Trading]") {
+    NF::TradeGood g;
+    g.id = "spice";
+    g.legal = false;
+    REQUIRE(g.isContraband());
+    g.legal = true;
+    REQUIRE_FALSE(g.isContraband());
+}
+
+TEST_CASE("TradingPost add and query stock", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Station Alpha");
+    REQUIRE(post.postId() == "hub1");
+    REQUIRE(post.name() == "Station Alpha");
+
+    post.addStock("iron", 50, 10.f);
+    REQUIRE(post.stockOf("iron") == 50);
+    REQUIRE(post.priceOf("iron") == 10.f);
+    REQUIRE(post.stockCount() == 1);
+
+    // Add more of same good updates quantity
+    post.addStock("iron", 30, 12.f);
+    REQUIRE(post.stockOf("iron") == 80);
+    REQUIRE(post.priceOf("iron") == 12.f);  // price updated
+}
+
+TEST_CASE("TradingPost remove stock", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("copper", 100, 5.f);
+
+    int removed = post.removeStock("copper", 40);
+    REQUIRE(removed == 40);
+    REQUIRE(post.stockOf("copper") == 60);
+
+    // Can't remove more than available
+    removed = post.removeStock("copper", 200);
+    REQUIRE(removed == 60);
+    REQUIRE(post.stockOf("copper") == 0);
+
+    // Non-existent good returns 0
+    removed = post.removeStock("gold", 10);
+    REQUIRE(removed == 0);
+}
+
+TEST_CASE("TradingPost buy transaction", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("fuel", 100, 20.f);
+
+    float cost = post.buy("fuel", 5);
+    REQUIRE(cost == Catch::Approx(100.f));  // 5 × 20
+    REQUIRE(post.stockOf("fuel") == 95);
+    REQUIRE(post.totalSales() == Catch::Approx(100.f));
+}
+
+TEST_CASE("TradingPost buy insufficient stock", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("fuel", 3, 20.f);
+
+    float cost = post.buy("fuel", 10);  // not enough
+    REQUIRE(cost == 0.f);
+    REQUIRE(post.stockOf("fuel") == 3);  // unchanged
+}
+
+TEST_CASE("TradingPost sell transaction", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+
+    float revenue = post.sell("iron", 10, 50.f);
+    REQUIRE(revenue == Catch::Approx(400.f));  // 10 × 50 × 0.8
+    REQUIRE(post.stockOf("iron") == 10);  // added to stock
+    REQUIRE(post.totalPurchases() == Catch::Approx(400.f));
+}
+
+TEST_CASE("TradingPost tax rate", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    REQUIRE(post.taxRate() == Catch::Approx(0.05f));  // default 5%
+
+    post.setTaxRate(0.1f);
+    REQUIRE(post.taxRate() == Catch::Approx(0.1f));
+
+    // Clamped to [0, 1]
+    post.setTaxRate(-0.5f);
+    REQUIRE(post.taxRate() == 0.f);
+    post.setTaxRate(2.f);
+    REQUIRE(post.taxRate() == 1.f);
+}
+
+TEST_CASE("TradingPost tick prices supply/demand", "[Game][G23][Trading]") {
+    NF::TradingPost post("hub1", "Hub");
+    post.addStock("rare_gem", 5, 100.f);  // low stock → price rises
+
+    float priceBefore = post.priceOf("rare_gem");
+    post.tickPrices(1.f);
+    float priceAfter = post.priceOf("rare_gem");
+    REQUIRE(priceAfter > priceBefore);  // low stock drives price up
+}
+
+TEST_CASE("TradingSystem register goods", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradeGood g;
+    g.id = "iron_ore";
+    g.name = "Iron Ore";
+    g.category = NF::TradeGoodCategory::Raw;
+    g.basePrice = 15.f;
+    ts.registerGood(g);
+    REQUIRE(ts.goodCount() == 1);
+
+    // No duplicate
+    ts.registerGood(g);
+    REQUIRE(ts.goodCount() == 1);
+
+    auto* found = ts.findGood("iron_ore");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->name == "Iron Ore");
+}
+
+TEST_CASE("TradingSystem add/remove posts", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    ts.addPost(NF::TradingPost("alpha", "Alpha Station"));
+    ts.addPost(NF::TradingPost("beta", "Beta Station"));
+    REQUIRE(ts.postCount() == 2);
+
+    REQUIRE(ts.findPost("alpha") != nullptr);
+    REQUIRE(ts.removePost("beta"));
+    REQUIRE(ts.postCount() == 1);
+    REQUIRE_FALSE(ts.removePost("beta"));  // already removed
+}
+
+TEST_CASE("TradingSystem add routes", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradeRoute r;
+    r.originId = "alpha";
+    r.destinationId = "beta";
+    r.goodId = "iron";
+    r.distance = 50.f;
+    ts.addRoute(r);
+    REQUIRE(ts.routeCount() == 1);
+}
+
+TEST_CASE("TradingSystem executeBuy", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradingPost post("alpha", "Alpha");
+    post.addStock("fuel", 100, 25.f);
+    ts.addPost(std::move(post));
+
+    float cost = ts.executeBuy("alpha", "fuel", 4);
+    REQUIRE(cost == Catch::Approx(100.f));  // 4 × 25
+    REQUIRE(ts.totalVolume() == Catch::Approx(100.f));
+}
+
+TEST_CASE("TradingSystem executeSell", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradeGood g;
+    g.id = "copper";
+    g.basePrice = 30.f;
+    ts.registerGood(g);
+    ts.addPost(NF::TradingPost("alpha", "Alpha"));
+
+    float revenue = ts.executeSell("alpha", "copper", 10);
+    REQUIRE(revenue == Catch::Approx(240.f));  // 10 × 30 × 0.8
+}
+
+TEST_CASE("TradingSystem executeBuy nonexistent post", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    float cost = ts.executeBuy("nowhere", "fuel", 1);
+    REQUIRE(cost == 0.f);
+}
+
+TEST_CASE("TradingSystem tick advances prices", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradingPost post("alpha", "Alpha");
+    post.addStock("rare", 3, 100.f);  // low stock
+    ts.addPost(std::move(post));
+
+    ts.tick(1.f);
+    REQUIRE(ts.findPost("alpha")->priceOf("rare") > 100.f);
+}
+
+TEST_CASE("TradingSystem route profit margin", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    NF::TradingPost origin("a", "Origin");
+    origin.addStock("fuel", 50, 10.f);
+    NF::TradingPost dest("b", "Dest");
+    dest.addStock("fuel", 50, 20.f);
+    ts.addPost(std::move(origin));
+    ts.addPost(std::move(dest));
+
+    NF::TradeRoute route;
+    route.originId = "a";
+    route.destinationId = "b";
+    route.goodId = "fuel";
+
+    float margin = ts.routeProfitMargin(route);
+    // Buy at 10, sell at 20 × 0.8 = 16, margin = (16-10)/10 = 0.6
+    REQUIRE(margin == Catch::Approx(0.6f));
+}
+
+TEST_CASE("TradingSystem max caps", "[Game][G23][Trading]") {
+    NF::TradingSystem ts;
+    REQUIRE(NF::TradingSystem::kMaxPosts == 32);
+    REQUIRE(NF::TradingSystem::kMaxRoutes == 64);
+    REQUIRE(NF::TradingSystem::kMaxGoods == 128);
+}

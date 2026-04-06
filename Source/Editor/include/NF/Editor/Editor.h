@@ -2749,6 +2749,334 @@ private:
     ViewportPanel*       m_viewport  = nullptr;
 };
 
+// ── M4/S3 Asset Pipeline ──────────────────────────────────────────
+
+/// 128-bit asset GUID for stable references across renames and moves.
+struct AssetGuid {
+    uint64_t hi = 0;
+    uint64_t lo = 0;
+
+    [[nodiscard]] bool isNull() const { return hi == 0 && lo == 0; }
+
+    bool operator==(const AssetGuid& o) const { return hi == o.hi && lo == o.lo; }
+    bool operator!=(const AssetGuid& o) const { return !(*this == o); }
+    bool operator<(const AssetGuid& o) const {
+        return hi < o.hi || (hi == o.hi && lo < o.lo);
+    }
+
+    /// Generate a deterministic GUID from a path string (FNV-1a based).
+    static AssetGuid fromPath(const std::string& path) {
+        AssetGuid g;
+        // FNV-1a 64-bit for hi
+        uint64_t h = 14695981039346656037ULL;
+        for (char c : path) {
+            h ^= static_cast<uint64_t>(static_cast<unsigned char>(c));
+            h *= 1099511628211ULL;
+        }
+        g.hi = h;
+        // Second pass with different seed for lo
+        h = 17316040143175676883ULL;
+        for (auto it = path.rbegin(); it != path.rend(); ++it) {
+            h ^= static_cast<uint64_t>(static_cast<unsigned char>(*it));
+            h *= 1099511628211ULL;
+        }
+        g.lo = h;
+        return g;
+    }
+
+    /// Generate a unique GUID from a counter (for testing / new assets).
+    static AssetGuid generate(uint64_t counter) {
+        AssetGuid g;
+        g.hi = 0x4F00FACE00000000ULL | (counter >> 32);
+        g.lo = (counter & 0xFFFFFFFFULL) | 0xA55E700000000000ULL;
+        return g;
+    }
+
+    [[nodiscard]] std::string toString() const {
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), "%016llx-%016llx",
+                      static_cast<unsigned long long>(hi),
+                      static_cast<unsigned long long>(lo));
+        return buf;
+    }
+};
+
+enum class AssetType : uint8_t {
+    Unknown  = 0,
+    Mesh     = 1,
+    Texture  = 2,
+    Material = 3,
+    Sound    = 4,
+    Script   = 5,
+    Graph    = 6,
+    World    = 7
+};
+
+inline const char* assetTypeName(AssetType t) {
+    switch (t) {
+        case AssetType::Mesh:     return "Mesh";
+        case AssetType::Texture:  return "Texture";
+        case AssetType::Material: return "Material";
+        case AssetType::Sound:    return "Sound";
+        case AssetType::Script:   return "Script";
+        case AssetType::Graph:    return "Graph";
+        case AssetType::World:    return "World";
+        default:                  return "Unknown";
+    }
+}
+
+inline AssetType classifyAssetExtension(const std::string& ext) {
+    if (ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb") return AssetType::Mesh;
+    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp") return AssetType::Texture;
+    if (ext == ".mat" || ext == ".nfmat") return AssetType::Material;
+    if (ext == ".wav" || ext == ".ogg" || ext == ".mp3") return AssetType::Sound;
+    if (ext == ".lua" || ext == ".nfs") return AssetType::Script;
+    if (ext == ".nfg") return AssetType::Graph;
+    if (ext == ".nfw") return AssetType::World;
+    return AssetType::Unknown;
+}
+
+/// An entry in the asset database.
+struct AssetEntry {
+    AssetGuid   guid;
+    std::string path;          // relative to content root
+    std::string name;          // filename without extension
+    AssetType   type       = AssetType::Unknown;
+    uint64_t    lastModified = 0;  // epoch seconds
+    size_t      sizeBytes  = 0;
+    bool        imported   = false;
+};
+
+/// Central GUID-based asset registry.  Maps paths↔GUIDs and tracks import state.
+class AssetDatabase {
+public:
+    /// Register an asset.  If the path already exists the existing entry is updated.
+    AssetGuid registerAsset(const std::string& relativePath, AssetType type,
+                            size_t sizeBytes = 0, uint64_t lastMod = 0) {
+        // Check if path already registered
+        for (auto& e : m_entries) {
+            if (e.path == relativePath) {
+                e.type = type;
+                e.sizeBytes = sizeBytes;
+                e.lastModified = lastMod;
+                return e.guid;
+            }
+        }
+        AssetEntry entry;
+        entry.guid = AssetGuid::fromPath(relativePath);
+        entry.path = relativePath;
+        entry.type = type;
+        entry.sizeBytes = sizeBytes;
+        entry.lastModified = lastMod;
+
+        // Extract name from path
+        auto pos = relativePath.find_last_of("/\\");
+        std::string filename = (pos != std::string::npos) ? relativePath.substr(pos + 1) : relativePath;
+        auto dotPos = filename.find_last_of('.');
+        entry.name = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
+
+        m_entries.push_back(entry);
+        return entry.guid;
+    }
+
+    /// Remove an asset by GUID.
+    bool removeAsset(const AssetGuid& guid) {
+        for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
+            if (it->guid == guid) { m_entries.erase(it); return true; }
+        }
+        return false;
+    }
+
+    /// Find by GUID.
+    [[nodiscard]] AssetEntry* findByGuid(const AssetGuid& guid) {
+        for (auto& e : m_entries) if (e.guid == guid) return &e;
+        return nullptr;
+    }
+    [[nodiscard]] const AssetEntry* findByGuid(const AssetGuid& guid) const {
+        for (auto& e : m_entries) if (e.guid == guid) return &e;
+        return nullptr;
+    }
+
+    /// Find by relative path.
+    [[nodiscard]] AssetEntry* findByPath(const std::string& path) {
+        for (auto& e : m_entries) if (e.path == path) return &e;
+        return nullptr;
+    }
+
+    /// Mark an asset as imported.
+    bool markImported(const AssetGuid& guid) {
+        if (auto* e = findByGuid(guid)) { e->imported = true; return true; }
+        return false;
+    }
+
+    /// Scan a directory tree and register all recognised asset files.
+    size_t scanDirectory(const std::string& rootPath) {
+        size_t count = 0;
+        if (!std::filesystem::exists(rootPath)) return 0;
+        for (auto& entry : std::filesystem::recursive_directory_iterator(rootPath)) {
+            if (!entry.is_regular_file()) continue;
+            auto ext = entry.path().extension().string();
+            AssetType type = classifyAssetExtension(ext);
+            if (type == AssetType::Unknown) continue;
+
+            std::string relPath = entry.path().string();
+            // Normalise to forward slashes
+            for (char& c : relPath) if (c == '\\') c = '/';
+
+            uint64_t lastMod = 0;
+            auto ftime = std::filesystem::last_write_time(entry);
+            lastMod = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    ftime.time_since_epoch()).count());
+
+            registerAsset(relPath, type, static_cast<size_t>(entry.file_size()), lastMod);
+            ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] const std::vector<AssetEntry>& entries() const { return m_entries; }
+    [[nodiscard]] size_t assetCount() const { return m_entries.size(); }
+
+    /// Return all assets of a given type.
+    [[nodiscard]] std::vector<const AssetEntry*> assetsOfType(AssetType type) const {
+        std::vector<const AssetEntry*> result;
+        for (auto& e : m_entries) if (e.type == type) result.push_back(&e);
+        return result;
+    }
+
+    [[nodiscard]] size_t importedCount() const {
+        size_t n = 0;
+        for (auto& e : m_entries) if (e.imported) ++n;
+        return n;
+    }
+
+    void clear() { m_entries.clear(); }
+
+private:
+    std::vector<AssetEntry> m_entries;
+};
+
+/// Import settings for mesh assets.
+struct MeshImportSettings {
+    float scaleFactor       = 1.0f;
+    bool  generateNormals   = true;
+    bool  generateTangents  = false;
+    bool  flipWindingOrder  = false;
+    bool  mergeMeshes       = false;
+    int   maxVertices       = 0;  // 0 = no limit
+};
+
+/// Import settings for texture assets.
+struct TextureImportSettings {
+    bool  generateMipmaps    = true;
+    bool  sRGB               = true;
+    int   maxResolution      = 0;   // 0 = no limit
+    bool  premultiplyAlpha   = false;
+    bool  flipVertically     = true;
+    float compressionQuality = 0.8f; // 0-1
+};
+
+/// Mesh importer — validates and "imports" mesh files into the asset database.
+class MeshImporter {
+public:
+    void setSettings(const MeshImportSettings& s) { m_settings = s; }
+    [[nodiscard]] const MeshImportSettings& settings() const { return m_settings; }
+
+    /// Validate that the given path is a supported mesh format.
+    [[nodiscard]] bool canImport(const std::string& path) const {
+        auto ext = std::filesystem::path(path).extension().string();
+        return ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb";
+    }
+
+    /// Import a mesh into the asset database.  Returns the GUID.
+    AssetGuid import(AssetDatabase& db, const std::string& relativePath) {
+        if (!canImport(relativePath)) return {};
+        AssetGuid guid = db.registerAsset(relativePath, AssetType::Mesh);
+        db.markImported(guid);
+        ++m_importCount;
+        NF_LOG_INFO("MeshImporter", "Imported mesh: " + relativePath);
+        return guid;
+    }
+
+    [[nodiscard]] size_t importCount() const { return m_importCount; }
+
+private:
+    MeshImportSettings m_settings;
+    size_t m_importCount = 0;
+};
+
+/// Texture importer — validates and "imports" texture files into the asset database.
+class TextureImporter {
+public:
+    void setSettings(const TextureImportSettings& s) { m_settings = s; }
+    [[nodiscard]] const TextureImportSettings& settings() const { return m_settings; }
+
+    /// Validate that the given path is a supported texture format.
+    [[nodiscard]] bool canImport(const std::string& path) const {
+        auto ext = std::filesystem::path(path).extension().string();
+        return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+               ext == ".tga" || ext == ".bmp";
+    }
+
+    /// Import a texture into the asset database.  Returns the GUID.
+    AssetGuid import(AssetDatabase& db, const std::string& relativePath) {
+        if (!canImport(relativePath)) return {};
+        AssetGuid guid = db.registerAsset(relativePath, AssetType::Texture);
+        db.markImported(guid);
+        ++m_importCount;
+        NF_LOG_INFO("TextureImporter", "Imported texture: " + relativePath);
+        return guid;
+    }
+
+    [[nodiscard]] size_t importCount() const { return m_importCount; }
+
+private:
+    TextureImportSettings m_settings;
+    size_t m_importCount = 0;
+};
+
+/// Watches for asset changes and tracks which GUIDs need re-import (hot-reload).
+class AssetWatcher {
+public:
+    /// Poll the asset database for changes.  Returns number of dirty assets detected.
+    size_t pollChanges(AssetDatabase& db) {
+        size_t detected = 0;
+        for (auto& entry : db.entries()) {
+            if (!std::filesystem::exists(entry.path)) continue;
+            auto ftime = std::filesystem::last_write_time(entry.path);
+            uint64_t modTime = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    ftime.time_since_epoch()).count());
+            if (modTime > entry.lastModified) {
+                m_dirtyAssets.insert(entry.guid);
+                ++detected;
+            }
+        }
+        return detected;
+    }
+
+    /// Mark a GUID as dirty (needs re-import).
+    void markDirty(const AssetGuid& guid) { m_dirtyAssets.insert(guid); }
+
+    /// Clear a GUID from dirty set after re-import.
+    void clearDirty(const AssetGuid& guid) { m_dirtyAssets.erase(guid); }
+
+    /// Check if an asset is dirty.
+    [[nodiscard]] bool isDirty(const AssetGuid& guid) const {
+        return m_dirtyAssets.count(guid) > 0;
+    }
+
+    [[nodiscard]] size_t dirtyCount() const { return m_dirtyAssets.size(); }
+
+    void clearAll() { m_dirtyAssets.clear(); }
+
+    [[nodiscard]] const std::set<AssetGuid>& dirtyAssets() const { return m_dirtyAssets; }
+
+private:
+    std::set<AssetGuid> m_dirtyAssets;
+};
+
 // ── Editor application ───────────────────────────────────────────
 
 class EditorApp {
@@ -3057,6 +3385,37 @@ public:
             NF_LOG_INFO("Editor", "Voxel Paint tool activated");
         }, "Voxel Paint Tool", "");
 
+        // M4/S3 Asset Pipeline commands
+        m_commands.registerCommand("assets.scan", [this]() {
+            if (!m_projectPaths.contentPath().empty()) {
+                size_t n = m_assetDatabase.scanDirectory(m_projectPaths.contentPath());
+                NF_LOG_INFO("Assets", "Scanned " + std::to_string(n) + " assets");
+                m_notifications.push(NotificationType::Success,
+                    "Asset scan: " + std::to_string(n) + " files found");
+            }
+        }, "Scan Assets", "");
+
+        m_commands.registerCommand("assets.reimport", [this]() {
+            size_t reimported = 0;
+            for (auto& guid : m_assetWatcher.dirtyAssets()) {
+                auto* entry = m_assetDatabase.findByGuid(guid);
+                if (!entry) continue;
+                if (m_meshImporter.canImport(entry->path))
+                    m_meshImporter.import(m_assetDatabase, entry->path);
+                else if (m_textureImporter.canImport(entry->path))
+                    m_textureImporter.import(m_assetDatabase, entry->path);
+                ++reimported;
+            }
+            m_assetWatcher.clearAll();
+            if (reimported > 0) {
+                NF_LOG_INFO("Assets", "Re-imported " + std::to_string(reimported) + " assets");
+                m_notifications.push(NotificationType::Success,
+                    "Re-imported " + std::to_string(reimported) + " assets");
+            }
+        }, "Reimport Changed Assets", "");
+        m_commands.setEnabledCheck("assets.reimport",
+            [this]() { return m_assetWatcher.dirtyCount() > 0; });
+
         // Create default toolbar items
         m_toolbar.addItem("Select", "select", "Select tool", [this]() {
             m_gizmo.setMode(GizmoMode::Translate);
@@ -3331,6 +3690,13 @@ public:
     PlayInEditorSystem& playInEditor() { return *m_playInEditor; }
     const PlayInEditorSystem& playInEditor() const { return *m_playInEditor; }
 
+    // M4/S3 accessors
+    AssetDatabase& assetDatabase() { return m_assetDatabase; }
+    const AssetDatabase& assetDatabase() const { return m_assetDatabase; }
+    MeshImporter& meshImporter() { return m_meshImporter; }
+    TextureImporter& textureImporter() { return m_textureImporter; }
+    AssetWatcher& assetWatcher() { return m_assetWatcher; }
+
     [[nodiscard]] PCGTuningPanel* pcgTuningPanel() {
         for (auto& p : m_editorPanels) {
             if (auto* pcg = dynamic_cast<PCGTuningPanel*>(p.get())) return pcg;
@@ -3414,6 +3780,9 @@ private:
         tools.addSeparator();
         tools.addItem("Entity Placement",   "tools.entity_placement");
         tools.addItem("Voxel Paint",        "tools.voxel_paint");
+        tools.addSeparator();
+        tools.addItem("Scan Assets",        "assets.scan");
+        tools.addItem("Reimport Changed",   "assets.reimport");
     }
 
     Renderer m_renderer;
@@ -3456,6 +3825,12 @@ private:
 
     // M3/S2 Play-in-Editor
     std::unique_ptr<PlayInEditorSystem> m_playInEditor;
+
+    // M4/S3 Asset Pipeline
+    AssetDatabase m_assetDatabase;
+    MeshImporter m_meshImporter;
+    TextureImporter m_textureImporter;
+    AssetWatcher m_assetWatcher;
 
     // ── State persistence ───────────────────────────────────────
 

@@ -5199,4 +5199,264 @@ private:
     std::vector<WeatherForecastEntry> m_forecast;
 };
 
+// ── G23 Trading System ────────────────────────────────────────────
+
+enum class TradeGoodCategory : uint8_t {
+    Raw         = 0,
+    Refined     = 1,
+    Component   = 2,
+    Consumable  = 3,
+    Tech        = 4,
+    Luxury      = 5,
+    Contraband  = 6,
+    Data        = 7
+};
+
+inline const char* tradeGoodCategoryName(TradeGoodCategory c) {
+    switch (c) {
+        case TradeGoodCategory::Raw:        return "Raw";
+        case TradeGoodCategory::Refined:    return "Refined";
+        case TradeGoodCategory::Component:  return "Component";
+        case TradeGoodCategory::Consumable: return "Consumable";
+        case TradeGoodCategory::Tech:       return "Tech";
+        case TradeGoodCategory::Luxury:     return "Luxury";
+        case TradeGoodCategory::Contraband: return "Contraband";
+        case TradeGoodCategory::Data:       return "Data";
+    }
+    return "Unknown";
+}
+
+/// Description of a tradeable good.
+struct TradeGood {
+    std::string         id;
+    std::string         name;
+    TradeGoodCategory   category    = TradeGoodCategory::Raw;
+    float               basePrice   = 10.f;    // credits per unit
+    float               weight      = 1.f;     // kg per unit
+    bool                legal       = true;     // false = contraband
+
+    [[nodiscard]] bool isContraband() const { return !legal; }
+};
+
+/// A pending buy or sell offer at a trading post.
+struct TradeOffer {
+    std::string goodId;
+    int         quantity     = 0;
+    float       pricePerUnit = 0.f;
+    bool        isBuyOffer   = true;  // true = the post wants to buy, false = selling
+};
+
+/// A trade route connecting two posts.
+struct TradeRoute {
+    std::string originId;
+    std::string destinationId;
+    std::string goodId;
+    float       profitMargin = 0.f;  // percentage 0-1
+    float       riskLevel    = 0.f;  // 0 = safe, 1 = very dangerous
+    float       distance     = 0.f;  // abstract distance units
+};
+
+/// A single trading post — manages local inventory, pricing, and offers.
+class TradingPost {
+public:
+    TradingPost() = default;
+    TradingPost(const std::string& id, const std::string& name)
+        : m_id(id), m_name(name) {}
+
+    [[nodiscard]] const std::string& postId() const { return m_id; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    /// Add stock of a good.
+    void addStock(const std::string& goodId, int quantity, float pricePerUnit) {
+        for (auto& s : m_stock) {
+            if (s.goodId == goodId) {
+                s.quantity += quantity;
+                s.pricePerUnit = pricePerUnit;
+                return;
+            }
+        }
+        m_stock.push_back({goodId, quantity, pricePerUnit, false});
+    }
+
+    /// Remove stock (e.g. after sale).  Returns actual amount removed.
+    int removeStock(const std::string& goodId, int quantity) {
+        for (auto& s : m_stock) {
+            if (s.goodId == goodId) {
+                int removed = std::min(s.quantity, quantity);
+                s.quantity -= removed;
+                return removed;
+            }
+        }
+        return 0;
+    }
+
+    /// Query current stock for a good.
+    [[nodiscard]] int stockOf(const std::string& goodId) const {
+        for (auto& s : m_stock) if (s.goodId == goodId) return s.quantity;
+        return 0;
+    }
+
+    /// Get the current price for a good.
+    [[nodiscard]] float priceOf(const std::string& goodId) const {
+        for (auto& s : m_stock) if (s.goodId == goodId) return s.pricePerUnit;
+        return 0.f;
+    }
+
+    /// Execute a buy: player buys 'quantity' of goodId from the post.
+    /// Returns total cost (0 if insufficient stock).
+    float buy(const std::string& goodId, int quantity) {
+        for (auto& s : m_stock) {
+            if (s.goodId != goodId) continue;
+            if (s.quantity < quantity) return 0.f;  // insufficient stock
+            float cost = s.pricePerUnit * static_cast<float>(quantity);
+            s.quantity -= quantity;
+            m_totalSales += cost;
+            return cost;
+        }
+        return 0.f;
+    }
+
+    /// Execute a sell: player sells 'quantity' of goodId to the post.
+    /// Returns revenue (buy-back is at 80% of current price).
+    float sell(const std::string& goodId, int quantity, float basePrice) {
+        float sellPrice = basePrice * 0.8f;  // 80% buy-back rate
+        addStock(goodId, quantity, basePrice);
+        float revenue = sellPrice * static_cast<float>(quantity);
+        m_totalPurchases += revenue;
+        return revenue;
+    }
+
+    /// Apply supply/demand price fluctuation per tick.
+    void tickPrices(float dt) {
+        for (auto& s : m_stock) {
+            // Low stock → price rises, high stock → price falls
+            float supplyFactor = 1.f;
+            if (s.quantity < 10)       supplyFactor = 1.05f;
+            else if (s.quantity > 100) supplyFactor = 0.97f;
+            s.pricePerUnit *= std::pow(supplyFactor, dt);
+            s.pricePerUnit = std::max(0.01f, s.pricePerUnit);  // price floor
+        }
+    }
+
+    [[nodiscard]] const std::vector<TradeOffer>& stock() const { return m_stock; }
+    [[nodiscard]] size_t stockCount() const { return m_stock.size(); }
+    [[nodiscard]] float totalSales() const { return m_totalSales; }
+    [[nodiscard]] float totalPurchases() const { return m_totalPurchases; }
+
+    /// Set a tax rate (0-1).
+    void setTaxRate(float rate) { m_taxRate = std::max(0.f, std::min(rate, 1.f)); }
+    [[nodiscard]] float taxRate() const { return m_taxRate; }
+
+private:
+    std::string m_id;
+    std::string m_name;
+    std::vector<TradeOffer> m_stock;
+    float m_totalSales     = 0.f;
+    float m_totalPurchases = 0.f;
+    float m_taxRate        = 0.05f;  // 5% default
+};
+
+/// Central trading system managing all posts, routes, and global economics.
+class TradingSystem {
+public:
+    static constexpr int kMaxPosts  = 32;
+    static constexpr int kMaxRoutes = 64;
+    static constexpr int kMaxGoods  = 128;
+
+    /// Register a trade good definition.
+    void registerGood(const TradeGood& good) {
+        if (static_cast<int>(m_goods.size()) >= kMaxGoods) return;
+        for (auto& g : m_goods) if (g.id == good.id) return;  // no duplicates
+        m_goods.push_back(good);
+    }
+
+    /// Add a trading post.
+    void addPost(TradingPost post) {
+        if (static_cast<int>(m_posts.size()) >= kMaxPosts) return;
+        m_posts.push_back(std::move(post));
+    }
+
+    /// Remove a post by ID.
+    bool removePost(const std::string& id) {
+        for (auto it = m_posts.begin(); it != m_posts.end(); ++it) {
+            if (it->postId() == id) { m_posts.erase(it); return true; }
+        }
+        return false;
+    }
+
+    /// Find a post by ID.
+    [[nodiscard]] TradingPost* findPost(const std::string& id) {
+        for (auto& p : m_posts) if (p.postId() == id) return &p;
+        return nullptr;
+    }
+
+    /// Add a trade route.
+    void addRoute(const TradeRoute& route) {
+        if (static_cast<int>(m_routes.size()) >= kMaxRoutes) return;
+        m_routes.push_back(route);
+    }
+
+    /// Find the trade good definition.
+    [[nodiscard]] const TradeGood* findGood(const std::string& id) const {
+        for (auto& g : m_goods) if (g.id == id) return &g;
+        return nullptr;
+    }
+
+    /// Execute a trade: player buys from a post.
+    float executeBuy(const std::string& postId, const std::string& goodId, int qty) {
+        auto* post = findPost(postId);
+        if (!post) return 0.f;
+        float cost = post->buy(goodId, qty);
+        if (cost > 0.f) m_totalVolume += cost;
+        return cost;
+    }
+
+    /// Execute a trade: player sells to a post.
+    float executeSell(const std::string& postId, const std::string& goodId, int qty) {
+        auto* post = findPost(postId);
+        if (!post) return 0.f;
+        const auto* good = findGood(goodId);
+        float basePrice = good ? good->basePrice : 10.f;
+        float revenue = post->sell(goodId, qty, basePrice);
+        if (revenue > 0.f) m_totalVolume += revenue;
+        return revenue;
+    }
+
+    /// Advance all post prices by dt seconds.
+    void tick(float dt) {
+        for (auto& p : m_posts)
+            p.tickPrices(dt);
+    }
+
+    /// Calculate profit margin for a route (buy at origin, sell at destination).
+    [[nodiscard]] float routeProfitMargin(const TradeRoute& route) const {
+        const TradingPost* origin = nullptr;
+        const TradingPost* dest = nullptr;
+        for (auto& p : m_posts) {
+            if (p.postId() == route.originId) origin = &p;
+            if (p.postId() == route.destinationId) dest = &p;
+        }
+        if (!origin || !dest) return 0.f;
+
+        float buyPrice  = origin->priceOf(route.goodId);
+        float sellPrice = dest->priceOf(route.goodId) * 0.8f;  // sell at 80%
+        if (buyPrice <= 0.f) return 0.f;
+        return (sellPrice - buyPrice) / buyPrice;
+    }
+
+    [[nodiscard]] const std::vector<TradeGood>& goods() const { return m_goods; }
+    [[nodiscard]] const std::vector<TradingPost>& posts() const { return m_posts; }
+    [[nodiscard]] const std::vector<TradeRoute>& routes() const { return m_routes; }
+    [[nodiscard]] size_t postCount() const { return m_posts.size(); }
+    [[nodiscard]] size_t routeCount() const { return m_routes.size(); }
+    [[nodiscard]] size_t goodCount() const { return m_goods.size(); }
+    [[nodiscard]] float totalVolume() const { return m_totalVolume; }
+
+private:
+    std::vector<TradeGood>    m_goods;
+    std::vector<TradingPost>  m_posts;
+    std::vector<TradeRoute>   m_routes;
+    float m_totalVolume = 0.f;
+};
+
 } // namespace NF

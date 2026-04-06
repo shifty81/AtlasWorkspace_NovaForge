@@ -869,3 +869,70 @@ G22 (Weather System) fully delivered:
 - WeatherSystem with forecast queue, auto-transitions, effects query
 - 18 new game tests, all passing
 Total: 940 tests, 0 failures.
+
+## M4/S3 — Asset Pipeline ✅
+
+- [x] M4-1: AssetGuid 128-bit UUID type (FNV-1a from path, generate from counter)
+  - Null check, deterministic fromPath, toString (hex-dash format)
+- [x] M4-2: AssetType enum (Mesh, Texture, Material, Sound, Script, Graph, World, Unknown)
+  - assetTypeName() helper, classifyAssetExtension() for 15+ extensions
+- [x] M4-3: AssetEntry struct (guid, path, name, type, lastModified, sizeBytes, imported)
+- [x] M4-4: AssetDatabase class — GUID-based asset registry
+  - registerAsset (auto-dedup by path), removeAsset, findByGuid/findByPath
+  - markImported, assetsOfType, importedCount, scanDirectory (recursive fs walk)
+  - clear, entries, assetCount
+- [x] M4-5: MeshImportSettings / TextureImportSettings structs
+  - Mesh: scaleFactor, generateNormals, generateTangents, flipWindingOrder, mergeMeshes
+  - Texture: generateMipmaps, sRGB, maxResolution, premultiplyAlpha, flipVertically, compressionQuality
+- [x] M4-6: MeshImporter class — validate (.obj/.fbx/.gltf/.glb), import, settings
+- [x] M4-7: TextureImporter class — validate (.png/.jpg/.tga/.bmp), import, settings
+- [x] M4-8: AssetWatcher class — hot-reload detection via dirty GUID set
+  - markDirty, clearDirty, isDirty, clearAll, pollChanges (timestamp comparison)
+- [x] M4-9: EditorApp integration
+  - Member variables: m_assetDatabase, m_meshImporter, m_textureImporter, m_assetWatcher
+  - Accessors: assetDatabase(), meshImporter(), textureImporter(), assetWatcher()
+  - Commands: assets.scan (scan content dir), assets.reimport (re-import dirty)
+  - Menu: Tools → Scan Assets, Reimport Changed
+- [x] M4-10: test_m4_editor.cpp — 24 new Catch2 test cases
+- [x] Build verification: 983/983 tests pass (940 existing + 43 new)
+
+## M4/S3 Complete ✅
+
+M4/S3 (Asset Pipeline) fully delivered:
+- AssetGuid 128-bit UUID with deterministic path-based generation
+- AssetDatabase with GUID↔path registry, import tracking, directory scanning
+- MeshImporter + TextureImporter with settings and validation
+- AssetWatcher for hot-reload detection
+- Fully wired into EditorApp with commands and menu items
+- 24 new editor tests, all passing
+
+## G23 — Trading System ✅
+
+- [x] G23-1: TradeGoodCategory enum (Raw, Refined, Component, Consumable, Tech, Luxury, Contraband, Data)
+  - tradeGoodCategoryName() for all 8 categories
+- [x] G23-2: TradeGood struct (id, name, category, basePrice, weight, legal flag)
+  - isContraband() convenience query
+- [x] G23-3: TradeOffer struct (goodId, quantity, pricePerUnit, isBuyOffer)
+- [x] G23-4: TradeRoute struct (originId, destinationId, goodId, profitMargin, riskLevel, distance)
+- [x] G23-5: TradingPost class — local inventory, pricing, and transactions
+  - addStock, removeStock, stockOf, priceOf
+  - buy() (deducts stock, returns cost), sell() (adds stock, returns revenue at 80%)
+  - tickPrices() (supply/demand fluctuation), taxRate management
+  - totalSales, totalPurchases tracking
+- [x] G23-6: TradingSystem class — global trade management
+  - registerGood (no duplicates), addPost, removePost, findPost, findGood
+  - executeBuy, executeSell (through posts), tick price updates
+  - routeProfitMargin (buy-at-origin, sell-at-destination calculation)
+  - Max caps: 32 posts, 64 routes, 128 goods, total volume tracking
+- [x] G23-7: 19 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 983/983 tests pass
+
+## G23 Complete ✅
+
+G23 (Trading System) fully delivered:
+- TradeGoodCategory×8 with name helper
+- TradeGood, TradeOffer, TradeRoute data types
+- TradingPost with buy/sell transactions, supply/demand pricing
+- TradingSystem with global trade management, route profit analysis
+- 19 new game tests, all passing
+Total: 983 tests, 0 failures.
