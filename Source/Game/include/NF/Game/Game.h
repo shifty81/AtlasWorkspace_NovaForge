@@ -9370,4 +9370,139 @@ private:
     size_t               m_tickCount = 0;
 };
 
+// ============================================================
+// G42 — Wildfire System
+// ============================================================
+
+enum class WildfireType : uint8_t {
+    Forest, Grassland, Shrub, Peat, Urban, Agricultural, Desert, Tropical
+};
+
+[[nodiscard]] inline const char* wildfireTypeName(WildfireType t) {
+    switch (t) {
+        case WildfireType::Forest:       return "Forest";
+        case WildfireType::Grassland:    return "Grassland";
+        case WildfireType::Shrub:        return "Shrub";
+        case WildfireType::Peat:         return "Peat";
+        case WildfireType::Urban:        return "Urban";
+        case WildfireType::Agricultural: return "Agricultural";
+        case WildfireType::Desert:       return "Desert";
+        case WildfireType::Tropical:     return "Tropical";
+    }
+    return "Unknown";
+}
+
+enum class WildfireSeverity : uint8_t {
+    Minor, Moderate, Significant, Major, Catastrophic
+};
+
+[[nodiscard]] inline const char* wildfireSeverityName(WildfireSeverity s) {
+    switch (s) {
+        case WildfireSeverity::Minor:        return "Minor";
+        case WildfireSeverity::Moderate:     return "Moderate";
+        case WildfireSeverity::Significant:  return "Significant";
+        case WildfireSeverity::Major:        return "Major";
+        case WildfireSeverity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct WildfireFront {
+    std::string      id;
+    float            widthKm         = 0.f;
+    float            advanceRateKmh  = 0.f;
+    bool             contained       = false;
+    WildfireSeverity severity        = WildfireSeverity::Minor;
+
+    void contain()          { contained = true; }
+    void spread(float rate) { advanceRateKmh = rate; }
+
+    [[nodiscard]] bool isContained()    const { return contained; }
+    [[nodiscard]] bool isSpreading()    const { return advanceRateKmh > 0.f && !contained; }
+    [[nodiscard]] bool isCatastrophic() const { return severity == WildfireSeverity::Catastrophic; }
+};
+
+class WildfireZone {
+public:
+    explicit WildfireZone(const std::string& name) : m_name(name) {}
+
+    void setType(WildfireType t)         { m_type = t; }
+    void setSeverity(WildfireSeverity s) { m_severity = s; }
+
+    bool addFront(const WildfireFront& f) {
+        for (auto& existing : m_fronts) if (existing.id == f.id) return false;
+        m_fronts.push_back(f);
+        return true;
+    }
+
+    void containAll() { for (auto& f : m_fronts) f.contain(); }
+
+    [[nodiscard]] size_t frontCount() const { return m_fronts.size(); }
+
+    [[nodiscard]] size_t containedFronts() const {
+        size_t c = 0;
+        for (auto& f : m_fronts) if (f.isContained()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()     const { return m_name;     }
+    [[nodiscard]] WildfireType       type()     const { return m_type;     }
+    [[nodiscard]] WildfireSeverity   severity() const { return m_severity; }
+
+    [[nodiscard]] bool isActive() const {
+        for (auto& f : m_fronts) if (f.isSpreading()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                m_name;
+    WildfireType               m_type      = WildfireType::Forest;
+    WildfireSeverity           m_severity  = WildfireSeverity::Minor;
+    std::vector<WildfireFront> m_fronts;
+    size_t                     m_tickCount = 0;
+};
+
+class WildfireSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    WildfireZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] WildfireZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isActive()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.severity() == WildfireSeverity::Catastrophic) c++;
+        return c;
+    }
+
+private:
+    std::vector<WildfireZone> m_zones;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF

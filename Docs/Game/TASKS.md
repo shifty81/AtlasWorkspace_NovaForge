@@ -2130,3 +2130,50 @@ Total: 1504 tests, 0 failures (1480 existing + 14 S21 + 10 G40 = 1504).
 ## Build Verification ✅
 
 Total: 1528 tests, 0 failures (1504 existing + 14 S22 + 10 G41 = 1528).
+
+---
+
+## S23 — Shortcut Manager ✅
+
+- [x] ShortcutCategory enum ×8 (File, Edit, View, Navigate, Select, Debug, Tool, Custom)
+  - shortcutCategoryName() for all 8 categories
+- [x] ShortcutState enum ×4 (Inactive, Active, Pressed, Blocked)
+  - shortcutStateName() for all 4 states
+- [x] ShortcutBinding struct (id, name, category, key, modifiers, enabled, state)
+  - enable/disable, trigger (sets Pressed), reset (sets Inactive)
+  - isEnabled, isActive (state==Pressed), hasKey (key non-empty)
+- [x] ShortcutContext — named context with binding list (max uncapped)
+  - addBinding (duplicate id rejected), removeBinding, findBinding
+  - enableAll, disableAll, activeCount (enabled bindings), bindingCount, name
+- [x] ShortcutManager — multi-context registry (max 32)
+  - createContext (duplicate/full rejected), removeContext (clears active if removed), findContext
+  - setActiveContext/activeContext/activeName/hasActive/contextCount
+- [x] 14 new editor tests (test_s23_editor.cpp), all passing
+
+## S23 Complete ✅
+
+---
+
+## G42 — Wildfire System ✅
+
+- [x] WildfireType enum ×8 (Forest, Grassland, Shrub, Peat, Urban, Agricultural, Desert, Tropical)
+  - wildfireTypeName() for all 8 types
+- [x] WildfireSeverity enum ×5 (Minor, Moderate, Significant, Major, Catastrophic)
+  - wildfireSeverityName() for all 5 severities
+- [x] WildfireFront struct (id, widthKm, advanceRateKmh, contained, severity)
+  - contain, spread(rate), isContained, isSpreading (rate > 0 and not contained), isCatastrophic
+- [x] WildfireZone class — per-zone state + front list
+  - setType, setSeverity, addFront (duplicate id rejected), containAll
+  - frontCount, containedFronts, name, type, severity, isActive, tick
+- [x] WildfireSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, activeCount, catastrophicCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G42 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1552 tests, 0 failures (1528 existing + 14 S23 + 10 G42 = 1552).

@@ -71,7 +71,8 @@
 | **G39** — Earthquake System | EarthquakeScale×8, EarthquakeStatus×4, Earthquake, FaultLine, EarthquakeSystem | ✅ Done |
 | **G40** — Volcano System | VolcanoActivity×8, VolcanoStatus×4, VolcanicEvent, Volcano, VolcanoSystem | ✅ Done |
 | **G41** — Tsunami System | TsunamiCause×8, TsunamiStatus×4, TsunamiWave, Tsunami, TsunamiSystem | ✅ Done |
-| **G42** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G42** — Wildfire System | WildfireType×8, WildfireSeverity×5, WildfireFront, WildfireZone, WildfireSystem | ✅ Done |
+| **G43** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -124,7 +125,8 @@
 | **S20** — Resource Monitor System | ResourceMonitorMetric×8, ResourceMonitorLevel×4, ResourceMonitorSample, ResourceMonitorChannel, ResourceMonitorSystem | ✅ Done |
 | **S21** — Editor Event Bus System | EditorEventPriority×8, EditorBusState×4, EditorBusEvent, EditorEventSubscription, EditorEventBus | ✅ Done |
 | **S22** — Workspace Layout Manager | LayoutPanelType×8, LayoutDockZone×4, LayoutPanel, LayoutSplit, WorkspaceLayout, WorkspaceLayoutManager | ✅ Done |
-| **S23** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S23** — Shortcut Manager | ShortcutCategory×8, ShortcutState×4, ShortcutBinding, ShortcutContext, ShortcutManager | ✅ Done |
+| **S24** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

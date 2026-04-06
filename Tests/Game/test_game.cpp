@@ -7377,3 +7377,110 @@ TEST_CASE("TsunamiSystem tick increments all tsunami tickCounts", "[Game][G41][T
     REQUIRE(sys.find("x")->tickCount() == 3);
     REQUIRE(sys.find("y")->tickCount() == 3);
 }
+
+// ============================================================
+// G42 — Wildfire System
+// ============================================================
+
+TEST_CASE("WildfireType names cover all 8 values", "[Game][G42][Wildfire]") {
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Forest))       == "Forest");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Grassland))    == "Grassland");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Shrub))        == "Shrub");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Peat))         == "Peat");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Urban))        == "Urban");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Agricultural)) == "Agricultural");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Desert))       == "Desert");
+    REQUIRE(std::string(NF::wildfireTypeName(NF::WildfireType::Tropical))     == "Tropical");
+}
+
+TEST_CASE("WildfireSeverity names cover all 5 values", "[Game][G42][Wildfire]") {
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Significant))  == "Significant");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Major))        == "Major");
+    REQUIRE(std::string(NF::wildfireSeverityName(NF::WildfireSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("WildfireFront contain/spread/isContained/isSpreading", "[Game][G42][Wildfire]") {
+    NF::WildfireFront f;
+    f.id = "front-1";
+    f.spread(15.f);
+    REQUIRE(f.isSpreading());
+    REQUIRE_FALSE(f.isContained());
+    f.contain();
+    REQUIRE(f.isContained());
+    REQUIRE_FALSE(f.isSpreading());
+}
+
+TEST_CASE("WildfireFront isCatastrophic threshold", "[Game][G42][Wildfire]") {
+    NF::WildfireFront f;
+    f.id = "front-2";
+    REQUIRE_FALSE(f.isCatastrophic());
+    f.severity = NF::WildfireSeverity::Catastrophic;
+    REQUIRE(f.isCatastrophic());
+}
+
+TEST_CASE("WildfireZone addFront and duplicate rejection", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("australia-east");
+    NF::WildfireFront f1; f1.id = "f1"; f1.spread(10.f);
+    NF::WildfireFront f2; f2.id = "f2"; f2.spread(5.f);
+    NF::WildfireFront dup; dup.id = "f1";
+
+    REQUIRE(zone.addFront(f1));
+    REQUIRE(zone.addFront(f2));
+    REQUIRE_FALSE(zone.addFront(dup));
+    REQUIRE(zone.frontCount() == 2);
+}
+
+TEST_CASE("WildfireZone containAll sets all fronts contained", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("california");
+    NF::WildfireFront f1; f1.id = "f1"; f1.spread(20.f);
+    NF::WildfireFront f2; f2.id = "f2"; f2.spread(8.f);
+    zone.addFront(f1);
+    zone.addFront(f2);
+    zone.containAll();
+    REQUIRE(zone.containedFronts() == 2);
+    REQUIRE_FALSE(zone.isActive());
+}
+
+TEST_CASE("WildfireZone isActive requires spreading front", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("portugal");
+    REQUIRE_FALSE(zone.isActive());
+    NF::WildfireFront f; f.id = "f1"; f.spread(3.f);
+    zone.addFront(f);
+    REQUIRE(zone.isActive());
+}
+
+TEST_CASE("WildfireZone frontCount and containedFronts count", "[Game][G42][Wildfire]") {
+    NF::WildfireZone zone("greece");
+    NF::WildfireFront a; a.id = "a"; a.spread(5.f);
+    NF::WildfireFront b; b.id = "b"; b.contained = true;
+    zone.addFront(a);
+    zone.addFront(b);
+    REQUIRE(zone.frontCount() == 2);
+    REQUIRE(zone.containedFronts() == 1);
+}
+
+TEST_CASE("WildfireSystem createZone and duplicate rejection", "[Game][G42][Wildfire]") {
+    NF::WildfireSystem sys;
+    REQUIRE(sys.createZone("zone-a") != nullptr);
+    REQUIRE(sys.createZone("zone-b") != nullptr);
+    REQUIRE(sys.createZone("zone-a") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("WildfireSystem activeCount and tick", "[Game][G42][Wildfire]") {
+    NF::WildfireSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::WildfireFront f; f.id = "f1"; f.spread(12.f);
+    sys.byName("z1")->addFront(f);
+    sys.byName("z2")->setSeverity(NF::WildfireSeverity::Catastrophic);
+
+    REQUIRE(sys.activeCount()       == 1);
+    REQUIRE(sys.catastrophicCount() == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
