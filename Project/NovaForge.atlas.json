@@ -1,0 +1,46 @@
+{
+  "name": "NovaForge",
+  "version": "0.1.0",
+  "type": "game",
+  "engine": "NovaForge",
+  "description": "Voxel-first FPS game with modular R.I.G. progression and fleet command",
+  "entrypoints": {
+    "editor": "NovaForgeEditor",
+    "game": "NovaForgeGame",
+    "server": "NovaForgeServer"
+  },
+  "paths": {
+    "content": "Content/",
+    "data": "Data/",
+    "schemas": "Schemas/",
+    "source": "Source/",
+    "config": "Config/",
+    "logs": "Logs/",
+    "saved": "Saved/",
+    "codex": "Codex/",
+    "intake": "Content/Incoming/"
+  },
+  "build": {
+    "system": "cmake",
+    "standalone_preset": "debug",
+    "hosted_preset": "debug",
+    "hosted_flag": "-DNF_HOSTED=ON",
+    "test_flag": "-DNF_BUILD_TESTS=ON",
+    "targets": {
+      "editor": "NovaForgeEditor",
+      "game": "NovaForgeGame",
+      "server": "NovaForgeServer",
+      "tests": "all"
+    }
+  },
+  "pipeline": {
+    "watch_dir": ".novaforge/pipeline/",
+    "manifest": ".novaforge/pipeline/manifest.json",
+    "log": ".novaforge/pipeline/watch.log"
+  },
+  "workspace": {
+    "project_dir": "Project/",
+    "selector_on_startup": true,
+    "auto_load_last": false
+  }
+}
