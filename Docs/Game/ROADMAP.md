@@ -70,7 +70,8 @@
 | **G38** — Storm System | StormType×8, StormSeverity×5, Storm, StormRegion, StormSystem | ✅ Done |
 | **G39** — Earthquake System | EarthquakeScale×8, EarthquakeStatus×4, Earthquake, FaultLine, EarthquakeSystem | ✅ Done |
 | **G40** — Volcano System | VolcanoActivity×8, VolcanoStatus×4, VolcanicEvent, Volcano, VolcanoSystem | ✅ Done |
-| **G41** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G41** — Tsunami System | TsunamiCause×8, TsunamiStatus×4, TsunamiWave, Tsunami, TsunamiSystem | ✅ Done |
+| **G42** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -122,7 +123,8 @@
 | **S19** — Scene Snapshot System | SceneSnapshotType×8, SceneSnapshotState×4, SceneSnapshotFrame, SceneSnapshotHistory, SceneSnapshotSystem | ✅ Done |
 | **S20** — Resource Monitor System | ResourceMonitorMetric×8, ResourceMonitorLevel×4, ResourceMonitorSample, ResourceMonitorChannel, ResourceMonitorSystem | ✅ Done |
 | **S21** — Editor Event Bus System | EditorEventPriority×8, EditorBusState×4, EditorBusEvent, EditorEventSubscription, EditorEventBus | ✅ Done |
-| **S22** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S22** — Workspace Layout Manager | LayoutPanelType×8, LayoutDockZone×4, LayoutPanel, LayoutSplit, WorkspaceLayout, WorkspaceLayoutManager | ✅ Done |
+| **S23** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

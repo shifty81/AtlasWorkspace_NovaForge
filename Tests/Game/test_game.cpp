@@ -7285,3 +7285,95 @@ TEST_CASE("VolcanoSystem tick propagates to volcanoes and increments tickCount",
     REQUIRE(sys.byName("A")->tickCount() == 2);
     REQUIRE(sys.byName("B")->tickCount() == 2);
 }
+
+// ============================================================
+// G41 — Tsunami System tests
+// ============================================================
+
+TEST_CASE("TsunamiCause names cover all 8 values", "[Game][G41][Tsunami]") {
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Earthquake))  == "Earthquake");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Landslide))   == "Landslide");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Volcanic))    == "Volcanic");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Meteorite))   == "Meteorite");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Submarine))   == "Submarine");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Glacial))     == "Glacial");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Nuclear))     == "Nuclear");
+    REQUIRE(std::string(NF::tsunamiCauseName(NF::TsunamiCause::Unknown))     == "Unknown");
+}
+
+TEST_CASE("Tsunami status advance chain", "[Game][G41][Tsunami]") {
+    NF::Tsunami t("t1");
+    REQUIRE(t.status() == NF::TsunamiStatus::Forming);
+    t.advance();
+    REQUIRE(t.status() == NF::TsunamiStatus::Traveling);
+    t.advance();
+    REQUIRE(t.status() == NF::TsunamiStatus::Striking);
+    REQUIRE(t.isStriking());
+    t.advance();
+    REQUIRE(t.status() == NF::TsunamiStatus::Receding);
+    REQUIRE(t.isReceding());
+}
+
+TEST_CASE("Tsunami advance is no-op from Receding", "[Game][G41][Tsunami]") {
+    NF::Tsunami t("t2");
+    t.advance(); t.advance(); t.advance(); // reach Receding
+    t.advance(); // should stay Receding
+    REQUIRE(t.isReceding());
+}
+
+TEST_CASE("TsunamiWave isDevastating threshold", "[Game][G41][Tsunami]") {
+    NF::TsunamiWave w;
+    w.heightMeters = 9.9f;
+    REQUIRE_FALSE(w.isDevastating());
+    w.heightMeters = 10.f;
+    REQUIRE(w.isDevastating());
+}
+
+TEST_CASE("TsunamiWave isFast threshold", "[Game][G41][Tsunami]") {
+    NF::TsunamiWave w;
+    w.speedKmh = 799.f;
+    REQUIRE_FALSE(w.isFast());
+    w.speedKmh = 800.f;
+    REQUIRE(w.isFast());
+}
+
+TEST_CASE("Tsunami maxWaveHeight and isDevastating via waves", "[Game][G41][Tsunami]") {
+    NF::Tsunami t("t3");
+    NF::TsunamiWave w1; w1.heightMeters = 5.f;
+    NF::TsunamiWave w2; w2.heightMeters = 15.f;
+    t.addWave(w1); t.addWave(w2);
+    REQUIRE(t.maxWaveHeight() == 15.f);
+    REQUIRE(t.isDevastating());
+    REQUIRE(t.waveCount() == 2);
+}
+
+TEST_CASE("TsunamiSystem create + duplicate rejection", "[Game][G41][Tsunami]") {
+    NF::TsunamiSystem sys;
+    REQUIRE(sys.create("pacific-1") != nullptr);
+    REQUIRE(sys.create("indian-1")  != nullptr);
+    REQUIRE(sys.create("pacific-1") == nullptr); // duplicate
+    REQUIRE(sys.count() == 2);
+}
+
+TEST_CASE("TsunamiSystem strikingCount and devastatingCount", "[Game][G41][Tsunami]") {
+    NF::TsunamiSystem sys;
+    sys.create("a");
+    sys.create("b");
+    // Use find() after both are inserted to avoid dangling pointer on vector realloc
+    sys.find("a")->advance(); sys.find("a")->advance(); // Forming → Traveling → Striking
+
+    NF::TsunamiWave big; big.heightMeters = 20.f;
+    sys.find("b")->addWave(big);
+
+    REQUIRE(sys.strikingCount()    == 1);
+    REQUIRE(sys.devastatingCount() == 1);
+}
+
+TEST_CASE("TsunamiSystem tick increments all tsunami tickCounts", "[Game][G41][Tsunami]") {
+    NF::TsunamiSystem sys;
+    sys.create("x"); sys.create("y");
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 3);
+    REQUIRE(sys.find("x")->tickCount() == 3);
+    REQUIRE(sys.find("y")->tickCount() == 3);
+}

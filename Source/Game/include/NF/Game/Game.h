@@ -9236,4 +9236,138 @@ private:
     size_t               m_eventCount = 0;
 };
 
+// ============================================================
+// G41 — Tsunami System
+// ============================================================
+
+enum class TsunamiCause : uint8_t {
+    Earthquake   = 0,
+    Landslide    = 1,
+    Volcanic     = 2,
+    Meteorite    = 3,
+    Submarine    = 4,
+    Glacial      = 5,
+    Nuclear      = 6,
+    Unknown      = 7,
+};
+
+inline const char* tsunamiCauseName(TsunamiCause c) {
+    switch (c) {
+        case TsunamiCause::Earthquake:  return "Earthquake";
+        case TsunamiCause::Landslide:   return "Landslide";
+        case TsunamiCause::Volcanic:    return "Volcanic";
+        case TsunamiCause::Meteorite:   return "Meteorite";
+        case TsunamiCause::Submarine:   return "Submarine";
+        case TsunamiCause::Glacial:     return "Glacial";
+        case TsunamiCause::Nuclear:     return "Nuclear";
+        case TsunamiCause::Unknown:     return "Unknown";
+        default:                        return "Unknown";
+    }
+}
+
+enum class TsunamiStatus : uint8_t {
+    Forming   = 0,
+    Traveling = 1,
+    Striking  = 2,
+    Receding  = 3,
+};
+
+struct TsunamiWave {
+    float    heightMeters  = 0.f;
+    float    speedKmh      = 0.f;
+    float    periodSeconds = 0.f;
+    bool     broke         = false;
+
+    void breakWave() { broke = true; }
+    [[nodiscard]] bool hasBroken()    const { return broke;                  }
+    [[nodiscard]] bool isDevastating() const { return heightMeters >= 10.f;  }
+    [[nodiscard]] bool isFast()        const { return speedKmh >= 800.f;     }
+};
+
+class Tsunami {
+public:
+    explicit Tsunami(std::string id) : m_id(std::move(id)) {}
+
+    [[nodiscard]] const std::string& id()      const { return m_id;     }
+    [[nodiscard]] TsunamiStatus      status()   const { return m_status; }
+    [[nodiscard]] TsunamiCause       cause()    const { return m_cause;  }
+    [[nodiscard]] size_t             waveCount() const { return m_waves.size(); }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount;    }
+
+    void setCause(TsunamiCause c) { m_cause = c; }
+    void advance() {
+        switch (m_status) {
+            case TsunamiStatus::Forming:   m_status = TsunamiStatus::Traveling; break;
+            case TsunamiStatus::Traveling: m_status = TsunamiStatus::Striking;  break;
+            case TsunamiStatus::Striking:  m_status = TsunamiStatus::Receding;  break;
+            default: break;
+        }
+    }
+
+    bool addWave(const TsunamiWave& w) {
+        m_waves.push_back(w);
+        return true;
+    }
+
+    [[nodiscard]] float maxWaveHeight() const {
+        float max = 0.f;
+        for (auto& w : m_waves) if (w.heightMeters > max) max = w.heightMeters;
+        return max;
+    }
+
+    [[nodiscard]] bool isDevastating() const { return maxWaveHeight() >= 10.f; }
+    [[nodiscard]] bool isReceding()    const { return m_status == TsunamiStatus::Receding;  }
+    [[nodiscard]] bool isStriking()    const { return m_status == TsunamiStatus::Striking;  }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string          m_id;
+    TsunamiStatus        m_status    = TsunamiStatus::Forming;
+    TsunamiCause         m_cause     = TsunamiCause::Unknown;
+    std::vector<TsunamiWave> m_waves;
+    size_t               m_tickCount = 0;
+};
+
+class TsunamiSystem {
+public:
+    static constexpr size_t MAX_TSUNAMIS = 64;
+
+    Tsunami* create(const std::string& id) {
+        if (m_tsunamis.size() >= MAX_TSUNAMIS) return nullptr;
+        for (auto& t : m_tsunamis) if (t.id() == id) return nullptr;
+        m_tsunamis.emplace_back(id);
+        return &m_tsunamis.back();
+    }
+
+    [[nodiscard]] Tsunami* find(const std::string& id) {
+        for (auto& t : m_tsunamis) if (t.id() == id) return &t;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& t : m_tsunamis) t.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t count()       const { return m_tsunamis.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount;       }
+
+    [[nodiscard]] size_t strikingCount() const {
+        size_t c = 0;
+        for (auto& t : m_tsunamis) if (t.isStriking()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t devastatingCount() const {
+        size_t c = 0;
+        for (auto& t : m_tsunamis) if (t.isDevastating()) c++;
+        return c;
+    }
+
+private:
+    std::vector<Tsunami> m_tsunamis;
+    size_t               m_tickCount = 0;
+};
+
 } // namespace NF

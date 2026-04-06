@@ -2082,3 +2082,51 @@ Total: 1480 tests, 0 failures (1454 existing + 14 S20 + 12 G39 = 1480).
 ## Build Verification ✅
 
 Total: 1504 tests, 0 failures (1480 existing + 14 S21 + 10 G40 = 1504).
+
+---
+
+## S22 — Workspace Layout Manager ✅
+
+- [x] LayoutPanelType enum ×8 (Viewport, Inspector, Hierarchy, ContentBrowser, Console, Profiler, Timeline, Custom)
+  - layoutPanelTypeName() for all 8 types
+- [x] LayoutDockZone enum ×4 (Left, Right, Top, Bottom)
+  - layoutDockZoneName() for all 4 zones
+- [x] LayoutPanel struct (id, title, type, dockZone, width, height, visible, pinned)
+  - show/hide, pin/unpin, isVisible, isPinned, hasSize (both dims > 0)
+- [x] LayoutSplit struct (firstPanelId, secondPanelId, isHorizontal, ratio)
+  - isValid (non-empty ids, 0 < ratio < 1), flipOrientation
+- [x] WorkspaceLayout — named layout with panels + splits
+  - addPanel (duplicate rejected), removePanel, findPanel
+  - addSplit (invalid rejected), visiblePanelCount, pinnedPanelCount
+  - showAll, hideAll
+- [x] WorkspaceLayoutManager — multi-layout registry (max 32)
+  - createLayout, removeLayout (clears active if removed), findLayout
+  - setActive/activeLayout/activeName/hasActive
+- [x] 14 new editor tests (test_s22_editor.cpp), all passing
+
+## S22 Complete ✅
+
+---
+
+## G41 — Tsunami System ✅
+
+- [x] TsunamiCause enum ×8 (Earthquake, Landslide, Volcanic, Meteorite, Submarine, Glacial, Nuclear, Unknown)
+  - tsunamiCauseName() for all 8 causes
+- [x] TsunamiStatus enum ×4 (Forming, Traveling, Striking, Receding)
+- [x] TsunamiWave struct (heightMeters, speedKmh, periodSeconds, broke)
+  - breakWave, hasBroken, isDevastating (height ≥ 10m), isFast (speed ≥ 800 km/h)
+- [x] Tsunami class — per-tsunami state machine + wave list
+  - advance() chains: Forming→Traveling→Striking→Receding (no-op from Receding)
+  - setCause, addWave, maxWaveHeight, isDevastating, isStriking, isReceding
+- [x] TsunamiSystem — multi-tsunami coordinator (max 64)
+  - create (duplicate rejected), find, tick propagation
+  - strikingCount, devastatingCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G41 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1528 tests, 0 failures (1504 existing + 14 S22 + 10 G41 = 1528).
