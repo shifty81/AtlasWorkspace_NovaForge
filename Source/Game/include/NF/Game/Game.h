@@ -9505,4 +9505,134 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// ============================================================
+// G43 — Flood System
+// ============================================================
+
+enum class FloodType { River, Coastal, Flash, Urban, Groundwater, Dam, Snowmelt, Tropical };
+
+inline const char* floodTypeName(FloodType t) {
+    switch (t) {
+        case FloodType::River:       return "River";
+        case FloodType::Coastal:     return "Coastal";
+        case FloodType::Flash:       return "Flash";
+        case FloodType::Urban:       return "Urban";
+        case FloodType::Groundwater: return "Groundwater";
+        case FloodType::Dam:         return "Dam";
+        case FloodType::Snowmelt:    return "Snowmelt";
+        case FloodType::Tropical:    return "Tropical";
+        default:                     return "Unknown";
+    }
+}
+
+enum class FloodSeverity { Minor, Moderate, Significant, Major, Catastrophic };
+
+inline const char* floodSeverityName(FloodSeverity s) {
+    switch (s) {
+        case FloodSeverity::Minor:        return "Minor";
+        case FloodSeverity::Moderate:     return "Moderate";
+        case FloodSeverity::Significant:  return "Significant";
+        case FloodSeverity::Major:        return "Major";
+        case FloodSeverity::Catastrophic: return "Catastrophic";
+        default:                          return "Unknown";
+    }
+}
+
+struct FloodWaterLevel {
+    std::string id;
+    float       depthMeters           = 0.f;
+    float       riseRateMetersPerHour = 0.f;
+    bool        receding              = false;
+
+    void startReceding()  { receding = true; }
+    void rise(float rate) { riseRateMetersPerHour = rate; }
+
+    [[nodiscard]] bool isRising()       const { return riseRateMetersPerHour > 0.f && !receding; }
+    [[nodiscard]] bool isDangerous()    const { return depthMeters >= 1.0f; }
+    [[nodiscard]] bool isCatastrophic() const { return depthMeters >= 5.0f; }
+};
+
+class FloodZone {
+public:
+    explicit FloodZone(const std::string& name) : m_name(name) {}
+
+    void setType(FloodType t)         { m_type = t;     }
+    void setSeverity(FloodSeverity s) { m_severity = s; }
+
+    bool addLevel(const FloodWaterLevel& l) {
+        for (auto& existing : m_levels) if (existing.id == l.id) return false;
+        m_levels.push_back(l);
+        return true;
+    }
+
+    void recessAll() { for (auto& l : m_levels) l.startReceding(); }
+
+    [[nodiscard]] size_t levelCount() const { return m_levels.size(); }
+
+    [[nodiscard]] size_t recedingLevels() const {
+        size_t c = 0;
+        for (auto& l : m_levels) if (l.receding) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()     const { return m_name;     }
+    [[nodiscard]] FloodType          type()     const { return m_type;     }
+    [[nodiscard]] FloodSeverity      severity() const { return m_severity; }
+
+    [[nodiscard]] bool isFlooding() const {
+        for (auto& l : m_levels) if (l.isRising()) return true;
+        return false;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                  m_name;
+    FloodType                    m_type      = FloodType::River;
+    FloodSeverity                m_severity  = FloodSeverity::Minor;
+    std::vector<FloodWaterLevel> m_levels;
+    size_t                       m_tickCount = 0;
+};
+
+class FloodSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    FloodZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] FloodZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t floodingCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isFlooding()) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.severity() == FloodSeverity::Catastrophic) c++;
+        return c;
+    }
+
+private:
+    std::vector<FloodZone> m_zones;
+    size_t                 m_tickCount = 0;
+};
+
 } // namespace NF

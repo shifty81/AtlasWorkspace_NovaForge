@@ -2177,3 +2177,52 @@ Total: 1528 tests, 0 failures (1504 existing + 14 S22 + 10 G41 = 1528).
 ## Build Verification ✅
 
 Total: 1552 tests, 0 failures (1528 existing + 14 S23 + 10 G42 = 1552).
+
+---
+
+## S24 — Notification System ✅
+
+- [x] NotificationSeverity enum ×8 (Info, Success, Warning, Error, Critical, Debug, Trace, System)
+  - notificationSeverityName() for all 8 severities
+- [x] NotificationState enum ×4 (Pending, Shown, Dismissed, Expired)
+  - notificationStateName() for all 4 states
+- [x] Notification struct (id, title, message, severity, state, durationMs, persistent)
+  - show/dismiss/expire, isDismissed, isExpired, isVisible (state==Shown)
+  - isError (severity >= Error), isCritical (severity == Critical)
+- [x] NotificationChannel — named channel with notification list (max uncapped)
+  - post (duplicate id rejected, marks Shown immediately), dismiss, find
+  - activeCount (Shown), errorCount (isError), clearDismissed (removes Dismissed/Expired)
+  - notificationCount, name
+- [x] NotificationSystem — multi-channel registry (max 16)
+  - createChannel (duplicate/full rejected), removeChannel, findChannel
+  - post (routes to named channel), channelCount, totalActive
+- [x] 14 new editor tests (test_s24_editor.cpp), all passing
+
+## S24 Complete ✅
+
+---
+
+## G43 — Flood System ✅
+
+- [x] FloodType enum ×8 (River, Coastal, Flash, Urban, Groundwater, Dam, Snowmelt, Tropical)
+  - floodTypeName() for all 8 types
+- [x] FloodSeverity enum ×5 (Minor, Moderate, Significant, Major, Catastrophic)
+  - floodSeverityName() for all 5 severities
+- [x] FloodWaterLevel struct (id, depthMeters, riseRateMetersPerHour, receding)
+  - startReceding, rise(rate), isRising (rate > 0 and not receding)
+  - isDangerous (depth >= 1.0m), isCatastrophic (depth >= 5.0m)
+- [x] FloodZone class — per-zone state + water level list
+  - setType, setSeverity, addLevel (duplicate id rejected), recessAll
+  - levelCount, recedingLevels, name, type, severity, isFlooding, tick
+- [x] FloodSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, floodingCount, catastrophicCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G43 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1576 tests, 0 failures (1552 existing + 14 S24 + 10 G43 = 1576).

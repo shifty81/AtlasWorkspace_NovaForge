@@ -7484,3 +7484,123 @@ TEST_CASE("WildfireSystem activeCount and tick", "[Game][G42][Wildfire]") {
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+// ============================================================
+// G43 — Flood System tests
+// ============================================================
+
+TEST_CASE("FloodType names cover all 8 values", "[Game][G43][Flood]") {
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::River))       == "River");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Coastal))     == "Coastal");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Flash))       == "Flash");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Urban))       == "Urban");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Groundwater)) == "Groundwater");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Dam))         == "Dam");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Snowmelt))    == "Snowmelt");
+    REQUIRE(std::string(NF::floodTypeName(NF::FloodType::Tropical))    == "Tropical");
+}
+
+TEST_CASE("FloodSeverity names cover all 5 values", "[Game][G43][Flood]") {
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Minor))        == "Minor");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Significant))  == "Significant");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Major))        == "Major");
+    REQUIRE(std::string(NF::floodSeverityName(NF::FloodSeverity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("FloodWaterLevel isRising and startReceding", "[Game][G43][Flood]") {
+    NF::FloodWaterLevel lvl;
+    lvl.id = "river-gauge-1";
+
+    REQUIRE_FALSE(lvl.isRising());
+    lvl.rise(0.5f);
+    REQUIRE(lvl.isRising());
+    lvl.startReceding();
+    REQUIRE_FALSE(lvl.isRising());
+    REQUIRE(lvl.receding);
+}
+
+TEST_CASE("FloodWaterLevel isDangerous and isCatastrophic thresholds", "[Game][G43][Flood]") {
+    NF::FloodWaterLevel lvl;
+    lvl.id = "gauge-2";
+
+    lvl.depthMeters = 0.5f;
+    REQUIRE_FALSE(lvl.isDangerous());
+    REQUIRE_FALSE(lvl.isCatastrophic());
+
+    lvl.depthMeters = 1.0f;
+    REQUIRE(lvl.isDangerous());
+    REQUIRE_FALSE(lvl.isCatastrophic());
+
+    lvl.depthMeters = 5.0f;
+    REQUIRE(lvl.isDangerous());
+    REQUIRE(lvl.isCatastrophic());
+}
+
+TEST_CASE("FloodZone addLevel and duplicate rejection", "[Game][G43][Flood]") {
+    NF::FloodZone zone("thames-basin");
+    NF::FloodWaterLevel l1; l1.id = "l1"; l1.rise(0.3f);
+    NF::FloodWaterLevel l2; l2.id = "l2"; l2.rise(0.1f);
+    NF::FloodWaterLevel dup; dup.id = "l1";
+
+    REQUIRE(zone.addLevel(l1));
+    REQUIRE(zone.addLevel(l2));
+    REQUIRE_FALSE(zone.addLevel(dup));
+    REQUIRE(zone.levelCount() == 2);
+}
+
+TEST_CASE("FloodZone recessAll sets all levels receding", "[Game][G43][Flood]") {
+    NF::FloodZone zone("mississippi");
+    NF::FloodWaterLevel a; a.id = "a"; a.rise(1.0f);
+    NF::FloodWaterLevel b; b.id = "b"; b.rise(0.5f);
+    zone.addLevel(a);
+    zone.addLevel(b);
+
+    zone.recessAll();
+    REQUIRE(zone.recedingLevels() == 2);
+    REQUIRE_FALSE(zone.isFlooding());
+}
+
+TEST_CASE("FloodZone isFlooding requires rising level", "[Game][G43][Flood]") {
+    NF::FloodZone zone("seine");
+    REQUIRE_FALSE(zone.isFlooding());
+
+    NF::FloodWaterLevel l; l.id = "g1"; l.rise(0.8f);
+    zone.addLevel(l);
+    REQUIRE(zone.isFlooding());
+}
+
+TEST_CASE("FloodZone levelCount and recedingLevels count", "[Game][G43][Flood]") {
+    NF::FloodZone zone("danube");
+    NF::FloodWaterLevel a; a.id = "a"; a.rise(0.4f);
+    NF::FloodWaterLevel b; b.id = "b"; b.receding = true;
+    zone.addLevel(a);
+    zone.addLevel(b);
+
+    REQUIRE(zone.levelCount() == 2);
+    REQUIRE(zone.recedingLevels() == 1);
+}
+
+TEST_CASE("FloodSystem createZone and duplicate rejection", "[Game][G43][Flood]") {
+    NF::FloodSystem sys;
+    REQUIRE(sys.createZone("zone-a") != nullptr);
+    REQUIRE(sys.createZone("zone-b") != nullptr);
+    REQUIRE(sys.createZone("zone-a") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("FloodSystem floodingCount and tick", "[Game][G43][Flood]") {
+    NF::FloodSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::FloodWaterLevel l; l.id = "l1"; l.rise(1.5f);
+    sys.byName("z1")->addLevel(l);
+    sys.byName("z2")->setSeverity(NF::FloodSeverity::Catastrophic);
+
+    REQUIRE(sys.floodingCount()      == 1);
+    REQUIRE(sys.catastrophicCount()  == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
