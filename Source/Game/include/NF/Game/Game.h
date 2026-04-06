@@ -6564,4 +6564,255 @@ private:
     std::vector<Vehicle> m_vehicles;
 };
 
+// ── G28 — Research System ────────────────────────────────────────
+
+enum class ResearchCategory : uint8_t {
+    Physics, Biology, Engineering, Computing, Materials, Energy, Weapons, Xenotech
+};
+
+inline const char* researchCategoryName(ResearchCategory c) {
+    switch (c) {
+        case ResearchCategory::Physics:     return "Physics";
+        case ResearchCategory::Biology:     return "Biology";
+        case ResearchCategory::Engineering: return "Engineering";
+        case ResearchCategory::Computing:   return "Computing";
+        case ResearchCategory::Materials:   return "Materials";
+        case ResearchCategory::Energy:      return "Energy";
+        case ResearchCategory::Weapons:     return "Weapons";
+        case ResearchCategory::Xenotech:    return "Xenotech";
+    }
+    return "Unknown";
+}
+
+struct ResearchProject {
+    std::string id;
+    std::string name;
+    ResearchCategory category = ResearchCategory::Physics;
+    float cost = 100.f;
+    float progress = 0.f;
+    float durationSeconds = 60.f;
+    std::vector<std::string> prerequisites;
+    bool completed = false;
+
+    [[nodiscard]] float progressFraction() const {
+        return cost > 0.f ? std::min(1.f, progress / cost) : 0.f;
+    }
+
+    [[nodiscard]] bool isComplete() const {
+        return completed || progress >= cost;
+    }
+
+    void addProgress(float points) {
+        progress = std::min(cost, progress + points);
+        if (progress >= cost) completed = true;
+    }
+};
+
+class ResearchLab {
+public:
+    void setId(const std::string& id) { m_id = id; }
+    [[nodiscard]] const std::string& id() const { return m_id; }
+
+    void setName(const std::string& name) { m_name = name; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void setResearchRate(float rate) { m_researchRate = std::max(0.f, rate); }
+    [[nodiscard]] float researchRate() const { return m_researchRate; }
+
+    bool assignProject(const std::string& projectId) {
+        if (m_activeProjectId == projectId) return false;
+        m_activeProjectId = projectId;
+        return true;
+    }
+
+    void clearProject() { m_activeProjectId.clear(); }
+
+    [[nodiscard]] const std::string& activeProjectId() const { return m_activeProjectId; }
+    [[nodiscard]] bool hasActiveProject() const { return !m_activeProjectId.empty(); }
+
+    void markCompleted(const std::string& projectId) {
+        m_completedProjects.push_back(projectId);
+    }
+
+    [[nodiscard]] size_t completedCount() const { return m_completedProjects.size(); }
+
+    [[nodiscard]] bool hasCompleted(const std::string& projectId) const {
+        for (const auto& p : m_completedProjects)
+            if (p == projectId) return true;
+        return false;
+    }
+
+    [[nodiscard]] const std::vector<std::string>& completedProjects() const { return m_completedProjects; }
+
+    void setBudget(float budget) { m_budget = std::max(0.f, budget); }
+    [[nodiscard]] float budget() const { return m_budget; }
+    void spendBudget(float amount) { m_budget = std::max(0.f, m_budget - amount); }
+    [[nodiscard]] bool hasBudget() const { return m_budget > 0.f; }
+
+private:
+    std::string m_id;
+    std::string m_name;
+    float m_researchRate = 1.f;
+    std::string m_activeProjectId;
+    std::vector<std::string> m_completedProjects;
+    float m_budget = 1000.f;
+};
+
+class ResearchTree {
+public:
+    bool addProject(const ResearchProject& project) {
+        if (m_projects.size() >= kMaxProjects) return false;
+        for (const auto& p : m_projects) {
+            if (p.id == project.id) return false;
+        }
+        m_projects.push_back(project);
+        return true;
+    }
+
+    bool removeProject(const std::string& id) {
+        auto it = std::find_if(m_projects.begin(), m_projects.end(),
+            [&id](const ResearchProject& p) { return p.id == id; });
+        if (it == m_projects.end()) return false;
+        m_projects.erase(it);
+        return true;
+    }
+
+    ResearchProject* findProject(const std::string& id) {
+        for (auto& p : m_projects) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+    const ResearchProject* findProject(const std::string& id) const {
+        for (const auto& p : m_projects) if (p.id == id) return &p;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t projectCount() const { return m_projects.size(); }
+    [[nodiscard]] const std::vector<ResearchProject>& projects() const { return m_projects; }
+
+    [[nodiscard]] bool prerequisitesMet(const std::string& projectId, const std::vector<std::string>& completed) const {
+        const auto* proj = findProject(projectId);
+        if (!proj) return false;
+        for (const auto& prereq : proj->prerequisites) {
+            bool found = false;
+            for (const auto& c : completed) {
+                if (c == prereq) { found = true; break; }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] std::vector<const ResearchProject*> projectsInCategory(ResearchCategory cat) const {
+        std::vector<const ResearchProject*> result;
+        for (const auto& p : m_projects) {
+            if (p.category == cat) result.push_back(&p);
+        }
+        return result;
+    }
+
+    [[nodiscard]] size_t completedCount() const {
+        size_t c = 0;
+        for (const auto& p : m_projects) if (p.isComplete()) ++c;
+        return c;
+    }
+
+    void clear() { m_projects.clear(); }
+
+    static constexpr size_t kMaxProjects = 128;
+
+private:
+    std::vector<ResearchProject> m_projects;
+};
+
+class ResearchSystem {
+public:
+    int createLab(const std::string& name) {
+        if (m_labs.size() >= kMaxLabs) return -1;
+        ResearchLab lab;
+        lab.setId("lab_" + std::to_string(m_labs.size()));
+        lab.setName(name);
+        m_labs.push_back(std::move(lab));
+        return static_cast<int>(m_labs.size() - 1);
+    }
+
+    ResearchLab* lab(int index) {
+        if (index < 0 || index >= static_cast<int>(m_labs.size())) return nullptr;
+        return &m_labs[static_cast<size_t>(index)];
+    }
+
+    const ResearchLab* lab(int index) const {
+        if (index < 0 || index >= static_cast<int>(m_labs.size())) return nullptr;
+        return &m_labs[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] size_t labCount() const { return m_labs.size(); }
+
+    ResearchTree& tree() { return m_tree; }
+    const ResearchTree& tree() const { return m_tree; }
+
+    void tick(float dt) {
+        for (auto& lab : m_labs) {
+            if (!lab.hasActiveProject() || !lab.hasBudget()) continue;
+
+            ResearchProject* proj = m_tree.findProject(lab.activeProjectId());
+            if (!proj || proj->isComplete()) {
+                if (proj && proj->isComplete()) {
+                    lab.markCompleted(proj->id);
+                    lab.clearProject();
+                }
+                continue;
+            }
+
+            float points = lab.researchRate() * dt;
+            float budgetCost = points * 0.1f;
+            if (lab.budget() < budgetCost) continue;
+
+            proj->addProgress(points);
+            lab.spendBudget(budgetCost);
+
+            if (proj->isComplete()) {
+                lab.markCompleted(proj->id);
+                lab.clearProject();
+                ++m_discoveries;
+            }
+        }
+    }
+
+    bool assignProject(int labIndex, const std::string& projectId) {
+        auto* l = lab(labIndex);
+        if (!l) return false;
+
+        const auto* proj = m_tree.findProject(projectId);
+        if (!proj || proj->isComplete()) return false;
+
+        std::vector<std::string> allCompleted;
+        for (const auto& lab : m_labs) {
+            for (const auto& c : lab.completedProjects())
+                allCompleted.push_back(c);
+        }
+
+        if (!m_tree.prerequisitesMet(projectId, allCompleted)) return false;
+
+        return l->assignProject(projectId);
+    }
+
+    [[nodiscard]] size_t discoveries() const { return m_discoveries; }
+
+    [[nodiscard]] size_t activeLabCount() const {
+        size_t count = 0;
+        for (const auto& l : m_labs) {
+            if (l.hasActiveProject()) ++count;
+        }
+        return count;
+    }
+
+    static constexpr size_t kMaxLabs = 8;
+
+private:
+    std::vector<ResearchLab> m_labs;
+    ResearchTree m_tree;
+    size_t m_discoveries = 0;
+};
+
 } // namespace NF

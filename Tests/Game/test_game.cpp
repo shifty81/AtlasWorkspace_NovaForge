@@ -5368,3 +5368,200 @@ TEST_CASE("VehicleSystem tick physics moves position", "[Game][G27][Vehicle]") {
     REQUIRE(v->position().x > startX);
     REQUIRE(v->fuel() < 100.f);
 }
+
+// ── G28 Research System Tests ────────────────────────────────────
+
+TEST_CASE("ResearchCategory all 8 names", "[Game][G28][Research]") {
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Physics)) == "Physics");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Biology)) == "Biology");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Engineering)) == "Engineering");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Computing)) == "Computing");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Materials)) == "Materials");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Energy)) == "Energy");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Weapons)) == "Weapons");
+    REQUIRE(std::string(NF::researchCategoryName(NF::ResearchCategory::Xenotech)) == "Xenotech");
+}
+
+TEST_CASE("ResearchProject defaults and progressFraction", "[Game][G28][Research]") {
+    NF::ResearchProject proj;
+    REQUIRE(proj.cost == 100.f);
+    REQUIRE(proj.progress == 0.f);
+    REQUIRE(proj.durationSeconds == 60.f);
+    REQUIRE(proj.completed == false);
+    REQUIRE(proj.progressFraction() == Catch::Approx(0.f));
+}
+
+TEST_CASE("ResearchProject addProgress completes", "[Game][G28][Research]") {
+    NF::ResearchProject proj;
+    proj.id = "p1";
+    proj.cost = 50.f;
+    proj.addProgress(30.f);
+    REQUIRE(proj.progress == Catch::Approx(30.f));
+    REQUIRE_FALSE(proj.isComplete());
+    proj.addProgress(25.f);
+    REQUIRE(proj.progress == Catch::Approx(50.f));
+    REQUIRE(proj.isComplete());
+    REQUIRE(proj.completed);
+}
+
+TEST_CASE("ResearchProject isComplete check", "[Game][G28][Research]") {
+    NF::ResearchProject proj;
+    proj.cost = 10.f;
+    REQUIRE_FALSE(proj.isComplete());
+    proj.completed = true;
+    REQUIRE(proj.isComplete());
+    proj.completed = false;
+    proj.progress = 10.f;
+    REQUIRE(proj.isComplete());
+}
+
+TEST_CASE("ResearchLab assign/clear project", "[Game][G28][Research]") {
+    NF::ResearchLab lab;
+    lab.setId("lab0");
+    lab.setName("Alpha Lab");
+    REQUIRE(lab.id() == "lab0");
+    REQUIRE(lab.name() == "Alpha Lab");
+    REQUIRE_FALSE(lab.hasActiveProject());
+    REQUIRE(lab.assignProject("proj_a"));
+    REQUIRE(lab.activeProjectId() == "proj_a");
+    REQUIRE(lab.hasActiveProject());
+    REQUIRE_FALSE(lab.assignProject("proj_a")); // same project
+    lab.clearProject();
+    REQUIRE_FALSE(lab.hasActiveProject());
+}
+
+TEST_CASE("ResearchLab completed tracking", "[Game][G28][Research]") {
+    NF::ResearchLab lab;
+    REQUIRE(lab.completedCount() == 0);
+    lab.markCompleted("p1");
+    lab.markCompleted("p2");
+    REQUIRE(lab.completedCount() == 2);
+    REQUIRE(lab.hasCompleted("p1"));
+    REQUIRE(lab.hasCompleted("p2"));
+    REQUIRE_FALSE(lab.hasCompleted("p3"));
+    REQUIRE(lab.completedProjects().size() == 2);
+}
+
+TEST_CASE("ResearchLab budget management", "[Game][G28][Research]") {
+    NF::ResearchLab lab;
+    REQUIRE(lab.budget() == Catch::Approx(1000.f));
+    REQUIRE(lab.hasBudget());
+    lab.spendBudget(999.f);
+    REQUIRE(lab.budget() == Catch::Approx(1.f));
+    lab.spendBudget(5.f);
+    REQUIRE(lab.budget() == Catch::Approx(0.f));
+    REQUIRE_FALSE(lab.hasBudget());
+    lab.setBudget(500.f);
+    REQUIRE(lab.budget() == Catch::Approx(500.f));
+}
+
+TEST_CASE("ResearchTree add/remove/find projects", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject p; p.id = "rp1"; p.name = "Laser";
+    REQUIRE(tree.addProject(p));
+    REQUIRE(tree.projectCount() == 1);
+    REQUIRE(tree.findProject("rp1") != nullptr);
+    REQUIRE(tree.findProject("rp1")->name == "Laser");
+    REQUIRE(tree.findProject("nope") == nullptr);
+    REQUIRE(tree.removeProject("rp1"));
+    REQUIRE(tree.projectCount() == 0);
+    REQUIRE_FALSE(tree.removeProject("rp1"));
+}
+
+TEST_CASE("ResearchTree reject duplicate ids", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject p; p.id = "dup";
+    REQUIRE(tree.addProject(p));
+    REQUIRE_FALSE(tree.addProject(p));
+    REQUIRE(tree.projectCount() == 1);
+}
+
+TEST_CASE("ResearchTree max projects", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    for (size_t i = 0; i < NF::ResearchTree::kMaxProjects; ++i) {
+        NF::ResearchProject p;
+        p.id = "p_" + std::to_string(i);
+        REQUIRE(tree.addProject(p));
+    }
+    REQUIRE(tree.projectCount() == NF::ResearchTree::kMaxProjects);
+    NF::ResearchProject overflow; overflow.id = "overflow";
+    REQUIRE_FALSE(tree.addProject(overflow));
+}
+
+TEST_CASE("ResearchTree prerequisitesMet", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject a; a.id = "a";
+    NF::ResearchProject b; b.id = "b"; b.prerequisites = {"a"};
+    tree.addProject(a);
+    tree.addProject(b);
+
+    std::vector<std::string> none;
+    REQUIRE(tree.prerequisitesMet("a", none));
+    REQUIRE_FALSE(tree.prerequisitesMet("b", none));
+
+    std::vector<std::string> doneA = {"a"};
+    REQUIRE(tree.prerequisitesMet("b", doneA));
+}
+
+TEST_CASE("ResearchTree projectsInCategory", "[Game][G28][Research]") {
+    NF::ResearchTree tree;
+    NF::ResearchProject p1; p1.id = "e1"; p1.category = NF::ResearchCategory::Energy;
+    NF::ResearchProject p2; p2.id = "e2"; p2.category = NF::ResearchCategory::Energy;
+    NF::ResearchProject p3; p3.id = "w1"; p3.category = NF::ResearchCategory::Weapons;
+    tree.addProject(p1);
+    tree.addProject(p2);
+    tree.addProject(p3);
+    auto energy = tree.projectsInCategory(NF::ResearchCategory::Energy);
+    REQUIRE(energy.size() == 2);
+    auto weapons = tree.projectsInCategory(NF::ResearchCategory::Weapons);
+    REQUIRE(weapons.size() == 1);
+    auto bio = tree.projectsInCategory(NF::ResearchCategory::Biology);
+    REQUIRE(bio.empty());
+}
+
+TEST_CASE("ResearchSystem create lab", "[Game][G28][Research]") {
+    NF::ResearchSystem sys;
+    REQUIRE(sys.labCount() == 0);
+    int idx = sys.createLab("Lab Alpha");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.labCount() == 1);
+    REQUIRE(sys.lab(0)->name() == "Lab Alpha");
+    REQUIRE(sys.lab(0)->id() == "lab_0");
+    REQUIRE(sys.lab(-1) == nullptr);
+    REQUIRE(sys.lab(99) == nullptr);
+}
+
+TEST_CASE("ResearchSystem max labs", "[Game][G28][Research]") {
+    NF::ResearchSystem sys;
+    for (size_t i = 0; i < NF::ResearchSystem::kMaxLabs; ++i) {
+        int idx = sys.createLab("L" + std::to_string(i));
+        REQUIRE(idx >= 0);
+    }
+    REQUIRE(sys.labCount() == NF::ResearchSystem::kMaxLabs);
+    REQUIRE(sys.createLab("Extra") == -1);
+}
+
+TEST_CASE("ResearchSystem tick advances research", "[Game][G28][Research]") {
+    NF::ResearchSystem sys;
+    NF::ResearchProject proj;
+    proj.id = "tp";
+    proj.name = "Test Project";
+    proj.cost = 10.f;
+    sys.tree().addProject(proj);
+
+    int labIdx = sys.createLab("Main");
+    sys.lab(labIdx)->setResearchRate(5.f);
+    REQUIRE(sys.assignProject(labIdx, "tp"));
+    REQUIRE(sys.activeLabCount() == 1);
+
+    sys.tick(1.f); // 5 points
+    auto* p = sys.tree().findProject("tp");
+    REQUIRE(p->progress == Catch::Approx(5.f));
+    REQUIRE_FALSE(p->isComplete());
+
+    sys.tick(1.f); // another 5 points -> 10 total
+    REQUIRE(p->isComplete());
+    REQUIRE(sys.discoveries() == 1);
+    REQUIRE(sys.activeLabCount() == 0);
+    REQUIRE(sys.lab(labIdx)->hasCompleted("tp"));
+}
