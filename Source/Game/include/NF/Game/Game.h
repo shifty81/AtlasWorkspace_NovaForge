@@ -10055,4 +10055,144 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// ============================================================
+// G47 — Solar Flare System
+// ============================================================
+
+enum class SolarFlareClass : uint8_t { A, B, C, M, X, S, N, Z };
+
+inline const char* solarFlareClassName(SolarFlareClass c) {
+    switch (c) {
+        case SolarFlareClass::A: return "A";
+        case SolarFlareClass::B: return "B";
+        case SolarFlareClass::C: return "C";
+        case SolarFlareClass::M: return "M";
+        case SolarFlareClass::X: return "X";
+        case SolarFlareClass::S: return "S";
+        case SolarFlareClass::N: return "N";
+        case SolarFlareClass::Z: return "Z";
+        default:                 return "Unknown";
+    }
+}
+
+enum class SolarFlareEffect : uint8_t { RadioBlackout, RadiationStorm, GeomagneticStorm, PowerGridDisruption, SatelliteDamage, CommunicationLoss };
+
+inline const char* solarFlareEffectName(SolarFlareEffect e) {
+    switch (e) {
+        case SolarFlareEffect::RadioBlackout:        return "RadioBlackout";
+        case SolarFlareEffect::RadiationStorm:       return "RadiationStorm";
+        case SolarFlareEffect::GeomagneticStorm:     return "GeomagneticStorm";
+        case SolarFlareEffect::PowerGridDisruption:  return "PowerGridDisruption";
+        case SolarFlareEffect::SatelliteDamage:      return "SatelliteDamage";
+        case SolarFlareEffect::CommunicationLoss:    return "CommunicationLoss";
+        default:                                     return "Unknown";
+    }
+}
+
+struct SolarFlareEvent {
+    std::string     id;
+    SolarFlareClass flareClass  = SolarFlareClass::C;
+    float           intensity   = 1.0f;
+    float           duration    = 60.f;
+    bool            active      = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isMajor()    const { return flareClass >= SolarFlareClass::M; }
+    [[nodiscard]] bool isExtreme()  const { return flareClass >= SolarFlareClass::X; }
+    [[nodiscard]] float energyOutput() const { return intensity * duration; }
+};
+
+class SolarFlareRegion {
+public:
+    explicit SolarFlareRegion(const std::string& name) : m_name(name) {}
+
+    bool addEvent(SolarFlareEvent e) {
+        for (auto& existing : m_events) if (existing.id == e.id) return false;
+        m_events.push_back(std::move(e));
+        return true;
+    }
+
+    bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SolarFlareEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()  const { return m_events.size(); }
+
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.active) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t majorCount() const {
+        size_t c = 0;
+        for (auto& e : m_events) if (e.isMajor()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    void tick() { m_tickCount++; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string                  m_name;
+    std::vector<SolarFlareEvent> m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class SolarFlareSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    SolarFlareRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] SolarFlareRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& r : m_regions) r.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount;      }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t majorEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.majorCount();
+        return c;
+    }
+
+private:
+    std::vector<SolarFlareRegion> m_regions;
+    size_t                        m_tickCount = 0;
+};
+
 } // namespace NF

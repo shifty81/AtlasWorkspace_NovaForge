@@ -2372,3 +2372,52 @@ Total: 1624 tests, 0 failures (1600 existing + 14 S26 + 10 G45 = 1624).
 ## Build Verification ✅
 
 Total: 1648 tests, 0 failures (1624 existing + 14 S27 + 10 G46 = 1648).
+
+---
+
+## S28 — Keyframe Animation Editor ✅
+
+- [x] KeyframeInterpolation enum ×8 (Linear, Step, Bezier, CubicSpline, EaseIn, EaseOut, EaseInOut, Custom)
+  - keyframeInterpolationName() for all 8 modes
+- [x] AnimationTrackType enum ×8 (Position, Rotation, Scale, Opacity, Color, Float, Bool, Event)
+  - animationTrackTypeName() for all 8 types
+- [x] Keyframe struct (time, value, interpolation, selected)
+  - select, deselect, setTime, setValue
+- [x] AnimationTrack class — named collection of keyframes
+  - addKeyframe (duplicate time rejected), removeKeyframe, findKeyframe
+  - keyframeCount, selectedCount, selectAll, deselectAll, duration, name, type
+- [x] KeyframeAnimationEditor class — multi-track animation editor (max 64 tracks)
+  - addTrack (duplicate/full rejected), removeTrack, findTrack
+  - trackCount, totalDuration, setPlayhead, playhead
+  - play, pause, stop, isPlaying
+  - selectAllKeyframes, deselectAllKeyframes
+- [x] 14 new editor tests (test_s28_editor.cpp), all passing
+
+## S28 Complete ✅
+
+---
+
+## G47 — Solar Flare System ✅
+
+- [x] SolarFlareClass enum ×8 (A, B, C, M, X, S, N, Z)
+  - solarFlareClassName() for all 8 classes
+- [x] SolarFlareEffect enum ×6 (RadioBlackout, RadiationStorm, GeomagneticStorm, PowerGridDisruption, SatelliteDamage, CommunicationLoss)
+  - solarFlareEffectName() for all 6 effects
+- [x] SolarFlareEvent struct (id, flareClass, intensity, duration, active)
+  - activate, deactivate, isMajor (>= M), isExtreme (>= X), energyOutput
+- [x] SolarFlareRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, majorCount
+  - name, tick, tickCount
+- [x] SolarFlareSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, majorEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G47 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1673 tests, 0 failures (1648 existing + 14 S28 + 11 G47 = 1673).

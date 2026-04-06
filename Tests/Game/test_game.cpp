@@ -7978,3 +7978,124 @@ TEST_CASE("EpidemicSystem criticalZoneCount and containedZoneCount", "[Game][G46
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+TEST_CASE("SolarFlareClass names cover all 8 values", "[Game][G47][SolarFlare]") {
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::A)) == "A");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::B)) == "B");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::C)) == "C");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::M)) == "M");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::X)) == "X");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::S)) == "S");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::N)) == "N");
+    REQUIRE(std::string(NF::solarFlareClassName(NF::SolarFlareClass::Z)) == "Z");
+}
+
+TEST_CASE("SolarFlareEffect names cover all 6 values", "[Game][G47][SolarFlare]") {
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::RadioBlackout))       == "RadioBlackout");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::RadiationStorm))      == "RadiationStorm");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::GeomagneticStorm))    == "GeomagneticStorm");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::PowerGridDisruption)) == "PowerGridDisruption");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::SatelliteDamage))     == "SatelliteDamage");
+    REQUIRE(std::string(NF::solarFlareEffectName(NF::SolarFlareEffect::CommunicationLoss))   == "CommunicationLoss");
+}
+
+TEST_CASE("SolarFlareEvent isMajor and isExtreme thresholds", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareEvent e;
+    e.id = "ev1"; e.flareClass = NF::SolarFlareClass::C;
+
+    REQUIRE_FALSE(e.isMajor());
+    REQUIRE_FALSE(e.isExtreme());
+
+    e.flareClass = NF::SolarFlareClass::M;
+    REQUIRE(e.isMajor());
+    REQUIRE_FALSE(e.isExtreme());
+
+    e.flareClass = NF::SolarFlareClass::X;
+    REQUIRE(e.isMajor());
+    REQUIRE(e.isExtreme());
+}
+
+TEST_CASE("SolarFlareEvent energyOutput calculation", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareEvent e;
+    e.id = "ev2"; e.intensity = 2.0f; e.duration = 30.f;
+
+    REQUIRE(e.energyOutput() == Catch::Approx(60.f));
+}
+
+TEST_CASE("SolarFlareEvent activate and deactivate", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareEvent e;
+    e.id = "ev3";
+
+    REQUIRE_FALSE(e.active);
+    e.activate();
+    REQUIRE(e.active);
+    e.deactivate();
+    REQUIRE_FALSE(e.active);
+}
+
+TEST_CASE("SolarFlareRegion addEvent and duplicate rejection", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareRegion region("region-1");
+
+    NF::SolarFlareEvent a; a.id = "ev-a"; a.flareClass = NF::SolarFlareClass::M;
+    NF::SolarFlareEvent b; b.id = "ev-b"; b.flareClass = NF::SolarFlareClass::X;
+    NF::SolarFlareEvent dup; dup.id = "ev-a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+}
+
+TEST_CASE("SolarFlareRegion activateAll and deactivateAll, activeCount", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareRegion region("region-2");
+
+    NF::SolarFlareEvent a; a.id = "a1";
+    NF::SolarFlareEvent b; b.id = "a2";
+    region.addEvent(a);
+    region.addEvent(b);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("SolarFlareRegion majorCount counts M+ class events", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareRegion region("region-3");
+
+    NF::SolarFlareEvent minor; minor.id = "c1"; minor.flareClass = NF::SolarFlareClass::C;
+    NF::SolarFlareEvent major; major.id = "m1"; major.flareClass = NF::SolarFlareClass::M;
+    NF::SolarFlareEvent extreme; extreme.id = "x1"; extreme.flareClass = NF::SolarFlareClass::X;
+
+    region.addEvent(minor);
+    region.addEvent(major);
+    region.addEvent(extreme);
+
+    REQUIRE(region.majorCount() == 2);
+}
+
+TEST_CASE("SolarFlareSystem createRegion and duplicate rejection", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareSystem sys;
+    REQUIRE(sys.createRegion("solar-a") != nullptr);
+    REQUIRE(sys.createRegion("solar-b") != nullptr);
+    REQUIRE(sys.createRegion("solar-a") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("SolarFlareSystem activeEventCount, majorEventCount and tick", "[Game][G47][SolarFlare]") {
+    NF::SolarFlareSystem sys;
+    sys.createRegion("r1");
+    sys.createRegion("r2");
+
+    NF::SolarFlareEvent ae; ae.id = "ae1"; ae.flareClass = NF::SolarFlareClass::X; ae.active = true;
+    NF::SolarFlareEvent me; me.id = "me1"; me.flareClass = NF::SolarFlareClass::M;
+    sys.byName("r1")->addEvent(ae);
+    sys.byName("r2")->addEvent(me);
+
+    REQUIRE(sys.activeEventCount()  == 1);
+    REQUIRE(sys.majorEventCount()   == 2); // X and M are both major
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}
