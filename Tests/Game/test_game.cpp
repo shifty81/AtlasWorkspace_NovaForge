@@ -4997,3 +4997,159 @@ TEST_CASE("HabitatSystem tickAtmosphere oxygen generation", "[Game][G25][Habitat
 TEST_CASE("HabitatLayout max zones", "[Game][G25][Habitat]") {
     REQUIRE(NF::HabitatLayout::kMaxZones == 32);
 }
+
+// ---------------------------------------------------------------------------
+// G26 — Power Grid System Tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("PowerSourceType names", "[Game][G26][Power]") {
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Solar))      == "Solar");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Nuclear))    == "Nuclear");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Fusion))     == "Fusion");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Geothermal)) == "Geothermal");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Wind))       == "Wind");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Battery))    == "Battery");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::FuelCell))   == "Fuel Cell");
+    REQUIRE(std::string(NF::powerSourceTypeName(NF::PowerSourceType::Antimatter)) == "Antimatter");
+}
+
+TEST_CASE("PowerNode defaults", "[Game][G26][Power]") {
+    NF::PowerNode node;
+    REQUIRE(node.netPower() == 0.f);
+    REQUIRE_FALSE(node.isGenerator());
+    REQUIRE_FALSE(node.isConsumer());
+}
+
+TEST_CASE("PowerNode offline", "[Game][G26][Power]") {
+    NF::PowerNode node;
+    node.generationRate = 100.f;
+    node.online = false;
+    REQUIRE(node.netPower() == 0.f);
+}
+
+TEST_CASE("PowerConduit defaults", "[Game][G26][Power]") {
+    NF::PowerConduit c;
+    REQUIRE(c.availableCapacity() == 100.f);
+    REQUIRE(c.loadFraction() == 0.f);
+    REQUIRE_FALSE(c.isOverloaded());
+}
+
+TEST_CASE("PowerConduit overloaded", "[Game][G26][Power]") {
+    NF::PowerConduit c;
+    c.maxCapacity = 50.f;
+    c.currentLoad = 80.f;
+    REQUIRE(c.isOverloaded());
+    REQUIRE(c.availableCapacity() == 0.f);
+}
+
+TEST_CASE("PowerGrid add/remove nodes", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode a; a.id = "a";
+    NF::PowerNode b; b.id = "b";
+    REQUIRE(grid.addNode(a));
+    REQUIRE(grid.addNode(b));
+    REQUIRE(grid.nodeCount() == 2);
+    REQUIRE(grid.removeNode("a"));
+    REQUIRE(grid.nodeCount() == 1);
+    REQUIRE(grid.findNode("a") == nullptr);
+    REQUIRE(grid.findNode("b") != nullptr);
+}
+
+TEST_CASE("PowerGrid reject duplicate nodes", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode a; a.id = "a";
+    REQUIRE(grid.addNode(a));
+    REQUIRE_FALSE(grid.addNode(a));
+    REQUIRE(grid.nodeCount() == 1);
+}
+
+TEST_CASE("PowerGrid max nodes", "[Game][G26][Power]") {
+    REQUIRE(NF::PowerGrid::kMaxNodes == 64);
+}
+
+TEST_CASE("PowerGrid add/remove conduits", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerConduit c1; c1.id = "c1";
+    NF::PowerConduit c2; c2.id = "c2";
+    REQUIRE(grid.addConduit(c1));
+    REQUIRE(grid.addConduit(c2));
+    REQUIRE(grid.conduitCount() == 2);
+    REQUIRE(grid.removeConduit("c1"));
+    REQUIRE(grid.conduitCount() == 1);
+}
+
+TEST_CASE("PowerGrid total generation and consumption", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 200.f;
+    NF::PowerNode con; con.id = "con"; con.consumptionRate = 50.f;
+    grid.addNode(gen);
+    grid.addNode(con);
+    REQUIRE(grid.totalGeneration() == 200.f);
+    REQUIRE(grid.totalConsumption() == 50.f);
+    REQUIRE(grid.netPower() == 150.f);
+    REQUIRE(grid.generatorCount() == 1);
+    REQUIRE(grid.consumerCount() == 1);
+}
+
+TEST_CASE("PowerGrid deficit detection", "[Game][G26][Power]") {
+    NF::PowerGrid grid;
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 10.f;
+    NF::PowerNode con; con.id = "con"; con.consumptionRate = 100.f;
+    grid.addNode(gen);
+    grid.addNode(con);
+    REQUIRE(grid.isDeficit());
+}
+
+TEST_CASE("PowerGridSystem create grid", "[Game][G26][Power]") {
+    NF::PowerGridSystem sys;
+    int idx = sys.createGrid("Main");
+    REQUIRE(idx == 0);
+    REQUIRE(sys.gridCount() == 1);
+    REQUIRE(sys.gridName(0) == "Main");
+    REQUIRE(sys.grid(0) != nullptr);
+}
+
+TEST_CASE("PowerGridSystem max grids", "[Game][G26][Power]") {
+    REQUIRE(NF::PowerGridSystem::kMaxGrids == 8);
+    NF::PowerGridSystem sys;
+    for (int i = 0; i < 8; ++i) {
+        REQUIRE(sys.createGrid("g" + std::to_string(i)) == i);
+    }
+    REQUIRE(sys.createGrid("overflow") == -1);
+}
+
+TEST_CASE("PowerGridSystem shed load", "[Game][G26][Power]") {
+    NF::PowerGridSystem sys;
+    int idx = sys.createGrid("Test");
+    NF::PowerGrid* g = sys.grid(idx);
+
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 50.f;
+    NF::PowerNode c1; c1.id = "c1"; c1.consumptionRate = 40.f; c1.priority = 1;
+    NF::PowerNode c2; c2.id = "c2"; c2.consumptionRate = 40.f; c2.priority = 2;
+    g->addNode(gen);
+    g->addNode(c1);
+    g->addNode(c2);
+
+    REQUIRE(g->isDeficit());
+    int shed = sys.shedLoad(idx);
+    REQUIRE(shed >= 1);
+    REQUIRE_FALSE(g->isDeficit());
+    // Low-priority consumer (c1, priority=1) should be shed first
+    REQUIRE_FALSE(g->findNode("c1")->online);
+}
+
+TEST_CASE("PowerGridSystem restore all", "[Game][G26][Power]") {
+    NF::PowerGridSystem sys;
+    int idx = sys.createGrid("Test");
+    NF::PowerGrid* g = sys.grid(idx);
+
+    NF::PowerNode gen; gen.id = "gen"; gen.generationRate = 50.f;
+    NF::PowerNode c1; c1.id = "c1"; c1.consumptionRate = 40.f; c1.priority = 1;
+    g->addNode(gen);
+    g->addNode(c1);
+
+    sys.shedLoad(idx);
+    int restored = sys.restoreAll(idx);
+    REQUIRE(restored >= 0);
+    REQUIRE(g->findNode("c1")->online);
+}

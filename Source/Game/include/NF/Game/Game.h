@@ -6005,4 +6005,291 @@ private:
     std::vector<std::vector<LifeSupportModule>> m_lifeSupportModules;
 };
 
+// ---------------------------------------------------------------------------
+// G26 — Power Grid System
+// ---------------------------------------------------------------------------
+
+enum class PowerSourceType : uint8_t {
+    Solar, Nuclear, Fusion, Geothermal, Wind, Battery, FuelCell, Antimatter
+};
+
+inline const char* powerSourceTypeName(PowerSourceType t) {
+    switch (t) {
+        case PowerSourceType::Solar:       return "Solar";
+        case PowerSourceType::Nuclear:     return "Nuclear";
+        case PowerSourceType::Fusion:      return "Fusion";
+        case PowerSourceType::Geothermal:  return "Geothermal";
+        case PowerSourceType::Wind:        return "Wind";
+        case PowerSourceType::Battery:     return "Battery";
+        case PowerSourceType::FuelCell:    return "Fuel Cell";
+        case PowerSourceType::Antimatter:  return "Antimatter";
+    }
+    return "Unknown";
+}
+
+struct PowerNode {
+    std::string id;
+    std::string name;
+    PowerSourceType sourceType = PowerSourceType::Solar;
+    float generationRate = 0.f;
+    float consumptionRate = 0.f;
+    int priority = 0;
+    bool online = true;
+
+    [[nodiscard]] float netPower() const { return online ? (generationRate - consumptionRate) : 0.f; }
+    [[nodiscard]] bool isGenerator() const { return generationRate > consumptionRate; }
+    [[nodiscard]] bool isConsumer() const { return consumptionRate > generationRate; }
+};
+
+struct PowerConduit {
+    std::string id;
+    std::string fromNodeId;
+    std::string toNodeId;
+    float maxCapacity = 100.f;
+    float currentLoad = 0.f;
+    float efficiency = 0.95f;
+    bool active = true;
+
+    [[nodiscard]] float availableCapacity() const { return active ? std::max(0.f, maxCapacity - currentLoad) : 0.f; }
+    [[nodiscard]] float loadFraction() const { return maxCapacity > 0.f ? currentLoad / maxCapacity : 0.f; }
+    [[nodiscard]] bool isOverloaded() const { return currentLoad > maxCapacity; }
+};
+
+class PowerGrid {
+public:
+    static constexpr size_t kMaxNodes = 64;
+    static constexpr size_t kMaxConduits = 128;
+
+    bool addNode(PowerNode node) {
+        if (m_nodes.size() >= kMaxNodes) return false;
+        for (const auto& n : m_nodes) {
+            if (n.id == node.id) return false;
+        }
+        m_nodes.push_back(std::move(node));
+        return true;
+    }
+
+    bool removeNode(const std::string& id) {
+        auto it = std::find_if(m_nodes.begin(), m_nodes.end(),
+                               [&](const PowerNode& n) { return n.id == id; });
+        if (it == m_nodes.end()) return false;
+        m_nodes.erase(it);
+        m_conduits.erase(
+            std::remove_if(m_conduits.begin(), m_conduits.end(),
+                           [&](const PowerConduit& c) {
+                               return c.fromNodeId == id || c.toNodeId == id;
+                           }),
+            m_conduits.end());
+        return true;
+    }
+
+    [[nodiscard]] const PowerNode* findNode(const std::string& id) const {
+        for (const auto& n : m_nodes) {
+            if (n.id == id) return &n;
+        }
+        return nullptr;
+    }
+
+    PowerNode* findNode(const std::string& id) {
+        for (auto& n : m_nodes) {
+            if (n.id == id) return &n;
+        }
+        return nullptr;
+    }
+
+    bool addConduit(PowerConduit conduit) {
+        if (m_conduits.size() >= kMaxConduits) return false;
+        for (const auto& c : m_conduits) {
+            if (c.id == conduit.id) return false;
+        }
+        m_conduits.push_back(std::move(conduit));
+        return true;
+    }
+
+    bool removeConduit(const std::string& id) {
+        auto it = std::find_if(m_conduits.begin(), m_conduits.end(),
+                               [&](const PowerConduit& c) { return c.id == id; });
+        if (it == m_conduits.end()) return false;
+        m_conduits.erase(it);
+        return true;
+    }
+
+    [[nodiscard]] const PowerConduit* findConduit(const std::string& id) const {
+        for (const auto& c : m_conduits) {
+            if (c.id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    PowerConduit* findConduit(const std::string& id) {
+        for (auto& c : m_conduits) {
+            if (c.id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] float totalGeneration() const {
+        float sum = 0.f;
+        for (const auto& n : m_nodes) {
+            if (n.online) sum += n.generationRate;
+        }
+        return sum;
+    }
+
+    [[nodiscard]] float totalConsumption() const {
+        float sum = 0.f;
+        for (const auto& n : m_nodes) {
+            if (n.online) sum += n.consumptionRate;
+        }
+        return sum;
+    }
+
+    [[nodiscard]] float netPower() const { return totalGeneration() - totalConsumption(); }
+    [[nodiscard]] bool isDeficit() const { return netPower() < 0.f; }
+    [[nodiscard]] size_t nodeCount() const { return m_nodes.size(); }
+    [[nodiscard]] size_t conduitCount() const { return m_conduits.size(); }
+    [[nodiscard]] const std::vector<PowerNode>& nodes() const { return m_nodes; }
+    [[nodiscard]] const std::vector<PowerConduit>& conduits() const { return m_conduits; }
+
+    [[nodiscard]] size_t generatorCount() const {
+        size_t count = 0;
+        for (const auto& n : m_nodes) {
+            if (n.isGenerator()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t consumerCount() const {
+        size_t count = 0;
+        for (const auto& n : m_nodes) {
+            if (n.isConsumer()) ++count;
+        }
+        return count;
+    }
+
+    void clear() {
+        m_nodes.clear();
+        m_conduits.clear();
+    }
+
+    std::vector<PowerNode>& nodesMutable() { return m_nodes; }
+    std::vector<PowerConduit>& conduitsMutable() { return m_conduits; }
+
+private:
+    std::vector<PowerNode> m_nodes;
+    std::vector<PowerConduit> m_conduits;
+};
+
+class PowerGridSystem {
+public:
+    static constexpr size_t kMaxGrids = 8;
+
+    int createGrid(const std::string& name) {
+        if (m_grids.size() >= kMaxGrids) return -1;
+        int idx = static_cast<int>(m_grids.size());
+        m_grids.emplace_back();
+        m_gridNames.push_back(name);
+        return idx;
+    }
+
+    PowerGrid* grid(int index) {
+        if (index < 0 || static_cast<size_t>(index) >= m_grids.size()) return nullptr;
+        return &m_grids[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] const PowerGrid* grid(int index) const {
+        if (index < 0 || static_cast<size_t>(index) >= m_grids.size()) return nullptr;
+        return &m_grids[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] const std::string& gridName(int index) const {
+        return m_gridNames.at(static_cast<size_t>(index));
+    }
+
+    [[nodiscard]] size_t gridCount() const { return m_grids.size(); }
+
+    void tickDistribution(int gridIdx, float /*dt*/) {
+        PowerGrid* g = grid(gridIdx);
+        if (!g) return;
+
+        for (auto& c : g->conduitsMutable()) {
+            c.currentLoad = 0.f;
+        }
+
+        float totalGen = g->totalGeneration();
+        float totalCons = g->totalConsumption();
+        if (totalGen <= 0.f || totalCons <= 0.f) return;
+
+        auto& conduits = g->conduitsMutable();
+        for (size_t i = 0; i < conduits.size(); ++i) {
+            if (!conduits[i].active) continue;
+            const PowerNode* toNode = g->findNode(conduits[i].toNodeId);
+            if (!toNode || !toNode->online || !toNode->isConsumer()) continue;
+
+            float share = toNode->consumptionRate / totalCons;
+            float load = share * std::min(totalGen, totalCons);
+            load = std::min(load, conduits[i].maxCapacity * conduits[i].efficiency);
+            conduits[i].currentLoad = load;
+        }
+    }
+
+    int shedLoad(int gridIdx) {
+        PowerGrid* g = grid(gridIdx);
+        if (!g) return 0;
+
+        struct ConsumerInfo {
+            size_t index;
+            int priority;
+            std::string id;
+        };
+        std::vector<ConsumerInfo> consumers;
+        const auto& nodes = g->nodes();
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            if (nodes[i].isConsumer() && nodes[i].online) {
+                consumers.push_back({i, nodes[i].priority, nodes[i].id});
+            }
+        }
+        std::sort(consumers.begin(), consumers.end(),
+                  [](const ConsumerInfo& a, const ConsumerInfo& b) {
+                      return a.priority < b.priority;
+                  });
+
+        int shed = 0;
+        for (const auto& ci : consumers) {
+            if (g->netPower() >= 0.f) break;
+            PowerNode* node = g->findNode(ci.id);
+            if (node) {
+                node->online = false;
+                ++shed;
+            }
+        }
+        return shed;
+    }
+
+    int restoreAll(int gridIdx) {
+        PowerGrid* g = grid(gridIdx);
+        if (!g) return 0;
+        int restored = 0;
+        for (auto& n : g->nodesMutable()) {
+            if (!n.online) {
+                n.online = true;
+                ++restored;
+            }
+        }
+        return restored;
+    }
+
+    [[nodiscard]] float totalSystemPower() const {
+        float sum = 0.f;
+        for (const auto& g : m_grids) {
+            sum += g.netPower();
+        }
+        return sum;
+    }
+
+private:
+    std::vector<PowerGrid>   m_grids;
+    std::vector<std::string> m_gridNames;
+};
+
 } // namespace NF
