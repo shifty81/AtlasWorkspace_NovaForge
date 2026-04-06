@@ -2659,3 +2659,52 @@ Total: 1780 tests, 0 failures (1753 existing + 16 S32 + 11 G51 = 1780).
 ## Build Verification ✅
 
 Total: 1805 tests, 0 failures (1780 existing + 14 S33 + 11 G52 = 1805).
+
+---
+
+## S34 — Material Editor ✅
+
+- [x] MaterialShadingModel enum ×8 (Unlit, Lambert, Phong, BlinnPhong, PBR, Toon, Subsurface, Custom)
+  - materialShadingModelName() for all 8 models
+- [x] MaterialBlendMode enum ×4 (Opaque, Masked, Translucent, Additive)
+  - materialBlendModeName() for all 4 modes
+- [x] MaterialParameter struct (name, value, exposed)
+  - expose, hide
+- [x] MaterialAsset class (name, shadingModel, blendMode, dirty flag, param list)
+  - addParameter (duplicate rejected), removeParameter, findParameter
+  - setShadingModel, setBlendMode, setDirty, isDirty
+  - paramCount, exposedParamCount
+- [x] MaterialEditor class (max 128 assets)
+  - addAsset (duplicate/full rejected), removeAsset (clears activeAsset)
+  - findAsset, setActiveAsset, activeAsset
+  - assetCount, dirtyCount
+- [x] 14 new editor tests (test_s34_editor.cpp), all passing
+
+## S34 Complete ✅
+
+---
+
+## G53 — Cyclone System ✅
+
+- [x] CycloneCategory enum ×6 (TropicalDepression, TropicalStorm, Cat1, Cat2, Cat3, Cat4)
+  - cycloneCategoryName() for all 6 categories
+- [x] CycloneStage enum ×6 (Forming, Intensifying, Peak, Weakening, Dissipating, Remnant)
+  - cycloneStageName() for all 6 stages
+- [x] CycloneEvent struct (id, category, stage, windSpeed, pressure, active)
+  - activate, deactivate, isMajor (>= Cat3), isAtPeak, stormSurge
+- [x] CycloneRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, majorCount, peakCount
+  - name, tick, tickCount
+- [x] CycloneSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, majorEventCount, peakEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G53 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1830 tests, 0 failures (1805 existing + 14 S34 + 11 G53 = 1830).

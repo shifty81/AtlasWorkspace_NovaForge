@@ -10938,4 +10938,143 @@ private:
     size_t                       m_tickCount = 0;
 };
 
+// ── G53 — Cyclone System ──────────────────────────────────────────
+
+enum class CycloneCategory : uint8_t {
+    TropicalDepression, TropicalStorm, Cat1, Cat2, Cat3, Cat4
+};
+
+inline const char* cycloneCategoryName(CycloneCategory c) {
+    switch (c) {
+        case CycloneCategory::TropicalDepression: return "TropicalDepression";
+        case CycloneCategory::TropicalStorm:      return "TropicalStorm";
+        case CycloneCategory::Cat1:               return "Cat1";
+        case CycloneCategory::Cat2:               return "Cat2";
+        case CycloneCategory::Cat3:               return "Cat3";
+        case CycloneCategory::Cat4:               return "Cat4";
+    }
+    return "Unknown";
+}
+
+enum class CycloneStage : uint8_t {
+    Forming, Intensifying, Peak, Weakening, Dissipating, Remnant
+};
+
+inline const char* cycloneStageName(CycloneStage s) {
+    switch (s) {
+        case CycloneStage::Forming:      return "Forming";
+        case CycloneStage::Intensifying: return "Intensifying";
+        case CycloneStage::Peak:         return "Peak";
+        case CycloneStage::Weakening:    return "Weakening";
+        case CycloneStage::Dissipating:  return "Dissipating";
+        case CycloneStage::Remnant:      return "Remnant";
+    }
+    return "Unknown";
+}
+
+struct CycloneEvent {
+    std::string    id;
+    CycloneCategory category = CycloneCategory::TropicalDepression;
+    CycloneStage    stage    = CycloneStage::Forming;
+    float           windSpeed = 0.0f;
+    float           pressure  = 1013.0f;
+    bool            active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isMajor() const {
+        return static_cast<uint8_t>(category) >= static_cast<uint8_t>(CycloneCategory::Cat3);
+    }
+    [[nodiscard]] bool isAtPeak() const { return stage == CycloneStage::Peak; }
+    [[nodiscard]] float stormSurge() const {
+        return (static_cast<float>(static_cast<uint8_t>(category) + 1)) * 0.5f * windSpeed / 100.0f;
+    }
+};
+
+class CycloneRegion {
+public:
+    explicit CycloneRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const CycloneEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] CycloneEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()  const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t majorCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isMajor()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<CycloneEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class CycloneSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    CycloneRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] CycloneRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t majorEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.majorCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+
+private:
+    std::vector<CycloneRegion> m_regions;
+    size_t                     m_tickCount = 0;
+};
+
 } // namespace NF

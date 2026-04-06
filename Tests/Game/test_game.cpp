@@ -8763,3 +8763,109 @@ TEST_CASE("SandstormSystem activeEventCount, severeEventCount, catastrophicEvent
     REQUIRE(sys.severeEventCount()        == 2); // c1 and s1
     REQUIRE(sys.catastrophicEventCount()  == 1); // only c1
 }
+
+// ── G53 — Cyclone System ──────────────────────────────────────────
+
+TEST_CASE("CycloneCategory names cover all 6 values", "[Game][G53][Cyclone]") {
+    REQUIRE(std::string(NF::cycloneCategoryName(NF::CycloneCategory::TropicalDepression)) == "TropicalDepression");
+    REQUIRE(std::string(NF::cycloneCategoryName(NF::CycloneCategory::TropicalStorm))      == "TropicalStorm");
+    REQUIRE(std::string(NF::cycloneCategoryName(NF::CycloneCategory::Cat1))               == "Cat1");
+    REQUIRE(std::string(NF::cycloneCategoryName(NF::CycloneCategory::Cat2))               == "Cat2");
+    REQUIRE(std::string(NF::cycloneCategoryName(NF::CycloneCategory::Cat3))               == "Cat3");
+    REQUIRE(std::string(NF::cycloneCategoryName(NF::CycloneCategory::Cat4))               == "Cat4");
+}
+
+TEST_CASE("CycloneStage names cover all 6 values", "[Game][G53][Cyclone]") {
+    REQUIRE(std::string(NF::cycloneStageName(NF::CycloneStage::Forming))      == "Forming");
+    REQUIRE(std::string(NF::cycloneStageName(NF::CycloneStage::Intensifying)) == "Intensifying");
+    REQUIRE(std::string(NF::cycloneStageName(NF::CycloneStage::Peak))         == "Peak");
+    REQUIRE(std::string(NF::cycloneStageName(NF::CycloneStage::Weakening))    == "Weakening");
+    REQUIRE(std::string(NF::cycloneStageName(NF::CycloneStage::Dissipating))  == "Dissipating");
+    REQUIRE(std::string(NF::cycloneStageName(NF::CycloneStage::Remnant))      == "Remnant");
+}
+
+TEST_CASE("CycloneEvent isMajor threshold is Cat3+", "[Game][G53][Cyclone]") {
+    NF::CycloneEvent ev; ev.id = "c1";
+
+    ev.category = NF::CycloneCategory::Cat2;
+    REQUIRE_FALSE(ev.isMajor());
+
+    ev.category = NF::CycloneCategory::Cat3;
+    REQUIRE(ev.isMajor());
+
+    ev.category = NF::CycloneCategory::Cat4;
+    REQUIRE(ev.isMajor());
+}
+
+TEST_CASE("CycloneEvent isAtPeak only true at Peak stage", "[Game][G53][Cyclone]") {
+    NF::CycloneEvent ev; ev.id = "c2";
+    ev.stage = NF::CycloneStage::Intensifying;
+    REQUIRE_FALSE(ev.isAtPeak());
+
+    ev.stage = NF::CycloneStage::Peak;
+    REQUIRE(ev.isAtPeak());
+}
+
+TEST_CASE("CycloneEvent stormSurge scales with category and windSpeed", "[Game][G53][Cyclone]") {
+    NF::CycloneEvent ev; ev.id = "c3";
+    // Cat1 (uint8=2): (2+1) * 0.5 * windSpeed / 100 = 1.5 * windSpeed / 100
+    ev.category  = NF::CycloneCategory::Cat1;
+    ev.windSpeed = 100.0f;
+    REQUIRE(ev.stormSurge() == Catch::Approx(1.5f));
+}
+
+TEST_CASE("CycloneEvent activate and deactivate toggle active", "[Game][G53][Cyclone]") {
+    NF::CycloneEvent ev; ev.id = "c4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("CycloneRegion majorCount and peakCount", "[Game][G53][Cyclone]") {
+    NF::CycloneRegion region("pacific");
+
+    NF::CycloneEvent a; a.id = "a"; a.category = NF::CycloneCategory::Cat4; a.stage = NF::CycloneStage::Peak; a.activate();
+    NF::CycloneEvent b; b.id = "b"; b.category = NF::CycloneCategory::Cat3; b.stage = NF::CycloneStage::Intensifying; b.activate();
+    NF::CycloneEvent c; c.id = "c"; c.category = NF::CycloneCategory::Cat1; c.stage = NF::CycloneStage::Peak; c.activate();
+
+    region.addEvent(a);
+    region.addEvent(b);
+    region.addEvent(c);
+
+    REQUIRE(region.activeCount() == 3);
+    REQUIRE(region.majorCount()  == 2); // a and b
+    REQUIRE(region.peakCount()   == 2); // a and c
+}
+
+TEST_CASE("CycloneSystem createRegion and tick propagation", "[Game][G53][Cyclone]") {
+    NF::CycloneSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()              == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+    REQUIRE(sys.byName("r2")->tickCount() == 2);
+}
+
+TEST_CASE("CycloneSystem activeEventCount, majorEventCount, peakEventCount", "[Game][G53][Cyclone]") {
+    NF::CycloneSystem sys;
+    sys.createRegion("ra");
+    sys.createRegion("rb");
+
+    NF::CycloneEvent x; x.id = "x"; x.category = NF::CycloneCategory::Cat4; x.stage = NF::CycloneStage::Peak; x.activate();
+    NF::CycloneEvent y; y.id = "y"; y.category = NF::CycloneCategory::Cat2; y.stage = NF::CycloneStage::Forming; y.activate();
+    NF::CycloneEvent z; z.id = "z"; z.category = NF::CycloneCategory::Cat3; z.stage = NF::CycloneStage::Weakening;
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount() == 2);
+    REQUIRE(sys.majorEventCount()  == 1); // only x (y is Cat2, z inactive)
+    REQUIRE(sys.peakEventCount()   == 1); // only x
+}

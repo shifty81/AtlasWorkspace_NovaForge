@@ -82,6 +82,7 @@
 | **G50** — Heatwave System | HeatwaveType×8, HeatwaveSeverity×6, HeatwaveEvent, HeatwaveRegion, HeatwaveSystem | ✅ Done |
 | **G51** — Blizzard System | BlizzardType×8, BlizzardIntensity×6, BlizzardEvent, BlizzardRegion, BlizzardSystem | ✅ Done |
 | **G52** — Sandstorm System | SandstormType×8, SandstormSeverity×6, SandstormEvent, SandstormRegion, SandstormSystem | ✅ Done |
+| **G53** — Cyclone System | CycloneCategory×6, CycloneStage×6, CycloneEvent, CycloneRegion, CycloneSystem | ✅ Done |
 
 ---
 
@@ -145,6 +146,7 @@
 | **S31** — Timeline Editor | TimelineEventType×8, TimelineTrackKind×4, TimelineEvent, TimelineTrack, TimelineEditorPanel | ✅ Done |
 | **S32** — Particle Effect Editor | ParticleEmitterShape×8, ParticleBlendMode×4, ParticleEmitterConfig, ParticleEffectLayer, ParticleEffectEditor | ✅ Done |
 | **S33** — Shader Graph Editor | ShaderNodeType×8, ShaderPortKind×4, ShaderNode, ShaderGraphEdge, ShaderGraphEditor | ✅ Done |
+| **S34** — Material Editor | MaterialShadingModel×8, MaterialBlendMode×4, MaterialParameter, MaterialAsset, MaterialEditor | ✅ Done |
 
 ## Status Key
 
