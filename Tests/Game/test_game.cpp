@@ -6345,3 +6345,284 @@ TEST_CASE("MigrationSystem tick + totalMigrantsInTransit", "[Game][G33][Migratio
     REQUIRE(sys.tickCount() == 1);
     REQUIRE(sys.totalMigrantsInTransit() == 1);
 }
+
+
+// ── G34 Tests: Insurgency System ─────────────────────────────────────────────
+
+TEST_CASE("InsurgencyType names", "[Game][G34][Insurgency]") {
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Political))   == "Political");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Religious))   == "Religious");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Economic))    == "Economic");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Military))    == "Military");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Cultural))    == "Cultural");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Ecological))  == "Ecological");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Corporate))   == "Corporate");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Territorial)) == "Territorial");
+}
+
+TEST_CASE("Insurgent status transitions", "[Game][G34][Insurgency]") {
+    NF::Insurgent ins;
+    ins.id   = "i1";
+    ins.name = "Raven";
+    REQUIRE(ins.isActive());
+    REQUIRE_FALSE(ins.isCaptured());
+
+    REQUIRE(ins.goUnderground());
+    REQUIRE(ins.isUnderground());
+    REQUIRE_FALSE(ins.isActive());
+
+    REQUIRE(ins.capture()); // can capture from underground
+    REQUIRE(ins.isCaptured());
+
+    REQUIRE_FALSE(ins.capture()); // already captured
+}
+
+TEST_CASE("Insurgent eliminate lifecycle", "[Game][G34][Insurgency]") {
+    NF::Insurgent ins;
+    ins.id     = "i2";
+    ins.status = NF::InsurgentStatus::Active;
+    REQUIRE(ins.eliminate());
+    REQUIRE(ins.isEliminated());
+    REQUIRE_FALSE(ins.eliminate()); // already eliminated
+}
+
+TEST_CASE("Insurgent goUnderground only from Active", "[Game][G34][Insurgency]") {
+    NF::Insurgent ins;
+    ins.status = NF::InsurgentStatus::Captured;
+    REQUIRE_FALSE(ins.goUnderground()); // cannot go underground from captured
+}
+
+TEST_CASE("InsurgencyCell isOperational + totalStrength", "[Game][G34][Insurgency]") {
+    NF::InsurgencyCell cell;
+    cell.id = "cell1"; cell.region = "Sector 7";
+    REQUIRE_FALSE(cell.isOperational()); // no members, no level
+
+    cell.addMembers(10);
+    cell.operationalLevel = 0.8f;
+    REQUIRE(cell.isOperational());
+    REQUIRE(cell.totalStrength() == Catch::Approx(8.f));
+}
+
+TEST_CASE("InsurgencyCell resources", "[Game][G34][Insurgency]") {
+    NF::InsurgencyCell cell;
+    cell.id = "cell2";
+    REQUIRE_FALSE(cell.isFunded());
+
+    cell.addResources(100.f);
+    REQUIRE(cell.isFunded());
+    REQUIRE(cell.resourcePool == Catch::Approx(100.f));
+
+    REQUIRE(cell.drainResources(40.f));
+    REQUIRE(cell.resourcePool == Catch::Approx(60.f));
+
+    REQUIRE_FALSE(cell.drainResources(200.f)); // not enough
+    REQUIRE(cell.resourcePool == Catch::Approx(60.f));
+}
+
+TEST_CASE("InsurgencyMovement addCell + duplicate rejection", "[Game][G34][Insurgency]") {
+    NF::InsurgencyMovement mv("FreedomFront");
+    NF::InsurgencyCell c1; c1.id = "c1"; c1.region = "North";
+    NF::InsurgencyCell c2; c2.id = "c1"; // duplicate
+
+    REQUIRE(mv.addCell(c1));
+    REQUIRE(mv.cellCount() == 1);
+    REQUIRE_FALSE(mv.addCell(c2));
+    REQUIRE(mv.cellCount() == 1);
+}
+
+TEST_CASE("InsurgencyMovement removeCell + activeCellCount + totalMembers", "[Game][G34][Insurgency]") {
+    NF::InsurgencyMovement mv("RedDawn");
+    NF::InsurgencyCell c1; c1.id = "c1"; c1.memberCount = 5; c1.operationalLevel = 1.f;
+    NF::InsurgencyCell c2; c2.id = "c2"; c2.memberCount = 3; c2.operationalLevel = 0.f; // inactive
+    mv.addCell(c1);
+    mv.addCell(c2);
+
+    REQUIRE(mv.totalMembers()    == 8);
+    REQUIRE(mv.activeCellCount() == 1);
+
+    REQUIRE(mv.removeCell("c1"));
+    REQUIRE(mv.cellCount()    == 1);
+    REQUIRE(mv.totalMembers() == 3);
+    REQUIRE_FALSE(mv.removeCell("nonexistent"));
+}
+
+TEST_CASE("InsurgencySystem createMovement + duplicate rejection", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    REQUIRE(sys.createMovement("FreedomFront") != nullptr);
+    REQUIRE(sys.createMovement("RedDawn")      != nullptr);
+    REQUIRE(sys.createMovement("FreedomFront") == nullptr); // duplicate
+    REQUIRE(sys.movementCount() == 2);
+}
+
+TEST_CASE("InsurgencySystem movementByName", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    sys.createMovement("Shadow");
+    REQUIRE(sys.movementByName("Shadow") != nullptr);
+    REQUIRE(sys.movementByName("Shadow")->name() == "Shadow");
+    REQUIRE(sys.movementByName("Unknown") == nullptr);
+}
+
+TEST_CASE("InsurgencySystem addInsurgent + activeInsurgentCount", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    NF::Insurgent i1; i1.id = "i1"; i1.status = NF::InsurgentStatus::Active;
+    NF::Insurgent i2; i2.id = "i2"; i2.status = NF::InsurgentStatus::Captured;
+    NF::Insurgent i3; i3.id = "i3"; i3.status = NF::InsurgentStatus::Active;
+    REQUIRE(sys.addInsurgent(i1));
+    REQUIRE(sys.addInsurgent(i2));
+    REQUIRE(sys.addInsurgent(i3));
+    REQUIRE_FALSE(sys.addInsurgent(i1)); // duplicate
+
+    REQUIRE(sys.totalInsurgentCount()    == 3);
+    REQUIRE(sys.activeInsurgentCount()   == 2);
+    REQUIRE(sys.capturedInsurgentCount() == 1);
+}
+
+TEST_CASE("InsurgencySystem tick + totalCells", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    auto* mv = sys.createMovement("TestMovement");
+    NF::InsurgencyCell cell; cell.id = "c1"; cell.memberCount = 5; cell.operationalLevel = 1.f;
+    mv->addCell(cell);
+
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.totalCells() == 1);
+}
+
+
+// ── G35 Tests: Plague System ─────────────────────────────────────────────────
+
+TEST_CASE("PlagueType names", "[Game][G35][Plague]") {
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Bacterial)) == "Bacterial");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Viral))     == "Viral");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Fungal))    == "Fungal");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Parasitic)) == "Parasitic");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Prion))     == "Prion");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Genetic))   == "Genetic");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Chemical))  == "Chemical");
+    REQUIRE(std::string(NF::plagueTypeName(NF::PlagueType::Radiation)) == "Radiation");
+}
+
+TEST_CASE("PlagueCarrier status transitions", "[Game][G35][Plague]") {
+    NF::PlagueCarrier c;
+    c.id   = "p1";
+    c.name = "Alice";
+    REQUIRE(c.isHealthy());
+
+    REQUIRE(c.expose());
+    REQUIRE(c.isExposed());
+
+    REQUIRE(c.infect());
+    REQUIRE(c.isInfected());
+
+    REQUIRE(c.recover());
+    REQUIRE(c.isRecovering());
+
+    REQUIRE(c.becomeImmune());
+    REQUIRE(c.isImmune());
+    REQUIRE(c.immunity == Catch::Approx(1.f));
+}
+
+TEST_CASE("PlagueCarrier fully immune cannot be exposed", "[Game][G35][Plague]") {
+    NF::PlagueCarrier c;
+    c.id      = "p2";
+    c.immunity = 1.f;
+    REQUIRE_FALSE(c.expose()); // fully immune
+    REQUIRE(c.isHealthy());
+}
+
+TEST_CASE("PlagueCarrier expose only from Healthy", "[Game][G35][Plague]") {
+    NF::PlagueCarrier c;
+    c.id = "p3"; c.status = NF::InfectionStatus::Infected;
+    REQUIRE_FALSE(c.expose()); // not healthy
+}
+
+TEST_CASE("PlagueStat helpers", "[Game][G35][Plague]") {
+    NF::PlagueStat p;
+    p.id             = "flu1";
+    p.region         = "North";
+    p.type           = NF::PlagueType::Viral;
+    p.transmissionRate = 2.5f;
+    p.mortalityRate    = 0.02f;
+
+    REQUIRE(p.isLethal());
+    REQUIRE(p.isSpreading());
+    REQUIRE_FALSE(p.isContained());
+
+    p.contain();
+    REQUIRE(p.isContained());
+    REQUIRE_FALSE(p.isSpreading());
+
+    p.release();
+    REQUIRE_FALSE(p.isContained());
+    REQUIRE(p.isSpreading());
+}
+
+TEST_CASE("PlagueRegion addCarrier + duplicate rejection", "[Game][G35][Plague]") {
+    NF::PlagueRegion region("Sector A");
+    NF::PlagueCarrier c1; c1.id = "c1"; c1.status = NF::InfectionStatus::Infected;
+    NF::PlagueCarrier c2; c2.id = "c1"; // duplicate
+
+    REQUIRE(region.addCarrier(c1));
+    REQUIRE(region.carrierCount() == 1);
+    REQUIRE_FALSE(region.addCarrier(c2));
+    REQUIRE(region.carrierCount() == 1);
+}
+
+TEST_CASE("PlagueRegion infectedCount + immuneCount + healthyCount", "[Game][G35][Plague]") {
+    NF::PlagueRegion region("Zone B");
+    NF::PlagueCarrier c1; c1.id = "c1"; c1.status = NF::InfectionStatus::Infected;
+    NF::PlagueCarrier c2; c2.id = "c2"; c2.status = NF::InfectionStatus::Immune;
+    NF::PlagueCarrier c3; c3.id = "c3"; c3.status = NF::InfectionStatus::Healthy;
+    region.addCarrier(c1);
+    region.addCarrier(c2);
+    region.addCarrier(c3);
+
+    REQUIRE(region.infectedCount() == 1);
+    REQUIRE(region.immuneCount()   == 1);
+    REQUIRE(region.healthyCount()  == 1);
+}
+
+TEST_CASE("PlagueSystem createRegion + duplicate rejection", "[Game][G35][Plague]") {
+    NF::PlagueSystem sys;
+    REQUIRE(sys.createRegion("North") != nullptr);
+    REQUIRE(sys.createRegion("South") != nullptr);
+    REQUIRE(sys.createRegion("North") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+}
+
+TEST_CASE("PlagueSystem addPlagueStat + activePlagueCount", "[Game][G35][Plague]") {
+    NF::PlagueSystem sys;
+    NF::PlagueStat p1; p1.id = "flu1"; p1.transmissionRate = 2.5f;
+    NF::PlagueStat p2; p2.id = "flu2"; p2.contained = true;
+    REQUIRE(sys.addPlagueStat(p1));
+    REQUIRE(sys.addPlagueStat(p2));
+    REQUIRE_FALSE(sys.addPlagueStat(p1)); // duplicate
+    REQUIRE(sys.plagueCount() == 2);
+    REQUIRE(sys.activePlagueCount() == 1);
+}
+
+TEST_CASE("PlagueSystem totalInfected + totalImmune across regions", "[Game][G35][Plague]") {
+    NF::PlagueSystem sys;
+    sys.createRegion("Alpha");
+    sys.createRegion("Beta");
+
+    NF::PlagueCarrier c1; c1.id = "c1"; c1.status = NF::InfectionStatus::Infected;
+    NF::PlagueCarrier c2; c2.id = "c2"; c2.status = NF::InfectionStatus::Immune;
+    NF::PlagueCarrier c3; c3.id = "c3"; c3.status = NF::InfectionStatus::Infected;
+    sys.regionByName("Alpha")->addCarrier(c1);
+    sys.regionByName("Alpha")->addCarrier(c2);
+    sys.regionByName("Beta")->addCarrier(c3);
+
+    REQUIRE(sys.totalInfected() == 2);
+    REQUIRE(sys.totalImmune()   == 1);
+}
+
+TEST_CASE("PlagueSystem tick propagates to regions", "[Game][G35][Plague]") {
+    NF::PlagueSystem sys;
+    sys.createRegion("East");
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.regionByName("East")->tickCount() == 2);
+}

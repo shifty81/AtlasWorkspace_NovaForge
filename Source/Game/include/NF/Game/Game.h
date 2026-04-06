@@ -8023,4 +8023,422 @@ private:
     size_t                      m_tickCount = 0;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G34 — Insurgency System
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class InsurgencyType : uint8_t {
+    Political   = 0,
+    Religious   = 1,
+    Economic    = 2,
+    Military    = 3,
+    Cultural    = 4,
+    Ecological  = 5,
+    Corporate   = 6,
+    Territorial = 7
+};
+
+inline const char* insurgencyTypeName(InsurgencyType t) {
+    switch (t) {
+        case InsurgencyType::Political:   return "Political";
+        case InsurgencyType::Religious:   return "Religious";
+        case InsurgencyType::Economic:    return "Economic";
+        case InsurgencyType::Military:    return "Military";
+        case InsurgencyType::Cultural:    return "Cultural";
+        case InsurgencyType::Ecological:  return "Ecological";
+        case InsurgencyType::Corporate:   return "Corporate";
+        case InsurgencyType::Territorial: return "Territorial";
+        default:                          return "Unknown";
+    }
+}
+
+enum class InsurgentStatus : uint8_t {
+    Active      = 0,
+    Captured    = 1,
+    Eliminated  = 2,
+    Underground = 3
+};
+
+struct Insurgent {
+    std::string     id;
+    std::string     name;
+    InsurgencyType  type      = InsurgencyType::Political;
+    InsurgentStatus status    = InsurgentStatus::Active;
+    float           loyalty   = 1.f;
+    float           influence = 0.f;
+
+    [[nodiscard]] bool isActive()      const { return status == InsurgentStatus::Active; }
+    [[nodiscard]] bool isCaptured()    const { return status == InsurgentStatus::Captured; }
+    [[nodiscard]] bool isEliminated()  const { return status == InsurgentStatus::Eliminated; }
+    [[nodiscard]] bool isUnderground() const { return status == InsurgentStatus::Underground; }
+
+    bool capture() {
+        if (status != InsurgentStatus::Active && status != InsurgentStatus::Underground) return false;
+        status = InsurgentStatus::Captured;
+        return true;
+    }
+
+    bool eliminate() {
+        if (status == InsurgentStatus::Eliminated) return false;
+        status = InsurgentStatus::Eliminated;
+        return true;
+    }
+
+    bool goUnderground() {
+        if (status != InsurgentStatus::Active) return false;
+        status = InsurgentStatus::Underground;
+        return true;
+    }
+};
+
+struct InsurgencyCell {
+    std::string    id;
+    std::string    region;
+    InsurgencyType type             = InsurgencyType::Political;
+    size_t         memberCount      = 0;
+    float          resourcePool     = 0.f;
+    float          operationalLevel = 0.f;
+
+    [[nodiscard]] bool  isOperational() const { return operationalLevel > 0.f && memberCount > 0; }
+    [[nodiscard]] bool  isFunded()      const { return resourcePool > 0.f; }
+    [[nodiscard]] float totalStrength() const { return static_cast<float>(memberCount) * operationalLevel; }
+
+    void addMembers(size_t count) { memberCount += count; }
+    bool removeMembers(size_t count) {
+        if (count > memberCount) return false;
+        memberCount -= count;
+        return true;
+    }
+
+    void addResources(float amount)  { if (amount > 0.f) resourcePool += amount; }
+    bool drainResources(float amount) {
+        if (amount > resourcePool) return false;
+        resourcePool -= amount;
+        return true;
+    }
+};
+
+class InsurgencyMovement {
+public:
+    static constexpr size_t kMaxCells = 32;
+
+    explicit InsurgencyMovement(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    bool addCell(const InsurgencyCell& cell) {
+        if (m_cells.size() >= kMaxCells) return false;
+        for (const auto& c : m_cells) { if (c.id == cell.id) return false; }
+        m_cells.push_back(cell);
+        return true;
+    }
+
+    bool removeCell(const std::string& cellId) {
+        for (auto it = m_cells.begin(); it != m_cells.end(); ++it) {
+            if (it->id == cellId) { m_cells.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] InsurgencyCell* findCell(const std::string& cellId) {
+        for (auto& c : m_cells) { if (c.id == cellId) return &c; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t cellCount()       const { return m_cells.size(); }
+    [[nodiscard]] size_t activeCellCount() const {
+        size_t count = 0;
+        for (const auto& c : m_cells) { if (c.isOperational()) ++count; }
+        return count;
+    }
+    [[nodiscard]] size_t totalMembers() const {
+        size_t total = 0;
+        for (const auto& c : m_cells) { total += c.memberCount; }
+        return total;
+    }
+
+    void tick(float /*dt*/) { m_tickCount++; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string                 m_name;
+    std::vector<InsurgencyCell> m_cells;
+    size_t                      m_tickCount = 0;
+};
+
+class InsurgencySystem {
+public:
+    static constexpr size_t kMaxMovements  = 8;
+    static constexpr size_t kMaxInsurgents = 256;
+
+    InsurgencyMovement* createMovement(const std::string& name) {
+        if (m_movements.size() >= kMaxMovements) return nullptr;
+        for (const auto& mv : m_movements) { if (mv.name() == name) return nullptr; }
+        m_movements.emplace_back(name);
+        return &m_movements.back();
+    }
+
+    [[nodiscard]] InsurgencyMovement* movementByName(const std::string& name) {
+        for (auto& mv : m_movements) { if (mv.name() == name) return &mv; }
+        return nullptr;
+    }
+
+    bool addInsurgent(const Insurgent& insurgent) {
+        if (m_insurgents.size() >= kMaxInsurgents) return false;
+        for (const auto& i : m_insurgents) { if (i.id == insurgent.id) return false; }
+        m_insurgents.push_back(insurgent);
+        return true;
+    }
+
+    [[nodiscard]] Insurgent* findInsurgent(const std::string& id) {
+        for (auto& i : m_insurgents) { if (i.id == id) return &i; }
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& mv : m_movements) mv.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t movementCount()       const { return m_movements.size(); }
+    [[nodiscard]] size_t totalInsurgentCount() const { return m_insurgents.size(); }
+    [[nodiscard]] size_t tickCount()           const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeInsurgentCount() const {
+        size_t count = 0;
+        for (const auto& i : m_insurgents) { if (i.isActive()) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] size_t capturedInsurgentCount() const {
+        size_t count = 0;
+        for (const auto& i : m_insurgents) { if (i.isCaptured()) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] size_t totalCells() const {
+        size_t count = 0;
+        for (const auto& mv : m_movements) count += mv.cellCount();
+        return count;
+    }
+
+private:
+    std::vector<InsurgencyMovement> m_movements;
+    std::vector<Insurgent>          m_insurgents;
+    size_t                          m_tickCount = 0;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G35 — Plague System
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class PlagueType : uint8_t {
+    Bacterial = 0,
+    Viral     = 1,
+    Fungal    = 2,
+    Parasitic = 3,
+    Prion     = 4,
+    Genetic   = 5,
+    Chemical  = 6,
+    Radiation = 7
+};
+
+inline const char* plagueTypeName(PlagueType t) {
+    switch (t) {
+        case PlagueType::Bacterial: return "Bacterial";
+        case PlagueType::Viral:     return "Viral";
+        case PlagueType::Fungal:    return "Fungal";
+        case PlagueType::Parasitic: return "Parasitic";
+        case PlagueType::Prion:     return "Prion";
+        case PlagueType::Genetic:   return "Genetic";
+        case PlagueType::Chemical:  return "Chemical";
+        case PlagueType::Radiation: return "Radiation";
+        default:                    return "Unknown";
+    }
+}
+
+enum class InfectionStatus : uint8_t {
+    Healthy    = 0,
+    Exposed    = 1,
+    Infected   = 2,
+    Recovering = 3,
+    Immune     = 4
+};
+
+struct PlagueCarrier {
+    std::string     id;
+    std::string     name;
+    InfectionStatus status        = InfectionStatus::Healthy;
+    float           infectivity   = 0.f;  // 0–1
+    float           immunity      = 0.f;  // 0–1
+    int             daysInfected  = 0;
+
+    [[nodiscard]] bool isHealthy()    const { return status == InfectionStatus::Healthy; }
+    [[nodiscard]] bool isExposed()    const { return status == InfectionStatus::Exposed; }
+    [[nodiscard]] bool isInfected()   const { return status == InfectionStatus::Infected; }
+    [[nodiscard]] bool isRecovering() const { return status == InfectionStatus::Recovering; }
+    [[nodiscard]] bool isImmune()     const { return status == InfectionStatus::Immune; }
+
+    bool expose() {
+        if (status != InfectionStatus::Healthy) return false;
+        if (immunity >= 1.f) return false; // fully immune, cannot be exposed
+        status = InfectionStatus::Exposed;
+        return true;
+    }
+
+    bool infect() {
+        if (status != InfectionStatus::Exposed) return false;
+        status = InfectionStatus::Infected;
+        return true;
+    }
+
+    bool recover() {
+        if (status != InfectionStatus::Infected && status != InfectionStatus::Recovering) return false;
+        status = InfectionStatus::Recovering;
+        return true;
+    }
+
+    bool becomeImmune() {
+        if (status == InfectionStatus::Healthy || status == InfectionStatus::Recovering
+            || status == InfectionStatus::Immune) {
+            status = InfectionStatus::Immune;
+            immunity = 1.f;
+            return true;
+        }
+        return false;
+    }
+};
+
+struct PlagueStat {
+    std::string id;
+    std::string region;
+    PlagueType  type            = PlagueType::Viral;
+    float       transmissionRate = 0.f;  // R0 factor
+    float       mortalityRate    = 0.f;  // 0–1
+    float       incubationDays   = 0.f;
+    bool        contained        = false;
+
+    [[nodiscard]] bool isLethal()    const { return mortalityRate > 0.f; }
+    [[nodiscard]] bool isContained() const { return contained; }
+    [[nodiscard]] bool isSpreading() const { return !contained && transmissionRate > 1.f; }
+
+    void contain()  { contained = true; }
+    void release()  { contained = false; }
+};
+
+class PlagueRegion {
+public:
+    static constexpr size_t kMaxCarriers = 512;
+
+    explicit PlagueRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    bool addCarrier(const PlagueCarrier& carrier) {
+        if (m_carriers.size() >= kMaxCarriers) return false;
+        for (const auto& c : m_carriers) { if (c.id == carrier.id) return false; }
+        m_carriers.push_back(carrier);
+        return true;
+    }
+
+    bool removeCarrier(const std::string& carrierId) {
+        for (auto it = m_carriers.begin(); it != m_carriers.end(); ++it) {
+            if (it->id == carrierId) { m_carriers.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] PlagueCarrier* findCarrier(const std::string& carrierId) {
+        for (auto& c : m_carriers) { if (c.id == carrierId) return &c; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t carrierCount()   const { return m_carriers.size(); }
+    [[nodiscard]] size_t infectedCount()  const {
+        size_t n = 0;
+        for (const auto& c : m_carriers) { if (c.isInfected()) ++n; }
+        return n;
+    }
+    [[nodiscard]] size_t immuneCount() const {
+        size_t n = 0;
+        for (const auto& c : m_carriers) { if (c.isImmune()) ++n; }
+        return n;
+    }
+    [[nodiscard]] size_t healthyCount() const {
+        size_t n = 0;
+        for (const auto& c : m_carriers) { if (c.isHealthy()) ++n; }
+        return n;
+    }
+
+    void tick(float /*dt*/) { m_tickCount++; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<PlagueCarrier> m_carriers;
+    size_t                    m_tickCount = 0;
+};
+
+class PlagueSystem {
+public:
+    static constexpr size_t kMaxRegions = 32;
+    static constexpr size_t kMaxPlagueStats = 16;
+
+    PlagueRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= kMaxRegions) return nullptr;
+        for (const auto& r : m_regions) { if (r.name() == name) return nullptr; }
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] PlagueRegion* regionByName(const std::string& name) {
+        for (auto& r : m_regions) { if (r.name() == name) return &r; }
+        return nullptr;
+    }
+
+    bool addPlagueStat(const PlagueStat& stat) {
+        if (m_plagues.size() >= kMaxPlagueStats) return false;
+        for (const auto& p : m_plagues) { if (p.id == stat.id) return false; }
+        m_plagues.push_back(stat);
+        return true;
+    }
+
+    [[nodiscard]] PlagueStat* findPlague(const std::string& id) {
+        for (auto& p : m_plagues) { if (p.id == id) return &p; }
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& r : m_regions) r.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t regionCount()     const { return m_regions.size(); }
+    [[nodiscard]] size_t plagueCount()     const { return m_plagues.size(); }
+    [[nodiscard]] size_t tickCount()       const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalInfected() const {
+        size_t n = 0;
+        for (const auto& r : m_regions) n += r.infectedCount();
+        return n;
+    }
+
+    [[nodiscard]] size_t totalImmune() const {
+        size_t n = 0;
+        for (const auto& r : m_regions) n += r.immuneCount();
+        return n;
+    }
+
+    [[nodiscard]] size_t activePlagueCount() const {
+        size_t n = 0;
+        for (const auto& p : m_plagues) { if (!p.isContained()) ++n; }
+        return n;
+    }
+
+private:
+    std::vector<PlagueRegion> m_regions;
+    std::vector<PlagueStat>   m_plagues;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF
