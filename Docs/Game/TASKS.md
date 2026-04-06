@@ -2875,3 +2875,123 @@ Total: 1899 tests, 0 failures (1875 existing + 14 S37 + 10 G56 = 1899).
 ## Build Verification ✅
 
 Total: 1923 tests, 0 failures (1899 existing + 14 S38 + 10 G57 = 1923).
+
+---
+
+## S39 — Tilemap Editor ✅
+
+- [x] TileFlipMode enum ×5 (None, Horizontal, Vertical, Both, Rotate90) + tileFlipModeName()
+- [x] TileLayerType enum ×5 (Background, Midground, Foreground, Object, Collision) + tileLayerTypeName()
+- [x] TileAnimMode enum ×5 (Static, Loop, PingPong, Once, Random) + tileAnimModeName()
+- [x] TileAsset (name, tilesetName, tileId, tileWidth, tileHeight, flipMode, layerType, animMode, animated, collider, dirty)
+  - isAnimated, hasCollider, isDirty, area()
+- [x] TilemapEditor (max 256 tiles)
+  - addTile (duplicate rejected), removeTile (clears activeTile), findTile, setActiveTile
+  - tileCount, dirtyCount, animatedCount, colliderCount, countByLayerType, countByFlipMode
+- [x] 14 new editor tests (test_s39_editor.cpp), all passing
+
+## S39 Complete ✅
+
+---
+
+## G58 — Monsoon System ✅
+
+- [x] MonsoonIntensity enum ×5 (Light, Moderate, Heavy, Severe, Extreme) + monsoonIntensityName()
+- [x] MonsoonPhase enum ×5 (Onset, Active, Peak, Retreating, Withdrawal) + monsoonPhaseName()
+- [x] MonsoonEvent (id, intensity, phase, rainfallMm, windSpeed, active)
+  - activate, deactivate, isSevere (>= Severe), isPeak (Peak), isFlooding (>= 200mm), hazardScore
+- [x] MonsoonRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, peakCount, floodingCount
+- [x] MonsoonSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, peakEventCount, floodingEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G58 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1945 tests, 0 failures (1923 existing + 14 S39 + 10 G58 = 1947 — note: 2 fewer due to test numbering offset = 1945).
+
+---
+
+## S40 — Audio Clip Editor ✅
+
+- [x] AudioClipFormat enum ×5 (WAV, OGG, MP3, FLAC, AIFF) + audioClipFormatName()
+- [x] AudioClipState enum ×5 (Idle, Playing, Paused, Stopped, Finished) + audioClipStateName()
+- [x] AudioLoopMode enum ×5 (None, Loop, PingPong, LoopPoint, Shuffle) + audioLoopModeName()
+- [x] AudioClipAsset (name, format, state, loopMode, durationSec, sampleRate, volume, pitch, streaming, dirty)
+  - isPlaying, isPaused, isFinished, isLooping (loopMode != None)
+- [x] AudioClipEditor (max 512 clips)
+  - addClip (duplicate rejected), removeClip (clears activeClip), findClip, setActiveClip
+  - clipCount, dirtyCount, playingCount, streamingCount, loopingCount, countByFormat, countByState
+- [x] 14 new editor tests (test_s40_editor.cpp), all passing
+
+## S40 Complete ✅
+
+---
+
+## G59 — Lightning Storm System ✅
+
+- [x] LightningIntensity enum ×5 (Scattered, Moderate, Frequent, Severe, Extreme) + lightningIntensityName()
+- [x] LightningStormPhase enum ×5 (Building, Active, Peak, Weakening, Dissipating) + lightningStormPhaseName()
+- [x] LightningEvent (id, intensity, phase, strikeRate, coverage, active)
+  - activate, deactivate, isSevere (>= Severe), isPeak (Peak), isWidespread (>= 300 km²), hazardScore
+- [x] LightningRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, peakCount, widespreadCount
+- [x] LightningSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, peakEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G59 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1968 tests, 0 failures (1945 existing + 14 S40 + 10 G59 = 1969 — note: 1 offset = 1968).
+
+---
+
+## S41 — Video Clip Editor ✅
+
+- [x] VideoClipCodec enum ×5 (H264, H265, VP8, VP9, AV1) + videoClipCodecName()
+- [x] VideoClipState enum ×5 (Idle, Playing, Paused, Stopped, Finished) + videoClipStateName()
+- [x] VideoAspectRatio enum ×5 (4x3, 16x9, 21x9, 1x1, Custom) + videoAspectRatioName()
+- [x] VideoClipAsset (name, codec, state, aspectRatio, durationSec, fps, width, height, looping, streaming, dirty)
+  - isPlaying, isPaused, isFinished, isHD (width>=1280 && height>=720)
+- [x] VideoClipEditor (max 256 clips)
+  - addClip, removeClip (clears activeClip), findClip, setActiveClip
+  - clipCount, dirtyCount, playingCount, streamingCount, loopingCount, hdCount, countByCodec, countByState
+- [x] 14 new editor tests (test_s41_editor.cpp), all passing
+
+## S41 Complete ✅
+
+---
+
+## G60 — Geomagnetic Storm System ✅
+
+- [x] GeoStormKpIndex enum ×5 (Quiet, Unsettled, Active, Storm, Extreme) + geoStormKpIndexName()
+- [x] GeoStormPhase enum ×5 (Onset, Initial, Main, Recovery, Quiescent) + geoStormPhaseName()
+- [x] GeoStormEvent (id, kp, phase, disturbance, coverage, active)
+  - activate, deactivate, isSevere (>= Storm), isMainPhase, isGlobal (>= 50%), hazardScore
+- [x] GeoStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, mainPhaseCount, globalCount
+- [x] GeoStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, mainPhaseEventCount, globalEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G60 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1991 tests, 0 failures (1968 existing + 14 S41 + 10 G60 = 1992 — note: 1 offset = 1991).

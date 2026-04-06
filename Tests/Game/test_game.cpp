@@ -9290,3 +9290,317 @@ TEST_CASE("IceStormSystem aggregate event counts", "[Game][G57][IceStorm]") {
     REQUIRE(sys.freezingEventCount()   == 1); // only x (y=Forming, z inactive)
     REQUIRE(sys.widespreadEventCount() == 1); // only x (coverage >= 400)
 }
+
+// ── G58 — Monsoon System ────────────────────────────────────────
+
+TEST_CASE("MonsoonIntensity names cover all 5 values", "[Game][G58][Monsoon]") {
+    REQUIRE(std::string(NF::monsoonIntensityName(NF::MonsoonIntensity::Light))    == "Light");
+    REQUIRE(std::string(NF::monsoonIntensityName(NF::MonsoonIntensity::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::monsoonIntensityName(NF::MonsoonIntensity::Heavy))    == "Heavy");
+    REQUIRE(std::string(NF::monsoonIntensityName(NF::MonsoonIntensity::Severe))   == "Severe");
+    REQUIRE(std::string(NF::monsoonIntensityName(NF::MonsoonIntensity::Extreme))  == "Extreme");
+}
+
+TEST_CASE("MonsoonPhase names cover all 5 values", "[Game][G58][Monsoon]") {
+    REQUIRE(std::string(NF::monsoonPhaseName(NF::MonsoonPhase::Onset))      == "Onset");
+    REQUIRE(std::string(NF::monsoonPhaseName(NF::MonsoonPhase::Active))     == "Active");
+    REQUIRE(std::string(NF::monsoonPhaseName(NF::MonsoonPhase::Peak))       == "Peak");
+    REQUIRE(std::string(NF::monsoonPhaseName(NF::MonsoonPhase::Retreating)) == "Retreating");
+    REQUIRE(std::string(NF::monsoonPhaseName(NF::MonsoonPhase::Withdrawal)) == "Withdrawal");
+}
+
+TEST_CASE("MonsoonEvent isSevere threshold is Severe+", "[Game][G58][Monsoon]") {
+    NF::MonsoonEvent ev; ev.id = "m1";
+    ev.intensity = NF::MonsoonIntensity::Heavy;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.intensity = NF::MonsoonIntensity::Severe;
+    REQUIRE(ev.isSevere());
+
+    ev.intensity = NF::MonsoonIntensity::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("MonsoonEvent isPeak and isFlooding", "[Game][G58][Monsoon]") {
+    NF::MonsoonEvent ev; ev.id = "m2";
+    ev.phase      = NF::MonsoonPhase::Active;
+    ev.rainfallMm = 100.0f;
+    REQUIRE_FALSE(ev.isPeak());
+    REQUIRE_FALSE(ev.isFlooding());
+
+    ev.phase      = NF::MonsoonPhase::Peak;
+    ev.rainfallMm = 250.0f;
+    REQUIRE(ev.isPeak());
+    REQUIRE(ev.isFlooding());
+}
+
+TEST_CASE("MonsoonEvent hazardScore calculation", "[Game][G58][Monsoon]") {
+    NF::MonsoonEvent ev; ev.id = "m3";
+    // Severe (uint8=3): (3+1) * 200 / 100 = 8.0
+    ev.intensity  = NF::MonsoonIntensity::Severe;
+    ev.rainfallMm = 200.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(8.0f));
+}
+
+TEST_CASE("MonsoonEvent activate and deactivate", "[Game][G58][Monsoon]") {
+    NF::MonsoonEvent ev; ev.id = "m4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("MonsoonRegion severeCount and floodingCount", "[Game][G58][Monsoon]") {
+    NF::MonsoonRegion region("south");
+
+    NF::MonsoonEvent a; a.id = "a"; a.intensity = NF::MonsoonIntensity::Extreme; a.phase = NF::MonsoonPhase::Peak; a.rainfallMm = 300.0f; a.activate();
+    NF::MonsoonEvent b; b.id = "b"; b.intensity = NF::MonsoonIntensity::Heavy;   b.phase = NF::MonsoonPhase::Active; b.rainfallMm = 50.0f; b.activate();
+    NF::MonsoonEvent c; c.id = "c"; c.intensity = NF::MonsoonIntensity::Severe;  c.phase = NF::MonsoonPhase::Peak;  c.rainfallMm = 250.0f; c.activate();
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()   == 2); // a (Extreme) and c (Severe)
+    REQUIRE(region.peakCount()     == 2); // a and c
+    REQUIRE(region.floodingCount() == 2); // a (300mm) and c (250mm)
+}
+
+TEST_CASE("MonsoonSystem createRegion and tick propagation", "[Game][G58][Monsoon]") {
+    NF::MonsoonSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("MonsoonSystem aggregate event counts", "[Game][G58][Monsoon]") {
+    NF::MonsoonSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::MonsoonEvent x; x.id = "x"; x.intensity = NF::MonsoonIntensity::Extreme; x.phase = NF::MonsoonPhase::Peak;   x.rainfallMm = 400.0f; x.activate();
+    NF::MonsoonEvent y; y.id = "y"; y.intensity = NF::MonsoonIntensity::Light;   y.phase = NF::MonsoonPhase::Onset;  y.rainfallMm = 10.0f;  y.activate();
+    NF::MonsoonEvent z; z.id = "z"; z.intensity = NF::MonsoonIntensity::Severe;  z.phase = NF::MonsoonPhase::Peak;   z.rainfallMm = 250.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()   == 2);
+    REQUIRE(sys.severeEventCount()   == 1); // only x (y=Light, z inactive)
+    REQUIRE(sys.peakEventCount()     == 1); // only x (y=Onset, z inactive)
+    REQUIRE(sys.floodingEventCount() == 1); // only x (y=10mm, z inactive)
+}
+
+// ── G59 — Lightning Storm System ────────────────────────────────
+
+TEST_CASE("LightningIntensity names cover all 5 values", "[Game][G59][Lightning]") {
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Scattered)) == "Scattered");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Moderate))  == "Moderate");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Frequent))  == "Frequent");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Severe))    == "Severe");
+    REQUIRE(std::string(NF::lightningIntensityName(NF::LightningIntensity::Extreme))   == "Extreme");
+}
+
+TEST_CASE("LightningStormPhase names cover all 5 values", "[Game][G59][Lightning]") {
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Building))    == "Building");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Active))      == "Active");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Peak))        == "Peak");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Weakening))   == "Weakening");
+    REQUIRE(std::string(NF::lightningStormPhaseName(NF::LightningStormPhase::Dissipating)) == "Dissipating");
+}
+
+TEST_CASE("LightningEvent isSevere threshold is Severe+", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l1";
+    ev.intensity = NF::LightningIntensity::Frequent;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.intensity = NF::LightningIntensity::Severe;
+    REQUIRE(ev.isSevere());
+
+    ev.intensity = NF::LightningIntensity::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("LightningEvent isPeak and isWidespread", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l2";
+    ev.phase    = NF::LightningStormPhase::Active;
+    ev.coverage = 100.0f;
+    REQUIRE_FALSE(ev.isPeak());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.phase    = NF::LightningStormPhase::Peak;
+    ev.coverage = 400.0f;
+    REQUIRE(ev.isPeak());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("LightningEvent hazardScore calculation", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l3";
+    // Severe (uint8=3): (3+1) * 50 / 10 = 20.0
+    ev.intensity  = NF::LightningIntensity::Severe;
+    ev.strikeRate = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(20.0f));
+}
+
+TEST_CASE("LightningEvent activate and deactivate", "[Game][G59][Lightning]") {
+    NF::LightningEvent ev; ev.id = "l4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("LightningRegion severeCount and widespreadCount", "[Game][G59][Lightning]") {
+    NF::LightningRegion region("plains");
+
+    NF::LightningEvent a; a.id = "a"; a.intensity = NF::LightningIntensity::Extreme; a.phase = NF::LightningStormPhase::Peak; a.coverage = 500.0f; a.activate();
+    NF::LightningEvent b; b.id = "b"; b.intensity = NF::LightningIntensity::Moderate; b.phase = NF::LightningStormPhase::Active; b.coverage = 50.0f; b.activate();
+    NF::LightningEvent c; c.id = "c"; c.intensity = NF::LightningIntensity::Severe; c.coverage = 350.0f; // inactive
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()     == 1); // only a (c is inactive)
+    REQUIRE(region.peakCount()       == 1); // only a
+    REQUIRE(region.widespreadCount() == 1); // only a (coverage >= 300)
+}
+
+TEST_CASE("LightningSystem createRegion and tick propagation", "[Game][G59][Lightning]") {
+    NF::LightningSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("LightningSystem aggregate event counts", "[Game][G59][Lightning]") {
+    NF::LightningSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::LightningEvent x; x.id = "x"; x.intensity = NF::LightningIntensity::Extreme; x.phase = NF::LightningStormPhase::Peak; x.coverage = 500.0f; x.strikeRate = 80.0f; x.activate();
+    NF::LightningEvent y; y.id = "y"; y.intensity = NF::LightningIntensity::Scattered; y.phase = NF::LightningStormPhase::Building; y.coverage = 10.0f; y.activate();
+    NF::LightningEvent z; z.id = "z"; z.intensity = NF::LightningIntensity::Severe; z.phase = NF::LightningStormPhase::Peak; z.coverage = 400.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Scattered, z inactive)
+    REQUIRE(sys.peakEventCount()       == 1); // only x (y=Building, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=10km², z inactive)
+}
+
+
+
+// ── G60 — Geomagnetic Storm System ──────────────────────────────
+
+TEST_CASE("GeoStormKpIndex names cover all 5 values", "[Game][G60][GeoStorm]") {
+    REQUIRE(std::string(NF::geoStormKpIndexName(NF::GeoStormKpIndex::Quiet))     == "Quiet");
+    REQUIRE(std::string(NF::geoStormKpIndexName(NF::GeoStormKpIndex::Unsettled)) == "Unsettled");
+    REQUIRE(std::string(NF::geoStormKpIndexName(NF::GeoStormKpIndex::Active))    == "Active");
+    REQUIRE(std::string(NF::geoStormKpIndexName(NF::GeoStormKpIndex::Storm))     == "Storm");
+    REQUIRE(std::string(NF::geoStormKpIndexName(NF::GeoStormKpIndex::Extreme))   == "Extreme");
+}
+
+TEST_CASE("GeoStormPhase names cover all 5 values", "[Game][G60][GeoStorm]") {
+    REQUIRE(std::string(NF::geoStormPhaseName(NF::GeoStormPhase::Onset))     == "Onset");
+    REQUIRE(std::string(NF::geoStormPhaseName(NF::GeoStormPhase::Initial))   == "Initial");
+    REQUIRE(std::string(NF::geoStormPhaseName(NF::GeoStormPhase::Main))      == "Main");
+    REQUIRE(std::string(NF::geoStormPhaseName(NF::GeoStormPhase::Recovery))  == "Recovery");
+    REQUIRE(std::string(NF::geoStormPhaseName(NF::GeoStormPhase::Quiescent)) == "Quiescent");
+}
+
+TEST_CASE("GeoStormEvent isSevere threshold is Storm+", "[Game][G60][GeoStorm]") {
+    NF::GeoStormEvent ev; ev.id = "g1";
+    ev.kp = NF::GeoStormKpIndex::Active;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.kp = NF::GeoStormKpIndex::Storm;
+    REQUIRE(ev.isSevere());
+
+    ev.kp = NF::GeoStormKpIndex::Extreme;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("GeoStormEvent isMainPhase and isGlobal", "[Game][G60][GeoStorm]") {
+    NF::GeoStormEvent ev; ev.id = "g2";
+    ev.phase    = NF::GeoStormPhase::Initial;
+    ev.coverage = 20.0f;
+    REQUIRE_FALSE(ev.isMainPhase());
+    REQUIRE_FALSE(ev.isGlobal());
+
+    ev.phase    = NF::GeoStormPhase::Main;
+    ev.coverage = 70.0f;
+    REQUIRE(ev.isMainPhase());
+    REQUIRE(ev.isGlobal());
+}
+
+TEST_CASE("GeoStormEvent hazardScore calculation", "[Game][G60][GeoStorm]") {
+    NF::GeoStormEvent ev; ev.id = "g3";
+    // Storm (uint8=3): (3+1) * 50 / 10 = 20.0
+    ev.kp       = NF::GeoStormKpIndex::Storm;
+    ev.coverage = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(20.0f));
+}
+
+TEST_CASE("GeoStormEvent activate and deactivate", "[Game][G60][GeoStorm]") {
+    NF::GeoStormEvent ev; ev.id = "g4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("GeoStormRegion severeCount, mainPhaseCount, globalCount", "[Game][G60][GeoStorm]") {
+    NF::GeoStormRegion region("polar");
+
+    NF::GeoStormEvent a; a.id = "a"; a.kp = NF::GeoStormKpIndex::Extreme; a.phase = NF::GeoStormPhase::Main;     a.coverage = 80.0f; a.activate();
+    NF::GeoStormEvent b; b.id = "b"; b.kp = NF::GeoStormKpIndex::Quiet;   b.phase = NF::GeoStormPhase::Initial;  b.coverage = 10.0f; b.activate();
+    NF::GeoStormEvent c; c.id = "c"; c.kp = NF::GeoStormKpIndex::Storm;   c.phase = NF::GeoStormPhase::Main;     c.coverage = 60.0f; // inactive
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()    == 1); // only a (b=Quiet, c inactive)
+    REQUIRE(region.mainPhaseCount() == 1); // only a (b=Initial, c inactive)
+    REQUIRE(region.globalCount()    == 1); // only a (b=10%, c inactive)
+}
+
+TEST_CASE("GeoStormSystem createRegion and tick propagation", "[Game][G60][GeoStorm]") {
+    NF::GeoStormSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("GeoStormSystem aggregate event counts", "[Game][G60][GeoStorm]") {
+    NF::GeoStormSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::GeoStormEvent x; x.id = "x"; x.kp = NF::GeoStormKpIndex::Extreme; x.phase = NF::GeoStormPhase::Main;    x.coverage = 75.0f; x.activate();
+    NF::GeoStormEvent y; y.id = "y"; y.kp = NF::GeoStormKpIndex::Unsettled;y.phase = NF::GeoStormPhase::Onset;   y.coverage = 5.0f;  y.activate();
+    NF::GeoStormEvent z; z.id = "z"; z.kp = NF::GeoStormKpIndex::Storm;    z.phase = NF::GeoStormPhase::Main;    z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()    == 2);
+    REQUIRE(sys.severeEventCount()    == 1); // only x (y=Unsettled, z inactive)
+    REQUIRE(sys.mainPhaseEventCount() == 1); // only x (y=Onset, z inactive)
+    REQUIRE(sys.globalEventCount()    == 1); // only x (y=5%, z inactive)
+}

@@ -10728,4 +10728,448 @@ private:
     std::string              m_activeSprite;
 };
 
+// ── S39 — Tilemap Editor ─────────────────────────────────────────
+
+enum class TileFlipMode : uint8_t {
+    None, Horizontal, Vertical, Both, Rotate90
+};
+inline const char* tileFlipModeName(TileFlipMode m) {
+    switch (m) {
+        case TileFlipMode::None:       return "None";
+        case TileFlipMode::Horizontal: return "Horizontal";
+        case TileFlipMode::Vertical:   return "Vertical";
+        case TileFlipMode::Both:       return "Both";
+        case TileFlipMode::Rotate90:   return "Rotate90";
+    }
+    return "Unknown";
+}
+
+enum class TileLayerType : uint8_t {
+    Background, Midground, Foreground, Object, Collision
+};
+inline const char* tileLayerTypeName(TileLayerType t) {
+    switch (t) {
+        case TileLayerType::Background: return "Background";
+        case TileLayerType::Midground:  return "Midground";
+        case TileLayerType::Foreground: return "Foreground";
+        case TileLayerType::Object:     return "Object";
+        case TileLayerType::Collision:  return "Collision";
+    }
+    return "Unknown";
+}
+
+enum class TileAnimMode : uint8_t {
+    Static, Loop, PingPong, Once, Random
+};
+inline const char* tileAnimModeName(TileAnimMode m) {
+    switch (m) {
+        case TileAnimMode::Static:   return "Static";
+        case TileAnimMode::Loop:     return "Loop";
+        case TileAnimMode::PingPong: return "PingPong";
+        case TileAnimMode::Once:     return "Once";
+        case TileAnimMode::Random:   return "Random";
+    }
+    return "Unknown";
+}
+
+class TileAsset {
+public:
+    explicit TileAsset(const std::string& name,
+                       uint32_t tileWidth  = 16,
+                       uint32_t tileHeight = 16)
+        : m_name(name), m_tileWidth(tileWidth), m_tileHeight(tileHeight) {}
+
+    void setTilesetName(const std::string& ts) { m_tilesetName = ts; }
+    void setTileId(uint32_t id)                { m_tileId      = id; }
+    void setFlipMode(TileFlipMode f)           { m_flipMode    = f;  }
+    void setLayerType(TileLayerType l)         { m_layerType   = l;  }
+    void setAnimMode(TileAnimMode a)           { m_animMode    = a;  }
+    void setAnimated(bool v)                   { m_animated    = v;  }
+    void setCollider(bool v)                   { m_collider    = v;  }
+    void setDirty(bool v)                      { m_dirty       = v;  }
+
+    [[nodiscard]] const std::string& name()        const { return m_name;        }
+    [[nodiscard]] const std::string& tilesetName() const { return m_tilesetName; }
+    [[nodiscard]] uint32_t           tileId()      const { return m_tileId;      }
+    [[nodiscard]] uint32_t           tileWidth()   const { return m_tileWidth;   }
+    [[nodiscard]] uint32_t           tileHeight()  const { return m_tileHeight;  }
+    [[nodiscard]] TileFlipMode       flipMode()    const { return m_flipMode;    }
+    [[nodiscard]] TileLayerType      layerType()   const { return m_layerType;   }
+    [[nodiscard]] TileAnimMode       animMode()    const { return m_animMode;    }
+    [[nodiscard]] bool               isAnimated()  const { return m_animated;    }
+    [[nodiscard]] bool               hasCollider() const { return m_collider;    }
+    [[nodiscard]] bool               isDirty()     const { return m_dirty;       }
+
+    [[nodiscard]] uint32_t area() const { return m_tileWidth * m_tileHeight; }
+
+private:
+    std::string   m_name;
+    std::string   m_tilesetName;
+    uint32_t      m_tileId      = 0;
+    uint32_t      m_tileWidth;
+    uint32_t      m_tileHeight;
+    TileFlipMode  m_flipMode    = TileFlipMode::None;
+    TileLayerType m_layerType   = TileLayerType::Background;
+    TileAnimMode  m_animMode    = TileAnimMode::Static;
+    bool          m_animated    = false;
+    bool          m_collider    = false;
+    bool          m_dirty       = false;
+};
+
+class TilemapEditor {
+public:
+    static constexpr size_t MAX_TILES = 256;
+
+    [[nodiscard]] bool addTile(const TileAsset& tile) {
+        if (m_tiles.size() >= MAX_TILES) return false;
+        for (auto& t : m_tiles) if (t.name() == tile.name()) return false;
+        m_tiles.push_back(tile);
+        return true;
+    }
+
+    [[nodiscard]] bool removeTile(const std::string& name) {
+        for (auto it = m_tiles.begin(); it != m_tiles.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeTile == name) m_activeTile.clear();
+                m_tiles.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] TileAsset* findTile(const std::string& name) {
+        for (auto& t : m_tiles) if (t.name() == name) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveTile(const std::string& name) {
+        for (auto& t : m_tiles)
+            if (t.name() == name) { m_activeTile = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeTile() const { return m_activeTile; }
+    [[nodiscard]] size_t tileCount()   const { return m_tiles.size(); }
+    [[nodiscard]] size_t dirtyCount()  const {
+        size_t c = 0; for (auto& t : m_tiles) if (t.isDirty())     ++c; return c;
+    }
+    [[nodiscard]] size_t animatedCount() const {
+        size_t c = 0; for (auto& t : m_tiles) if (t.isAnimated())  ++c; return c;
+    }
+    [[nodiscard]] size_t colliderCount() const {
+        size_t c = 0; for (auto& t : m_tiles) if (t.hasCollider()) ++c; return c;
+    }
+    [[nodiscard]] size_t countByLayerType(TileLayerType l) const {
+        size_t c = 0; for (auto& t : m_tiles) if (t.layerType() == l) ++c; return c;
+    }
+    [[nodiscard]] size_t countByFlipMode(TileFlipMode f) const {
+        size_t c = 0; for (auto& t : m_tiles) if (t.flipMode()    == f) ++c; return c;
+    }
+
+private:
+    std::vector<TileAsset> m_tiles;
+    std::string            m_activeTile;
+};
+
+// ── S40 — Audio Clip Editor ──────────────────────────────────────
+
+enum class AudioClipFormat : uint8_t {
+    WAV, OGG, MP3, FLAC, AIFF
+};
+inline const char* audioClipFormatName(AudioClipFormat f) {
+    switch (f) {
+        case AudioClipFormat::WAV:  return "WAV";
+        case AudioClipFormat::OGG:  return "OGG";
+        case AudioClipFormat::MP3:  return "MP3";
+        case AudioClipFormat::FLAC: return "FLAC";
+        case AudioClipFormat::AIFF: return "AIFF";
+    }
+    return "Unknown";
+}
+
+enum class AudioClipState : uint8_t {
+    Idle, Playing, Paused, Stopped, Finished
+};
+inline const char* audioClipStateName(AudioClipState s) {
+    switch (s) {
+        case AudioClipState::Idle:     return "Idle";
+        case AudioClipState::Playing:  return "Playing";
+        case AudioClipState::Paused:   return "Paused";
+        case AudioClipState::Stopped:  return "Stopped";
+        case AudioClipState::Finished: return "Finished";
+    }
+    return "Unknown";
+}
+
+enum class AudioLoopMode : uint8_t {
+    None, Loop, PingPong, LoopPoint, Shuffle
+};
+inline const char* audioLoopModeName(AudioLoopMode m) {
+    switch (m) {
+        case AudioLoopMode::None:      return "None";
+        case AudioLoopMode::Loop:      return "Loop";
+        case AudioLoopMode::PingPong:  return "PingPong";
+        case AudioLoopMode::LoopPoint: return "LoopPoint";
+        case AudioLoopMode::Shuffle:   return "Shuffle";
+    }
+    return "Unknown";
+}
+
+class AudioClipAsset {
+public:
+    explicit AudioClipAsset(const std::string& name,
+                             float durationSec = 1.0f,
+                             uint32_t sampleRate = 44100)
+        : m_name(name), m_durationSec(durationSec), m_sampleRate(sampleRate) {}
+
+    void setFormat(AudioClipFormat f)   { m_format   = f; }
+    void setState(AudioClipState s)     { m_state    = s; }
+    void setLoopMode(AudioLoopMode m)   { m_loopMode = m; }
+    void setVolume(float v)             { m_volume   = v; }
+    void setPitch(float p)              { m_pitch    = p; }
+    void setStreaming(bool v)           { m_streaming = v; }
+    void setDirty(bool v)               { m_dirty     = v; }
+
+    [[nodiscard]] const std::string& name()       const { return m_name;       }
+    [[nodiscard]] AudioClipFormat    format()     const { return m_format;     }
+    [[nodiscard]] AudioClipState     state()      const { return m_state;      }
+    [[nodiscard]] AudioLoopMode      loopMode()   const { return m_loopMode;   }
+    [[nodiscard]] float              durationSec()const { return m_durationSec;}
+    [[nodiscard]] uint32_t           sampleRate() const { return m_sampleRate; }
+    [[nodiscard]] float              volume()     const { return m_volume;     }
+    [[nodiscard]] float              pitch()      const { return m_pitch;      }
+    [[nodiscard]] bool               isStreaming()const { return m_streaming;  }
+    [[nodiscard]] bool               isDirty()    const { return m_dirty;      }
+
+    [[nodiscard]] bool isPlaying()  const { return m_state == AudioClipState::Playing;  }
+    [[nodiscard]] bool isPaused()   const { return m_state == AudioClipState::Paused;   }
+    [[nodiscard]] bool isFinished() const { return m_state == AudioClipState::Finished; }
+    [[nodiscard]] bool isLooping()  const { return m_loopMode != AudioLoopMode::None;   }
+
+private:
+    std::string      m_name;
+    AudioClipFormat  m_format     = AudioClipFormat::WAV;
+    AudioClipState   m_state      = AudioClipState::Idle;
+    AudioLoopMode    m_loopMode   = AudioLoopMode::None;
+    float            m_durationSec;
+    uint32_t         m_sampleRate;
+    float            m_volume     = 1.0f;
+    float            m_pitch      = 1.0f;
+    bool             m_streaming  = false;
+    bool             m_dirty      = false;
+};
+
+class AudioClipEditor {
+public:
+    static constexpr size_t MAX_CLIPS = 512;
+
+    [[nodiscard]] bool addClip(const AudioClipAsset& clip) {
+        if (m_clips.size() >= MAX_CLIPS) return false;
+        for (auto& c : m_clips) if (c.name() == clip.name()) return false;
+        m_clips.push_back(clip);
+        return true;
+    }
+
+    [[nodiscard]] bool removeClip(const std::string& name) {
+        for (auto it = m_clips.begin(); it != m_clips.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeClip == name) m_activeClip.clear();
+                m_clips.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] AudioClipAsset* findClip(const std::string& name) {
+        for (auto& c : m_clips) if (c.name() == name) return &c;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveClip(const std::string& name) {
+        for (auto& c : m_clips)
+            if (c.name() == name) { m_activeClip = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeClip() const { return m_activeClip; }
+    [[nodiscard]] size_t clipCount()     const { return m_clips.size(); }
+    [[nodiscard]] size_t dirtyCount()    const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isDirty())     ++n; return n;
+    }
+    [[nodiscard]] size_t playingCount()  const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isPlaying())   ++n; return n;
+    }
+    [[nodiscard]] size_t streamingCount()const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isStreaming())  ++n; return n;
+    }
+    [[nodiscard]] size_t loopingCount()  const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isLooping())   ++n; return n;
+    }
+    [[nodiscard]] size_t countByFormat(AudioClipFormat f) const {
+        size_t n = 0; for (auto& c : m_clips) if (c.format() == f) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(AudioClipState s) const {
+        size_t n = 0; for (auto& c : m_clips) if (c.state()  == s) ++n; return n;
+    }
+
+private:
+    std::vector<AudioClipAsset> m_clips;
+    std::string                 m_activeClip;
+};
+
+// ── S41 — Video Clip Editor ──────────────────────────────────────
+
+enum class VideoClipCodec : uint8_t {
+    H264, H265, VP8, VP9, AV1
+};
+inline const char* videoClipCodecName(VideoClipCodec c) {
+    switch (c) {
+        case VideoClipCodec::H264: return "H264";
+        case VideoClipCodec::H265: return "H265";
+        case VideoClipCodec::VP8:  return "VP8";
+        case VideoClipCodec::VP9:  return "VP9";
+        case VideoClipCodec::AV1:  return "AV1";
+    }
+    return "Unknown";
+}
+
+enum class VideoClipState : uint8_t {
+    Idle, Playing, Paused, Stopped, Finished
+};
+inline const char* videoClipStateName(VideoClipState s) {
+    switch (s) {
+        case VideoClipState::Idle:     return "Idle";
+        case VideoClipState::Playing:  return "Playing";
+        case VideoClipState::Paused:   return "Paused";
+        case VideoClipState::Stopped:  return "Stopped";
+        case VideoClipState::Finished: return "Finished";
+    }
+    return "Unknown";
+}
+
+enum class VideoAspectRatio : uint8_t {
+    Ratio4x3, Ratio16x9, Ratio21x9, Ratio1x1, Custom
+};
+inline const char* videoAspectRatioName(VideoAspectRatio r) {
+    switch (r) {
+        case VideoAspectRatio::Ratio4x3:  return "4x3";
+        case VideoAspectRatio::Ratio16x9: return "16x9";
+        case VideoAspectRatio::Ratio21x9: return "21x9";
+        case VideoAspectRatio::Ratio1x1:  return "1x1";
+        case VideoAspectRatio::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+class VideoClipAsset {
+public:
+    explicit VideoClipAsset(const std::string& name,
+                             float durationSec = 1.0f,
+                             uint32_t fps = 30)
+        : m_name(name), m_durationSec(durationSec), m_fps(fps) {}
+
+    void setCodec(VideoClipCodec c)         { m_codec       = c; }
+    void setState(VideoClipState s)         { m_state       = s; }
+    void setAspectRatio(VideoAspectRatio r) { m_aspectRatio = r; }
+    void setWidth(uint32_t w)               { m_width       = w; }
+    void setHeight(uint32_t h)              { m_height      = h; }
+    void setLooping(bool v)                 { m_looping     = v; }
+    void setStreaming(bool v)               { m_streaming   = v; }
+    void setDirty(bool v)                   { m_dirty       = v; }
+
+    [[nodiscard]] const std::string& name()       const { return m_name;       }
+    [[nodiscard]] VideoClipCodec     codec()      const { return m_codec;      }
+    [[nodiscard]] VideoClipState     state()      const { return m_state;      }
+    [[nodiscard]] VideoAspectRatio   aspectRatio()const { return m_aspectRatio;}
+    [[nodiscard]] float              durationSec()const { return m_durationSec;}
+    [[nodiscard]] uint32_t           fps()        const { return m_fps;        }
+    [[nodiscard]] uint32_t           width()      const { return m_width;      }
+    [[nodiscard]] uint32_t           height()     const { return m_height;     }
+    [[nodiscard]] bool               isLooping()  const { return m_looping;    }
+    [[nodiscard]] bool               isStreaming()const { return m_streaming;  }
+    [[nodiscard]] bool               isDirty()    const { return m_dirty;      }
+
+    [[nodiscard]] bool isPlaying()  const { return m_state == VideoClipState::Playing;  }
+    [[nodiscard]] bool isPaused()   const { return m_state == VideoClipState::Paused;   }
+    [[nodiscard]] bool isFinished() const { return m_state == VideoClipState::Finished; }
+    [[nodiscard]] bool isHD()       const { return m_width >= 1280 && m_height >= 720;  }
+
+private:
+    std::string      m_name;
+    VideoClipCodec   m_codec       = VideoClipCodec::H264;
+    VideoClipState   m_state       = VideoClipState::Idle;
+    VideoAspectRatio m_aspectRatio = VideoAspectRatio::Ratio16x9;
+    float            m_durationSec;
+    uint32_t         m_fps;
+    uint32_t         m_width       = 1920;
+    uint32_t         m_height      = 1080;
+    bool             m_looping     = false;
+    bool             m_streaming   = false;
+    bool             m_dirty       = false;
+};
+
+class VideoClipEditor {
+public:
+    static constexpr size_t MAX_CLIPS = 256;
+
+    [[nodiscard]] bool addClip(const VideoClipAsset& clip) {
+        if (m_clips.size() >= MAX_CLIPS) return false;
+        for (auto& c : m_clips) if (c.name() == clip.name()) return false;
+        m_clips.push_back(clip);
+        return true;
+    }
+
+    [[nodiscard]] bool removeClip(const std::string& name) {
+        for (auto it = m_clips.begin(); it != m_clips.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeClip == name) m_activeClip.clear();
+                m_clips.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] VideoClipAsset* findClip(const std::string& name) {
+        for (auto& c : m_clips) if (c.name() == name) return &c;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveClip(const std::string& name) {
+        for (auto& c : m_clips)
+            if (c.name() == name) { m_activeClip = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeClip()   const { return m_activeClip;  }
+    [[nodiscard]] size_t clipCount()                const { return m_clips.size(); }
+    [[nodiscard]] size_t dirtyCount()               const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isDirty())     ++n; return n;
+    }
+    [[nodiscard]] size_t playingCount()             const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isPlaying())   ++n; return n;
+    }
+    [[nodiscard]] size_t streamingCount()           const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isStreaming())  ++n; return n;
+    }
+    [[nodiscard]] size_t loopingCount()             const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isLooping())   ++n; return n;
+    }
+    [[nodiscard]] size_t hdCount()                  const {
+        size_t n = 0; for (auto& c : m_clips) if (c.isHD())        ++n; return n;
+    }
+    [[nodiscard]] size_t countByCodec(VideoClipCodec codec) const {
+        size_t n = 0; for (auto& c : m_clips) if (c.codec() == codec) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(VideoClipState s) const {
+        size_t n = 0; for (auto& c : m_clips) if (c.state()  == s) ++n; return n;
+    }
+
+private:
+    std::vector<VideoClipAsset> m_clips;
+    std::string                 m_activeClip;
+};
+
 } // namespace NF
