@@ -5731,3 +5731,183 @@ TEST_CASE("DiplomacySystem treaty + tick expiration", "[Game][G29][Diplomacy]") 
     REQUIRE(sys.totalActiveTreaties() == 0);
     REQUIRE(sys.tickCount() == 2);
 }
+
+// ── G30 Tests: Espionage System ─────────────────────────────────
+
+TEST_CASE("EspionageMissionType names", "[Game][G30][Espionage]") {
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::Infiltration)) == "Infiltration");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::Sabotage))     == "Sabotage");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::Surveillance))  == "Surveillance");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::DataTheft))    == "DataTheft");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::Assassination)) == "Assassination");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::Recruitment))  == "Recruitment");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::CounterIntel)) == "CounterIntel");
+    REQUIRE(std::string(NF::espionageMissionTypeName(NF::EspionageMissionType::Extraction))   == "Extraction");
+}
+
+TEST_CASE("SpyAgent defaults + availability", "[Game][G30][Espionage]") {
+    NF::SpyAgent agent;
+    REQUIRE(agent.isAvailable());
+    REQUIRE_FALSE(agent.isActive());
+    REQUIRE(agent.skillLevel == Catch::Approx(1.f));
+    REQUIRE(agent.loyalty == Catch::Approx(1.f));
+    REQUIRE(agent.coverStrength == Catch::Approx(1.f));
+}
+
+TEST_CASE("SpyAgent deploy/recall/compromise/capture/rescue", "[Game][G30][Espionage]") {
+    NF::SpyAgent agent;
+    agent.deploy();
+    REQUIRE(agent.isActive());
+    REQUIRE_FALSE(agent.isAvailable());
+
+    agent.recall();
+    REQUIRE(agent.isAvailable());
+
+    agent.compromise();
+    REQUIRE_FALSE(agent.isAvailable());
+    REQUIRE(agent.coverStrength == Catch::Approx(0.f));
+
+    agent.capture();
+    REQUIRE(agent.captured);
+    REQUIRE_FALSE(agent.isAvailable());
+
+    agent.rescue();
+    REQUIRE(agent.isAvailable());
+    REQUIRE(agent.coverStrength == Catch::Approx(0.3f));
+}
+
+TEST_CASE("EspionageMission advance + completion", "[Game][G30][Espionage]") {
+    NF::EspionageMission m;
+    m.durationSeconds = 10.f;
+    REQUIRE(m.progressFraction() == Catch::Approx(0.f));
+
+    m.advance(7.f);
+    REQUIRE(m.progressFraction() == Catch::Approx(0.7f));
+    REQUIRE(m.isInProgress());
+    REQUIRE_FALSE(m.isComplete());
+
+    m.advance(5.f); // exceeds duration
+    REQUIRE(m.isComplete());
+    REQUIRE(m.progress == Catch::Approx(1.f));
+}
+
+TEST_CASE("EspionageMission fail", "[Game][G30][Espionage]") {
+    NF::EspionageMission m;
+    m.durationSeconds = 10.f;
+    m.advance(3.f);
+    m.fail();
+    REQUIRE(m.isFailed());
+    m.advance(5.f); // no further progress after fail
+    REQUIRE(m.elapsedSeconds == Catch::Approx(3.f));
+}
+
+TEST_CASE("IntelligenceNetwork addAgent + duplicate rejection", "[Game][G30][Espionage]") {
+    NF::IntelligenceNetwork net("Alpha");
+    NF::SpyAgent a1; a1.id = "spy1"; a1.name = "Agent A";
+    NF::SpyAgent a2; a2.id = "spy1"; a2.name = "Duplicate";
+    REQUIRE(net.addAgent(a1));
+    REQUIRE(net.agentCount() == 1);
+    REQUIRE_FALSE(net.addAgent(a2)); // duplicate id
+    REQUIRE(net.agentCount() == 1);
+}
+
+TEST_CASE("IntelligenceNetwork removeAgent", "[Game][G30][Espionage]") {
+    NF::IntelligenceNetwork net("Alpha");
+    NF::SpyAgent a; a.id = "spy1";
+    net.addAgent(a);
+    REQUIRE(net.removeAgent("spy1"));
+    REQUIRE(net.agentCount() == 0);
+    REQUIRE_FALSE(net.removeAgent("nonexistent"));
+}
+
+TEST_CASE("IntelligenceNetwork launchMission + agent deployed", "[Game][G30][Espionage]") {
+    NF::IntelligenceNetwork net("Alpha");
+    NF::SpyAgent a; a.id = "spy1";
+    net.addAgent(a);
+    REQUIRE(net.launchMission("spy1", NF::EspionageMissionType::Surveillance, "Beta", 5.f));
+    REQUIRE(net.missionCount() == 1);
+    REQUIRE(net.activeMissionCount() == 1);
+    REQUIRE(net.findAgent("spy1")->deployed);
+    // can't launch again while deployed
+    REQUIRE_FALSE(net.launchMission("spy1", NF::EspionageMissionType::Sabotage, "Gamma", 3.f));
+}
+
+TEST_CASE("IntelligenceNetwork tick completes mission", "[Game][G30][Espionage]") {
+    NF::IntelligenceNetwork net("Alpha");
+    NF::SpyAgent a; a.id = "spy1";
+    net.addAgent(a);
+    net.launchMission("spy1", NF::EspionageMissionType::DataTheft, "Beta", 5.f);
+
+    net.tick(3.f);
+    REQUIRE(net.activeMissionCount() == 1);
+    REQUIRE(net.completedMissionCount() == 0);
+
+    net.tick(3.f); // total 6 > 5 -> complete
+    REQUIRE(net.completedMissionCount() == 1);
+    REQUIRE(net.intelGathered() == 1);
+    REQUIRE(net.findAgent("spy1")->missionsCompleted == 1);
+    REQUIRE_FALSE(net.findAgent("spy1")->deployed); // recalled
+}
+
+TEST_CASE("IntelligenceNetwork availableAgentCount", "[Game][G30][Espionage]") {
+    NF::IntelligenceNetwork net("Alpha");
+    NF::SpyAgent a1; a1.id = "spy1";
+    NF::SpyAgent a2; a2.id = "spy2";
+    net.addAgent(a1);
+    net.addAgent(a2);
+    REQUIRE(net.availableAgentCount() == 2);
+    net.launchMission("spy1", NF::EspionageMissionType::Infiltration, "Beta", 10.f);
+    REQUIRE(net.availableAgentCount() == 1);
+}
+
+TEST_CASE("EspionageSystem createNetwork + duplicate rejection", "[Game][G30][Espionage]") {
+    NF::EspionageSystem sys;
+    REQUIRE(sys.createNetwork("Alpha") == 0);
+    REQUIRE(sys.createNetwork("Beta") == 1);
+    REQUIRE(sys.createNetwork("Alpha") == -1); // duplicate
+    REQUIRE(sys.networkCount() == 2);
+}
+
+TEST_CASE("EspionageSystem recruit + launchMission + tick", "[Game][G30][Espionage]") {
+    NF::EspionageSystem sys;
+    sys.createNetwork("Alpha");
+    NF::SpyAgent a; a.id = "spy1";
+    REQUIRE(sys.recruitAgent("Alpha", a));
+
+    REQUIRE(sys.launchMission("Alpha", "spy1", NF::EspionageMissionType::Sabotage, "Beta", 5.f));
+    REQUIRE(sys.totalActiveMissions() == 1);
+
+    sys.tick(3.f);
+    REQUIRE(sys.totalActiveMissions() == 1);
+
+    sys.tick(3.f); // total 6 > 5 -> complete
+    REQUIRE(sys.totalActiveMissions() == 0);
+    REQUIRE(sys.totalIntelGathered() == 1);
+    REQUIRE(sys.tickCount() == 2);
+}
+
+TEST_CASE("EspionageSystem networkByName", "[Game][G30][Espionage]") {
+    NF::EspionageSystem sys;
+    sys.createNetwork("Alpha");
+    sys.createNetwork("Beta");
+    REQUIRE(sys.networkByName("Alpha") != nullptr);
+    REQUIRE(sys.networkByName("Alpha")->owner() == "Alpha");
+    REQUIRE(sys.networkByName("Gamma") == nullptr);
+}
+
+TEST_CASE("IntelligenceNetwork cannot remove deployed agent", "[Game][G30][Espionage]") {
+    NF::IntelligenceNetwork net("Alpha");
+    NF::SpyAgent a; a.id = "spy1";
+    net.addAgent(a);
+    net.launchMission("spy1", NF::EspionageMissionType::Infiltration, "Beta", 10.f);
+    REQUIRE_FALSE(net.removeAgent("spy1")); // deployed
+    REQUIRE(net.agentCount() == 1);
+}
+
+TEST_CASE("EspionageMission zero duration never completes via advance", "[Game][G30][Espionage]") {
+    NF::EspionageMission m;
+    m.durationSeconds = 0.f;
+    m.advance(100.f);
+    REQUIRE_FALSE(m.isComplete());
+    REQUIRE(m.progressFraction() == Catch::Approx(0.f));
+}

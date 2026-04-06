@@ -1311,3 +1311,77 @@ Total: 1152 tests, 0 failures.
 - [x] DiplomacySystem class — multi-faction diplomacy with bidirectional relations (max 16 channels)
 - [x] 15 new game tests, all passing
 Total: 1188 tests, 0 failures.
+
+---
+
+## S10 — Performance Profiler ✅
+
+- [x] ProfileMetricType enum ×8 (FrameTime, CpuUsage, GpuUsage, MemoryAlloc, DrawCalls, TriangleCount, ScriptTime, NetworkLatency)
+  - profileMetricTypeName() for all 8 types
+- [x] ProfileSample struct (type, value, timestamp, tag)
+  - hasTag() helper
+- [x] ProfileSession struct with start/stop/duration lifecycle
+- [x] FrameProfiler class — per-frame metric collection
+  - beginFrame/endFrame with duration tracking
+  - recordMetric for arbitrary metric types
+  - averageFrameTime, peakFrameTime, samplesByType
+  - clear() reset
+- [x] MemoryProfiler class — memory allocation tracking
+  - trackAllocation/trackFree with tagged usage
+  - currentUsage, peakUsage, allocationCount, freeCount
+  - Tagged memory tracking per category
+- [x] ProfilerTimeline class — timeline marker management
+  - addMarker, markersInRange, markersByCategory
+  - max 2048 markers
+- [x] PerformanceProfiler class — top-level profiler integration
+  - init/shutdown lifecycle
+  - startSession/stopSession with session counting
+  - Delegates to FrameProfiler, MemoryProfiler, ProfilerTimeline
+  - tick loop, ignores calls when not initialized
+- [x] 21 new editor tests (test_s10_editor.cpp), all passing
+
+## S10 Complete ✅
+
+S10 (Performance Profiler) fully delivered:
+- ProfileMetricType×8 with name helper
+- ProfileSample/ProfileSession data structs
+- FrameProfiler with frame timing, peak tracking, and metric recording
+- MemoryProfiler with allocation/free tracking and tagged categories
+- ProfilerTimeline with time-range and category filtering
+- PerformanceProfiler as top-level coordinator with session management
+- 21 new editor tests, all passing
+
+---
+
+## G30 — Espionage System ✅
+
+- [x] EspionageMissionType enum ×8 (Infiltration, Sabotage, Surveillance, DataTheft, Assassination, Recruitment, CounterIntel, Extraction)
+  - espionageMissionTypeName() for all 8 types
+- [x] SpyAgent struct (id, name, skillLevel, loyalty, coverStrength, status tracking)
+  - deploy/recall/compromise/capture/rescue lifecycle
+  - isAvailable/isActive state queries
+- [x] EspionageMission struct (id, type, targetFaction, progress, duration tracking)
+  - advance(dt) with auto-completion, progressFraction(), fail()
+- [x] IntelligenceNetwork class — per-faction spy management
+  - addAgent/removeAgent (max 16), duplicate rejection
+  - launchMission with agent deployment (max 64 missions)
+  - tick() advances missions, auto-recalls agents on completion
+  - availableAgentCount, activeMissionCount, completedMissionCount, intelGathered
+- [x] EspionageSystem class — multi-faction espionage coordination
+  - createNetwork (max 8), networkByName lookup
+  - recruitAgent, launchMission delegation
+  - tick() advances all networks
+  - totalActiveMissions, totalIntelGathered
+- [x] 15 new game tests, all passing
+- [x] Build verification: 1224/1224 tests pass (1188 existing + 21 S10 + 15 G30)
+
+## G30 Complete ✅
+
+G30 (Espionage System) fully delivered:
+- EspionageMissionType×8 with name helper
+- SpyAgent with full lifecycle (deploy/recall/compromise/capture/rescue)
+- EspionageMission with progress tracking and auto-completion
+- IntelligenceNetwork with agent management, mission launching, and intel gathering
+- EspionageSystem with multi-faction coordination and tick-based progression
+- 15 new game tests, all passing
+Total: 1224 tests, 0 failures.
