@@ -1449,7 +1449,7 @@ Total: 1245 tests, 0 failures.
   - init/shutdown lifecycle
   - openRepository (max 8), repositoryByName lookup
   - tick loop, totalBranches, totalCommits, totalModifiedFiles
-- [x] 18 new editor tests (test_s12_editor.cpp), all passing
+- [x] 15 new editor tests (test_s12_editor.cpp), all passing
 
 ## S12 Complete ✅
 
@@ -1458,7 +1458,7 @@ S12 (Version Control Integration) fully delivered:
 - VCSCommitInfo, VCSBranchInfo, VCSDiffEntry data structures
 - VCSRepository with branch switching, commit tracking, file status management
 - VersionControlSystem as top-level coordinator with multi-repo support
-- 18 new editor tests, all passing
+- 15 new editor tests, all passing
 
 ---
 
@@ -1482,7 +1482,7 @@ S12 (Version Control Integration) fully delivered:
   - createTable (max 16), tableByName lookup
   - translate with locale fallback, setLocale/activeLocale
   - tick loop, totalEntries, totalTranslated
-- [x] 18 new editor tests (test_s13_editor.cpp), all passing
+- [x] 17 new editor tests (test_s13_editor.cpp), all passing
 
 ## S13 Complete ✅
 
@@ -1492,7 +1492,7 @@ S13 (Localization System) fully delivered:
 - TranslationTable with key management and completion tracking
 - LocaleManager with active/fallback locale resolution
 - LocalizationSystem as top-level coordinator with multi-table support
-- 18 new editor tests, all passing
+- 17 new editor tests, all passing
 
 ---
 
@@ -1515,7 +1515,7 @@ S13 (Localization System) fully delivered:
   - createColony (max 16), colonyByName lookup
   - addColonistToColony delegation
   - tick loop, totalPopulation, totalBuildings, totalResourceOutput
-- [x] 15 new game tests (in test_game.cpp), all passing
+- [x] 14 new game tests (in test_game.cpp), all passing
 
 ## G31 Complete ✅
 
@@ -1525,7 +1525,7 @@ G31 (Colony Management) fully delivered:
 - ColonyBuilding with operational state management
 - Colony with population and building lifecycle
 - ColonySystem as multi-colony coordinator with resource output tracking
-- 15 new game tests, all passing
+- 14 new game tests, all passing
 
 ---
 
@@ -1547,7 +1547,7 @@ G31 (Colony Management) fully delivered:
   - addCollection (max 8), collectionByOwner
   - tick with auto-artifact discovery on site completion
   - activeSiteCount, completedSiteCount, totalArtifactsFound, totalDecodedArtifacts
-- [x] 13 new game tests (in test_game.cpp), all passing
+- [x] 12 new game tests (in test_game.cpp), all passing
 
 ## G32 Complete ✅
 
@@ -1557,10 +1557,10 @@ G32 (Archaeology System) fully delivered:
 - ExcavationSite with activation and time-based excavation
 - ArtifactCollection with rarity and decode tracking
 - ArchaeologySystem as top-level coordinator with site and collection management
-- 13 new game tests, all passing
+- 12 new game tests, all passing
 
 ---
 
 ## Build Verification ✅
 
-Total: 1303 tests, 0 failures (1245 existing + 18 S12 + 18 S13 + 15 G31 + 7 G32).
+Total: 1303 tests, 0 failures (1245 existing + 15 S12 + 17 S13 + 14 G31 + 12 G32).
