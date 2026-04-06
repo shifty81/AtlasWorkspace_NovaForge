@@ -2708,3 +2708,50 @@ Total: 1805 tests, 0 failures (1780 existing + 14 S33 + 11 G52 = 1805).
 ## Build Verification ✅
 
 Total: 1830 tests, 0 failures (1805 existing + 14 S34 + 11 G53 = 1830).
+
+---
+
+## S35 — Texture Editor ✅
+
+- [x] TextureFormat enum ×8 (R8, RG8, RGB8, RGBA8, R16F, RG16F, RGB16F, RGBA16F)
+  - textureFormatName() for all 8 formats
+- [x] TextureFilter enum ×4 (Nearest, Linear, NearestMipmapNearest, LinearMipmapLinear)
+  - textureFilterName() for all 4 filters
+- [x] TextureWrapMode enum ×4 (Repeat, MirroredRepeat, ClampToEdge, ClampToBorder)
+  - textureWrapModeName() for all 4 wrap modes
+- [x] TextureAsset class (name, width, height, format, filter, wrap, mipmaps, dirty)
+  - resize, setters, isHDR (16F formats), pixelCount
+- [x] TextureEditor class (max 256 textures)
+  - addTexture (duplicate/full rejected), removeTexture (clears activeTexture)
+  - findTexture, setActiveTexture, activeTexture
+  - textureCount, dirtyCount, hdrCount, mipmapCount
+- [x] 14 new editor tests (test_s35_editor.cpp), all passing
+
+## S35 Complete ✅
+
+---
+
+## G54 — Tornado System ✅
+
+- [x] TornadoScale enum ×6 (EF0, EF1, EF2, EF3, EF4, EF5)
+  - tornadoScaleName() for all 6 scales
+- [x] TornadoStage enum ×6 (Organizing, Mature, Shrinking, Rope, Dissipating, Remnant)
+  - tornadoStageName() for all 6 stages
+- [x] TornadoEvent struct (id, scale, stage, windSpeed, pathLength, active)
+  - activate, deactivate, isViolent (>= EF4), isAtPeak (Mature), destructionIndex
+- [x] TornadoRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, violentCount, peakCount
+  - name, tick, tickCount
+- [x] TornadoSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, violentEventCount, peakEventCount
+- [x] 8 new game tests (in test_game.cpp), all passing
+
+## G54 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1852 tests, 0 failures (1830 existing + 14 S35 + 8 G54 = 1852).

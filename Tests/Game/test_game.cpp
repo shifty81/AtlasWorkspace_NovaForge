@@ -8869,3 +8869,109 @@ TEST_CASE("CycloneSystem activeEventCount, majorEventCount, peakEventCount", "[G
     REQUIRE(sys.majorEventCount()  == 1); // only x (y is Cat2, z inactive)
     REQUIRE(sys.peakEventCount()   == 1); // only x
 }
+
+// ── G54 — Tornado System ──────────────────────────────────────────
+
+TEST_CASE("TornadoScale names cover all 6 values", "[Game][G54][Tornado]") {
+    REQUIRE(std::string(NF::tornadoScaleName(NF::TornadoScale::EF0)) == "EF0");
+    REQUIRE(std::string(NF::tornadoScaleName(NF::TornadoScale::EF1)) == "EF1");
+    REQUIRE(std::string(NF::tornadoScaleName(NF::TornadoScale::EF2)) == "EF2");
+    REQUIRE(std::string(NF::tornadoScaleName(NF::TornadoScale::EF3)) == "EF3");
+    REQUIRE(std::string(NF::tornadoScaleName(NF::TornadoScale::EF4)) == "EF4");
+    REQUIRE(std::string(NF::tornadoScaleName(NF::TornadoScale::EF5)) == "EF5");
+}
+
+TEST_CASE("TornadoStage names cover all 6 values", "[Game][G54][Tornado]") {
+    REQUIRE(std::string(NF::tornadoStageName(NF::TornadoStage::Organizing))  == "Organizing");
+    REQUIRE(std::string(NF::tornadoStageName(NF::TornadoStage::Mature))      == "Mature");
+    REQUIRE(std::string(NF::tornadoStageName(NF::TornadoStage::Shrinking))   == "Shrinking");
+    REQUIRE(std::string(NF::tornadoStageName(NF::TornadoStage::Rope))        == "Rope");
+    REQUIRE(std::string(NF::tornadoStageName(NF::TornadoStage::Dissipating)) == "Dissipating");
+    REQUIRE(std::string(NF::tornadoStageName(NF::TornadoStage::Remnant))     == "Remnant");
+}
+
+TEST_CASE("TornadoEvent isViolent threshold is EF4+", "[Game][G54][Tornado]") {
+    NF::TornadoEvent ev; ev.id = "t1";
+
+    ev.scale = NF::TornadoScale::EF3;
+    REQUIRE_FALSE(ev.isViolent());
+
+    ev.scale = NF::TornadoScale::EF4;
+    REQUIRE(ev.isViolent());
+
+    ev.scale = NF::TornadoScale::EF5;
+    REQUIRE(ev.isViolent());
+}
+
+TEST_CASE("TornadoEvent isAtPeak only true at Mature stage", "[Game][G54][Tornado]") {
+    NF::TornadoEvent ev; ev.id = "t2";
+    ev.stage = NF::TornadoStage::Shrinking;
+    REQUIRE_FALSE(ev.isAtPeak());
+
+    ev.stage = NF::TornadoStage::Mature;
+    REQUIRE(ev.isAtPeak());
+}
+
+TEST_CASE("TornadoEvent destructionIndex scales with scale and windSpeed", "[Game][G54][Tornado]") {
+    NF::TornadoEvent ev; ev.id = "t3";
+    // EF2 (uint8=2): (2+1) * windSpeed / 100 = 3 * 100/100 = 3.0
+    ev.scale     = NF::TornadoScale::EF2;
+    ev.windSpeed = 100.0f;
+    REQUIRE(ev.destructionIndex() == Catch::Approx(3.0f));
+}
+
+TEST_CASE("TornadoEvent activate and deactivate", "[Game][G54][Tornado]") {
+    NF::TornadoEvent ev; ev.id = "t4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("TornadoRegion violentCount and peakCount", "[Game][G54][Tornado]") {
+    NF::TornadoRegion region("plains");
+
+    NF::TornadoEvent a; a.id = "a"; a.scale = NF::TornadoScale::EF5; a.stage = NF::TornadoStage::Mature; a.activate();
+    NF::TornadoEvent b; b.id = "b"; b.scale = NF::TornadoScale::EF4; b.stage = NF::TornadoStage::Shrinking; b.activate();
+    NF::TornadoEvent c; c.id = "c"; c.scale = NF::TornadoScale::EF1; c.stage = NF::TornadoStage::Mature; c.activate();
+
+    region.addEvent(a);
+    region.addEvent(b);
+    region.addEvent(c);
+
+    REQUIRE(region.activeCount()  == 3);
+    REQUIRE(region.violentCount() == 2); // a and b (EF4+)
+    REQUIRE(region.peakCount()    == 2); // a and c (Mature)
+}
+
+TEST_CASE("TornadoSystem createRegion and tick propagation", "[Game][G54][Tornado]") {
+    NF::TornadoSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 3);
+    REQUIRE(sys.byName("r1")->tickCount() == 3);
+    REQUIRE(sys.byName("r2")->tickCount() == 3);
+}
+
+TEST_CASE("TornadoSystem activeEventCount, violentEventCount, peakEventCount", "[Game][G54][Tornado]") {
+    NF::TornadoSystem sys;
+    sys.createRegion("ra");
+    sys.createRegion("rb");
+
+    NF::TornadoEvent x; x.id = "x"; x.scale = NF::TornadoScale::EF5; x.stage = NF::TornadoStage::Mature; x.activate();
+    NF::TornadoEvent y; y.id = "y"; y.scale = NF::TornadoScale::EF2; y.stage = NF::TornadoStage::Rope; y.activate();
+    NF::TornadoEvent z; z.id = "z"; z.scale = NF::TornadoScale::EF4; z.stage = NF::TornadoStage::Mature; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()  == 2);
+    REQUIRE(sys.violentEventCount() == 1); // only x (y is EF2, z inactive)
+    REQUIRE(sys.peakEventCount()    == 1); // only x (y is Rope, z inactive)
+}

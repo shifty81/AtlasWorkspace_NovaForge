@@ -83,6 +83,7 @@
 | **G51** — Blizzard System | BlizzardType×8, BlizzardIntensity×6, BlizzardEvent, BlizzardRegion, BlizzardSystem | ✅ Done |
 | **G52** — Sandstorm System | SandstormType×8, SandstormSeverity×6, SandstormEvent, SandstormRegion, SandstormSystem | ✅ Done |
 | **G53** — Cyclone System | CycloneCategory×6, CycloneStage×6, CycloneEvent, CycloneRegion, CycloneSystem | ✅ Done |
+| **G54** — Tornado System | TornadoScale×6, TornadoStage×6, TornadoEvent, TornadoRegion, TornadoSystem | ✅ Done |
 
 ---
 
@@ -147,6 +148,7 @@
 | **S32** — Particle Effect Editor | ParticleEmitterShape×8, ParticleBlendMode×4, ParticleEmitterConfig, ParticleEffectLayer, ParticleEffectEditor | ✅ Done |
 | **S33** — Shader Graph Editor | ShaderNodeType×8, ShaderPortKind×4, ShaderNode, ShaderGraphEdge, ShaderGraphEditor | ✅ Done |
 | **S34** — Material Editor | MaterialShadingModel×8, MaterialBlendMode×4, MaterialParameter, MaterialAsset, MaterialEditor | ✅ Done |
+| **S35** — Texture Editor | TextureFormat×8, TextureFilter×4, TextureWrapMode×4, TextureAsset, TextureEditor | ✅ Done |
 
 ## Status Key
 

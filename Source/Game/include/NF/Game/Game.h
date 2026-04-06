@@ -11077,4 +11077,143 @@ private:
     size_t                     m_tickCount = 0;
 };
 
+// ── G54 — Tornado System ──────────────────────────────────────────
+
+enum class TornadoScale : uint8_t {
+    EF0, EF1, EF2, EF3, EF4, EF5
+};
+
+inline const char* tornadoScaleName(TornadoScale s) {
+    switch (s) {
+        case TornadoScale::EF0: return "EF0";
+        case TornadoScale::EF1: return "EF1";
+        case TornadoScale::EF2: return "EF2";
+        case TornadoScale::EF3: return "EF3";
+        case TornadoScale::EF4: return "EF4";
+        case TornadoScale::EF5: return "EF5";
+    }
+    return "Unknown";
+}
+
+enum class TornadoStage : uint8_t {
+    Organizing, Mature, Shrinking, Rope, Dissipating, Remnant
+};
+
+inline const char* tornadoStageName(TornadoStage s) {
+    switch (s) {
+        case TornadoStage::Organizing:  return "Organizing";
+        case TornadoStage::Mature:      return "Mature";
+        case TornadoStage::Shrinking:   return "Shrinking";
+        case TornadoStage::Rope:        return "Rope";
+        case TornadoStage::Dissipating: return "Dissipating";
+        case TornadoStage::Remnant:     return "Remnant";
+    }
+    return "Unknown";
+}
+
+struct TornadoEvent {
+    std::string  id;
+    TornadoScale scale    = TornadoScale::EF0;
+    TornadoStage stage    = TornadoStage::Organizing;
+    float        windSpeed = 0.0f;
+    float        pathLength = 0.0f;
+    bool         active   = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isViolent() const {
+        return static_cast<uint8_t>(scale) >= static_cast<uint8_t>(TornadoScale::EF4);
+    }
+    [[nodiscard]] bool isAtPeak() const { return stage == TornadoStage::Mature; }
+    [[nodiscard]] float destructionIndex() const {
+        return (static_cast<float>(static_cast<uint8_t>(scale) + 1)) * windSpeed / 100.0f;
+    }
+};
+
+class TornadoRegion {
+public:
+    explicit TornadoRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const TornadoEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] TornadoEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()    const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t violentCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isViolent()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<TornadoEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class TornadoSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    TornadoRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] TornadoRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t violentEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.violentCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()    const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+
+private:
+    std::vector<TornadoRegion> m_regions;
+    size_t                     m_tickCount = 0;
+};
+
 } // namespace NF
