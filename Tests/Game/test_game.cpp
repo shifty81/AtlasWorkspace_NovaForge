@@ -9809,6 +9809,6 @@ TEST_CASE("SolarWindSystem aggregate event counts", "[Game][G62][SolarWind]") {
 
     REQUIRE(sys.activeEventCount()     == 2);
     REQUIRE(sys.severeEventCount()     == 1); // only x (y=Moderate, z inactive)
-    REQUIRE(sys.fastStreamEventCount() == 1); // only x (y=Coronal, z inactive)
+    REQUIRE(sys.fastStreamEventCount() == 1); // only x (y=Coronal not fast/transient, z inactive)
     REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
 }
