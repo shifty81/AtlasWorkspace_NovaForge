@@ -1069,3 +1069,76 @@ G25 (Habitat System) fully delivered:
 - HabitatSystem with atmosphere simulation, breach/repair mechanics
 - 13 new game tests, all passing
 Total: 1042 tests, 0 failures.
+
+---
+
+## S6 — PCG World Tuning ✅
+
+- [x] S6-1: BiomeBrushType enum (Paint, Erase, Smooth, Raise, Lower, Flatten, Noise, Fill)
+  - biomeBrushTypeName() for all 8 types
+- [x] S6-2: BiomePaintCell struct (x, y, biomeIndex, intensity)
+- [x] S6-3: BiomePainter class — grid-based biome painting tool
+  - Configurable grid size (default 64, max 256)
+  - Active brush type, radius, intensity, biome index
+  - paint/erase/fill operations with bounds checking
+  - cellAt lookup, dirty flag tracking
+- [x] S6-4: StructureSeedOverride struct (structureId, overrideSeed, locked, notes)
+  - StructureSeedBank class — seed override management (max 128)
+  - add/remove/find/lock/unlock overrides, lockedCount
+- [x] S6-5: OreSeamType enum (Iron, Copper, Gold, Silver, Titanium, Uranium, Crystal, Exotic)
+  - oreSeamTypeName() for all 8 types
+  - OreSeamDef struct with volume() calculation
+  - OreSeamEditor class — ore seam management (max 64)
+  - add/remove/find, seamsOfType, totalVolume
+- [x] S6-6: PCGPreviewMode enum (Heightmap, Biome, Moisture, OreDeposits, Structures, Combined, Wireframe, Heatmap)
+  - pcgPreviewModeName() for all 8 modes
+  - PCGPreviewSettings struct (mode, resolution, zoom, autoRefresh, showGrid, showLabels, seed)
+  - PCGPreviewRenderer class — preview rendering with stale/fresh tracking
+  - setResolution (32..512 clamp), setZoom (0.1..10 clamp), refresh counter
+- [x] S6-7: test_s6_editor.cpp — 23 new Catch2 test cases
+- [x] Build verification: 1080/1080 tests pass
+
+## S6 Complete ✅
+
+S6 (PCG World Tuning) fully delivered:
+- BiomeBrushType×8 with BiomePainter grid painting tool
+- StructureSeedOverride + StructureSeedBank for deterministic seed control
+- OreSeamType×8 with OreSeamEditor for ore vein management
+- PCGPreviewMode×8 with PCGPreviewRenderer for real-time preview
+- 23 new editor tests, all passing
+
+---
+
+## G26 — Power Grid System ✅
+
+- [x] G26-1: PowerSourceType enum (Solar, Nuclear, Fusion, Geothermal, Wind, Battery, FuelCell, Antimatter)
+  - powerSourceTypeName() for all 8 types
+- [x] G26-2: PowerNode struct (id, name, sourceType, generationRate, consumptionRate, priority, online)
+  - netPower(), isGenerator(), isConsumer()
+- [x] G26-3: PowerConduit struct (id, fromNodeId, toNodeId, maxCapacity, currentLoad, efficiency)
+  - availableCapacity(), loadFraction(), isOverloaded()
+- [x] G26-4: PowerGrid class — node/conduit management
+  - addNode/removeNode (max 64), findNode, reject duplicates
+  - addConduit/removeConduit (max 128), findConduit
+  - totalGeneration, totalConsumption, netPower, isDeficit
+  - generatorCount, consumerCount
+  - removeNode cascades to connected conduits
+- [x] G26-5: PowerGridSystem class — central power grid management
+  - createGrid (max 8), grid access, gridName
+  - tickDistribution (proportional load distribution with efficiency)
+  - shedLoad (ascending priority load shedding until balanced)
+  - restoreAll (bring all nodes online)
+  - totalSystemPower across all grids
+- [x] G26-6: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1080/1080 tests pass (1042 existing + 23 S6 + 15 G26)
+
+## G26 Complete ✅
+
+G26 (Power Grid System) fully delivered:
+- PowerSourceType×8 with name helper
+- PowerNode with generation/consumption/priority model
+- PowerConduit with capacity, load tracking, and efficiency
+- PowerGrid with node/conduit management and deficit detection
+- PowerGridSystem with multi-grid simulation, load shedding, and restoration
+- 15 new game tests, all passing
+Total: 1080 tests, 0 failures.

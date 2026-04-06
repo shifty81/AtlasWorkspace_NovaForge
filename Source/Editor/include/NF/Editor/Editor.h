@@ -4314,22 +4314,15 @@ public:
 
     void paint(int x, int y) {
         if (x < 0 || x >= m_gridSize || y < 0 || y >= m_gridSize) return;
-        if (m_cells.size() >= kMaxCells) {
-            // Check if cell already exists at this position
-            auto* existing = cellAtMut(x, y);
-            if (existing) {
-                existing->biomeIndex = m_activeBiome;
-                existing->intensity = m_brushIntensity;
-                m_dirty = true;
-                return;
-            }
-            return; // at capacity
-        }
         auto* existing = cellAtMut(x, y);
         if (existing) {
             existing->biomeIndex = m_activeBiome;
             existing->intensity = m_brushIntensity;
-        } else {
+            m_dirty = true;
+            return;
+        }
+        if (m_cells.size() >= kMaxCells) return; // at capacity
+        {
             BiomePaintCell c;
             c.x = x;
             c.y = y;

@@ -165,7 +165,7 @@ TEST_CASE("OreSeamDef volume calculation", "[Editor][S6]") {
     NF::OreSeamDef seam;
     seam.radius = 5.f;
     seam.density = 0.5f;
-    float expected = 4.f / 3.f * 3.14159265f * 125.f * 0.5f;
+    float expected = 4.f / 3.f * 3.14159265f * (5.f * 5.f * 5.f) * 0.5f;
     REQUIRE(seam.volume() == Approx(expected).margin(0.01f));
 }
 
