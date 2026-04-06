@@ -78,6 +78,15 @@
 | **G46** — Epidemic System | EpidemicType×8, EpidemicPhase×5, EpidemicVector, EpidemicZone, EpidemicSystem | ✅ Done |
 | **G47** — Solar Flare System | SolarFlareClass×8, SolarFlareEffect×6, SolarFlareEvent, SolarFlareRegion, SolarFlareSystem | ✅ Done |
 | **G48** — Meteor Shower System | MeteorShowerClass×8, MeteorImpactType×6, MeteorEvent, MeteorShowerRegion, MeteorShowerSystem | ✅ Done |
+| **G49** — Aurora System | AuroraType×8, AuroraIntensity×6, AuroraEvent, AuroraRegion, AuroraSystem | ✅ Done |
+| **G50** — Heatwave System | HeatwaveType×8, HeatwaveSeverity×6, HeatwaveEvent, HeatwaveRegion, HeatwaveSystem | ✅ Done |
+| **G51** — Blizzard System | BlizzardType×8, BlizzardIntensity×6, BlizzardEvent, BlizzardRegion, BlizzardSystem | ✅ Done |
+| **G52** — Sandstorm System | SandstormType×8, SandstormSeverity×6, SandstormEvent, SandstormRegion, SandstormSystem | ✅ Done |
+| **G53** — Cyclone System | CycloneCategory×6, CycloneStage×6, CycloneEvent, CycloneRegion, CycloneSystem | ✅ Done |
+| **G54** — Tornado System | TornadoScale×6, TornadoStage×6, TornadoEvent, TornadoRegion, TornadoSystem | ✅ Done |
+| **G55** — Dust Storm System | DustDensity×5, DustStormPhase×5, DustStormEvent, DustStormRegion, DustStormSystem | ✅ Done |
+| **G56** — Hail Storm System | HailSize×5, HailStormPhase×5, HailStormEvent, HailStormRegion, HailStormSystem | ✅ Done |
+| **G57** — Ice Storm System | IceThickness×5, IceStormPhase×5, IceStormEvent, IceStormRegion, IceStormSystem | ✅ Done |
 
 ---
 
@@ -137,6 +146,15 @@
 | **S27** — Theme Manager | ThemeMode×4, ThemeColor×8, ThemeToken, Theme, ThemeManager | ✅ Done |
 | **S28** — Keyframe Animation Editor | KeyframeInterpolation×8, AnimationTrackType×8, Keyframe, AnimationTrack, KeyframeAnimationEditor | ✅ Done |
 | **S29** — Curve Editor | CurveType×8, CurveHandleMode×4, CurveControlPoint, Curve, CurveEditorPanel | ✅ Done |
+| **S30** — Gradient Editor | GradientType×8, GradientInterpolation×4, GradientColorStop, GradientRamp, GradientEditorPanel | ✅ Done |
+| **S31** — Timeline Editor | TimelineEventType×8, TimelineTrackKind×4, TimelineEvent, TimelineTrack, TimelineEditorPanel | ✅ Done |
+| **S32** — Particle Effect Editor | ParticleEmitterShape×8, ParticleBlendMode×4, ParticleEmitterConfig, ParticleEffectLayer, ParticleEffectEditor | ✅ Done |
+| **S33** — Shader Graph Editor | ShaderNodeType×8, ShaderPortKind×4, ShaderNode, ShaderGraphEdge, ShaderGraphEditor | ✅ Done |
+| **S34** — Material Editor | MaterialShadingModel×8, MaterialBlendMode×4, MaterialParameter, MaterialAsset, MaterialEditor | ✅ Done |
+| **S35** — Texture Editor | TextureFormat×8, TextureFilter×4, TextureWrapMode×4, TextureAsset, TextureEditor | ✅ Done |
+| **S36** — Font Editor | FontStyle×4, FontWeight×6, FontVariant×4, FontAsset, FontEditor | ✅ Done |
+| **S37** — Icon Editor | IconSize×5, IconTheme×4, IconState×5, IconAsset, IconEditor | ✅ Done |
+| **S38** — Sprite Editor | SpriteOrigin×5, SpriteBlendMode×5, SpriteAnimState×5, SpriteAsset, SpriteEditor | ✅ Done |
 
 ## Status Key
 

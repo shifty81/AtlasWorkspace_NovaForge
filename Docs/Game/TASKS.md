@@ -2467,3 +2467,411 @@ Total: 1673 tests, 0 failures (1648 existing + 14 S28 + 11 G47 = 1673).
 ## Build Verification ✅
 
 Total: 1699 tests, 0 failures (1673 existing + 14 S29 + 12 G48 = 1699).
+
+---
+
+## S30 — Gradient Editor ✅
+
+- [x] GradientType enum ×8 (Linear, Radial, Angular, Diamond, Square, Reflected, Conical, Custom)
+  - gradientTypeName() for all 8 types
+- [x] GradientInterpolation enum ×4 (Linear, Step, Spline, Constant)
+  - gradientInterpolationName() for all 4 modes
+- [x] GradientColorStop struct (position, r, g, b, a, interpolation, selected)
+  - select, deselect, setPosition
+- [x] GradientRamp class — named collection of GradientColorStop (max 64 stops)
+  - addStop (duplicate position rejected), removeStop, findStop
+  - stopCount, selectedCount, selectAll, deselectAll, name, type
+- [x] GradientEditorPanel class — multi-ramp editor (max 32 ramps)
+  - addRamp (duplicate/full rejected), removeRamp, findRamp
+  - rampCount, setActiveRamp, activeRamp, isSymmetric, setSymmetric
+  - selectAllStops, deselectAllStops
+- [x] 14 new editor tests (test_s30_editor.cpp), all passing
+
+## S30 Complete ✅
+
+---
+
+## G49 — Aurora System ✅
+
+- [x] AuroraType enum ×8 (Borealis, Australis, Polar, Substorm, Diffuse, Discrete, Pulsating, Custom)
+  - auroraTypeName() for all 8 types
+- [x] AuroraIntensity enum ×6 (Faint, Quiet, Active, Storm, Severe, Extreme)
+  - auroraIntensityName() for all 6 intensities
+- [x] AuroraEvent struct (id, type, intensity, duration, colorShift, active)
+  - activate, deactivate, isVisible (>= Active), isStorm (>= Storm), radiationIndex
+- [x] AuroraRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, stormCount
+  - name, tick, tickCount
+- [x] AuroraSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, stormEventCount
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G49 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1725 tests, 0 failures (1699 existing + 14 S30 + 12 G49 = 1725).
+
+---
+
+## S31 — Timeline Editor ✅
+
+- [x] TimelineEventType enum ×8 (Keyframe, Marker, Clip, Trigger, Label, Camera, Audio, Custom)
+  - timelineEventTypeName() for all 8 types
+- [x] TimelineTrackKind enum ×4 (Animation, Audio, Event, Camera)
+  - timelineTrackKindName() for all 4 kinds
+- [x] TimelineEvent struct (id, type, time, duration, selected)
+  - select, deselect, setTime, setDuration
+- [x] TimelineTrack class — named collection of TimelineEvents (max 128 events)
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - eventCount, selectedCount, selectAll, deselectAll, duration, muted, setMuted, name, kind
+- [x] TimelineEditorPanel class — multi-track timeline editor (max 64 tracks)
+  - addTrack (duplicate/full rejected), removeTrack, findTrack
+  - trackCount, setActiveTrack, activeTrack
+  - play, pause, stop, isPlaying, setPlayhead, playhead
+  - selectAllEvents, deselectAllEvents
+- [x] 14 new editor tests (test_s31_editor.cpp), all passing
+
+## S31 Complete ✅
+
+---
+
+## G50 — Heatwave System ✅
+
+- [x] HeatwaveType enum ×8 (Regional, Urban, Coastal, Continental, Desert, Tropical, Polar, Custom)
+  - heatwaveTypeName() for all 8 types
+- [x] HeatwaveSeverity enum ×6 (Mild, Moderate, Severe, Extreme, Catastrophic, Unprecedented)
+  - heatwaveSeverityName() for all 6 levels
+- [x] HeatwaveEvent struct (id, type, severity, duration, peakTemp, active)
+  - activate, deactivate, isDangerous (>= Severe), isExtreme (>= Extreme), heatIndex
+- [x] HeatwaveRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, extremeCount
+  - name, tick, tickCount
+- [x] HeatwaveSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, extremeEventCount
+- [x] 14 new game tests (in test_game.cpp), all passing
+
+## G50 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1753 tests, 0 failures (1725 existing + 14 S31 + 14 G50 = 1753).
+
+---
+
+## S32 — Particle Effect Editor ✅
+
+- [x] ParticleEmitterShape enum ×8 (Point, Circle, Rectangle, Cone, Sphere, Ring, Line, Custom)
+  - particleEmitterShapeName() for all 8 shapes
+- [x] ParticleBlendMode enum ×4 (Additive, Alpha, Multiply, Screen)
+  - particleBlendModeName() for all 4 modes
+- [x] ParticleEmitterConfig struct (id, shape, blendMode, emitRate, lifetime, speed, size, looping)
+  - setEmitRate, setLifetime, setSpeed, setSize, isValid
+- [x] ParticleEffectLayer class — named emitter collection (max 64)
+  - addEmitter (duplicate id rejected), removeEmitter, findEmitter
+  - emitterCount, visible, setVisible, name
+- [x] ParticleEffectEditor class — multi-layer editor (max 32 layers)
+  - addLayer (duplicate/full rejected), removeLayer, findLayer
+  - layerCount, setActiveLayer, activeLayer, totalEmitterCount
+  - preview, stopPreview, isPreviewing
+- [x] 16 new editor tests (test_s32_editor.cpp), all passing
+
+## S32 Complete ✅
+
+---
+
+## G51 — Blizzard System ✅
+
+- [x] BlizzardType enum ×8 (Arctic, Alpine, Coastal, Prairie, Lake, Polar, Nor'easter, Custom)
+  - blizzardTypeName() for all 8 types
+- [x] BlizzardIntensity enum ×6 (Light, Moderate, Heavy, Severe, Extreme, Whiteout)
+  - blizzardIntensityName() for all 6 levels
+- [x] BlizzardEvent struct (id, type, intensity, duration, windSpeed, active)
+  - activate, deactivate, isSevere (>= Severe), isWhiteout, visibilityIndex
+- [x] BlizzardRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, severeCount, whiteoutCount
+  - name, tick, tickCount
+- [x] BlizzardSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, whiteoutEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G51 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1780 tests, 0 failures (1753 existing + 16 S32 + 11 G51 = 1780).
+
+---
+
+## S33 — Shader Graph Editor ✅
+
+- [x] ShaderNodeType enum ×8 (Input, Output, Math, Texture, Color, Vector, Blend, Custom)
+  - shaderNodeTypeName() for all 8 types
+- [x] ShaderPortKind enum ×4 (Float, Vector2, Vector3, Vector4)
+  - shaderPortKindName() for all 4 kinds
+- [x] ShaderNode struct (id, type, posX, posY, selected)
+  - select, deselect, setPosition
+- [x] ShaderGraphEdge struct (id, fromNode, toNode, portKind)
+- [x] ShaderGraphEditor class (max 256 nodes, max 512 edges)
+  - addNode (duplicate/full rejected), removeNode (also removes connected edges, clears activeNode)
+  - findNode, addEdge (validates endpoints, rejects duplicate id), removeEdge
+  - setActiveNode, activeNode, selectAll, deselectAll
+  - nodeCount, edgeCount, selectedCount
+- [x] 14 new editor tests (test_s33_editor.cpp), all passing
+
+## S33 Complete ✅
+
+---
+
+## G52 — Sandstorm System ✅
+
+- [x] SandstormType enum ×8 (Haboob, Simoom, Khamsin, Shamal, Harmattan, Sirocco, Zonda, Custom)
+  - sandstormTypeName() for all 8 types
+- [x] SandstormSeverity enum ×6 (Dust, Moderate, Strong, Severe, Violent, Catastrophic)
+  - sandstormSeverityName() for all 6 levels
+- [x] SandstormEvent struct (id, type, severity, duration, windSpeed, active)
+  - activate, deactivate, isSevere (>= Severe), isCatastrophic, particleDensity
+- [x] SandstormRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, severeCount, catastrophicCount
+  - name, tick, tickCount
+- [x] SandstormSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, catastrophicEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G52 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1805 tests, 0 failures (1780 existing + 14 S33 + 11 G52 = 1805).
+
+---
+
+## S34 — Material Editor ✅
+
+- [x] MaterialShadingModel enum ×8 (Unlit, Lambert, Phong, BlinnPhong, PBR, Toon, Subsurface, Custom)
+  - materialShadingModelName() for all 8 models
+- [x] MaterialBlendMode enum ×4 (Opaque, Masked, Translucent, Additive)
+  - materialBlendModeName() for all 4 modes
+- [x] MaterialParameter struct (name, value, exposed)
+  - expose, hide
+- [x] MaterialAsset class (name, shadingModel, blendMode, dirty flag, param list)
+  - addParameter (duplicate rejected), removeParameter, findParameter
+  - setShadingModel, setBlendMode, setDirty, isDirty
+  - paramCount, exposedParamCount
+- [x] MaterialEditor class (max 128 assets)
+  - addAsset (duplicate/full rejected), removeAsset (clears activeAsset)
+  - findAsset, setActiveAsset, activeAsset
+  - assetCount, dirtyCount
+- [x] 14 new editor tests (test_s34_editor.cpp), all passing
+
+## S34 Complete ✅
+
+---
+
+## G53 — Cyclone System ✅
+
+- [x] CycloneCategory enum ×6 (TropicalDepression, TropicalStorm, Cat1, Cat2, Cat3, Cat4)
+  - cycloneCategoryName() for all 6 categories
+- [x] CycloneStage enum ×6 (Forming, Intensifying, Peak, Weakening, Dissipating, Remnant)
+  - cycloneStageName() for all 6 stages
+- [x] CycloneEvent struct (id, category, stage, windSpeed, pressure, active)
+  - activate, deactivate, isMajor (>= Cat3), isAtPeak, stormSurge
+- [x] CycloneRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, majorCount, peakCount
+  - name, tick, tickCount
+- [x] CycloneSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, majorEventCount, peakEventCount
+- [x] 11 new game tests (in test_game.cpp), all passing
+
+## G53 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1830 tests, 0 failures (1805 existing + 14 S34 + 11 G53 = 1830).
+
+---
+
+## S35 — Texture Editor ✅
+
+- [x] TextureFormat enum ×8 (R8, RG8, RGB8, RGBA8, R16F, RG16F, RGB16F, RGBA16F)
+  - textureFormatName() for all 8 formats
+- [x] TextureFilter enum ×4 (Nearest, Linear, NearestMipmapNearest, LinearMipmapLinear)
+  - textureFilterName() for all 4 filters
+- [x] TextureWrapMode enum ×4 (Repeat, MirroredRepeat, ClampToEdge, ClampToBorder)
+  - textureWrapModeName() for all 4 wrap modes
+- [x] TextureAsset class (name, width, height, format, filter, wrap, mipmaps, dirty)
+  - resize, setters, isHDR (16F formats), pixelCount
+- [x] TextureEditor class (max 256 textures)
+  - addTexture (duplicate/full rejected), removeTexture (clears activeTexture)
+  - findTexture, setActiveTexture, activeTexture
+  - textureCount, dirtyCount, hdrCount, mipmapCount
+- [x] 14 new editor tests (test_s35_editor.cpp), all passing
+
+## S35 Complete ✅
+
+---
+
+## G54 — Tornado System ✅
+
+- [x] TornadoScale enum ×6 (EF0, EF1, EF2, EF3, EF4, EF5)
+  - tornadoScaleName() for all 6 scales
+- [x] TornadoStage enum ×6 (Organizing, Mature, Shrinking, Rope, Dissipating, Remnant)
+  - tornadoStageName() for all 6 stages
+- [x] TornadoEvent struct (id, scale, stage, windSpeed, pathLength, active)
+  - activate, deactivate, isViolent (>= EF4), isAtPeak (Mature), destructionIndex
+- [x] TornadoRegion class — per-region event list
+  - addEvent (duplicate id rejected), removeEvent, findEvent
+  - activateAll, deactivateAll, eventCount, activeCount, violentCount, peakCount
+  - name, tick, tickCount
+- [x] TornadoSystem — multi-region coordinator (max 32)
+  - createRegion (duplicate/full rejected), byName, tick propagation
+  - regionCount, tickCount, activeEventCount, violentEventCount, peakEventCount
+- [x] 8 new game tests (in test_game.cpp), all passing
+
+## G54 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1852 tests, 0 failures (1830 existing + 14 S35 + 8 G54 = 1852).
+
+---
+
+## S36 — Font Editor ✅
+
+- [x] FontStyle enum ×4 (Normal, Italic, Oblique, Inherit) + fontStyleName()
+- [x] FontWeight enum ×6 (Thin, ExtraLight, Light, Regular, Medium, Bold) + fontWeightName()
+- [x] FontVariant enum ×4 (Normal, SmallCaps, AllSmallCaps, PetiteCaps) + fontVariantName()
+- [x] FontAsset (family, size, lineHeight, letterSpacing, style, weight, variant, embedded, dirty)
+  - isBold (Medium/Bold), isItalic (Italic/Oblique)
+- [x] FontEditor (max 128 fonts)
+  - addFont (duplicate rejected), removeFont (clears activeFont), findFont, setActiveFont
+  - fontCount, dirtyCount, embeddedCount, boldCount, italicCount
+- [x] 14 new editor tests (test_s36_editor.cpp), all passing
+
+## S36 Complete ✅
+
+---
+
+## G55 — Dust Storm System ✅
+
+- [x] DustDensity enum ×5 (Trace, Light, Moderate, Heavy, Extreme) + dustDensityName()
+- [x] DustStormPhase enum ×5 (Forming, Advancing, Peak, Retreating, Clearing) + dustStormPhaseName()
+- [x] DustStormEvent (id, density, phase, windSpeed, visibility, active)
+  - activate, deactivate, isHazardous (>= Heavy), isAtPeak (Peak), isLowVisibility (< 200m), hazardScore
+- [x] DustStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, hazardousCount, peakCount, lowVisCount
+- [x] DustStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, hazardousEventCount, peakEventCount
+- [x] 9 new game tests (in test_game.cpp), all passing
+
+## G55 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1875 tests, 0 failures (1852 existing + 14 S36 + 9 G55 = 1875).
+
+---
+
+## S37 — Icon Editor ✅
+
+- [x] IconSize enum ×5 (XSmall, Small, Medium, Large, XLarge) + iconSizeName()
+- [x] IconTheme enum ×4 (Light, Dark, HighContrast, Monochrome) + iconThemeName()
+- [x] IconState enum ×5 (Normal, Hover, Pressed, Disabled, Selected) + iconStateName()
+- [x] IconAsset (name, size, theme, state, pixelDensity, scalable, dirty)
+  - isDisabled, isSelected, isHighDPI (pixelDensity >= 2.0)
+- [x] IconEditor (max 256 icons)
+  - addIcon (duplicate rejected), removeIcon (clears activeIcon), findIcon, setActiveIcon
+  - iconCount, dirtyCount, scalableCount, disabledCount, highDPICount, countByTheme, countBySize
+- [x] 14 new editor tests (test_s37_editor.cpp), all passing
+
+## S37 Complete ✅
+
+---
+
+## G56 — Hail Storm System ✅
+
+- [x] HailSize enum ×5 (Pea, Marble, Golf, Baseball, Grapefruit) + hailSizeName()
+- [x] HailStormPhase enum ×5 (Developing, Intensifying, Peak, Weakening, Dissipating) + hailStormPhaseName()
+- [x] HailStormEvent (id, hailSize, phase, intensity, coverage, active)
+  - activate, deactivate, isSevere (>= Golf), isAtPeak (Peak), isWidespread (>= 500 km²), damageScore
+- [x] HailStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, peakCount, widespreadCount
+- [x] HailStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, peakEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G56 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1899 tests, 0 failures (1875 existing + 14 S37 + 10 G56 = 1899).
+
+---
+
+## S38 — Sprite Editor ✅
+
+- [x] SpriteOrigin enum ×5 (TopLeft, TopCenter, Center, BottomLeft, BottomCenter) + spriteOriginName()
+- [x] SpriteBlendMode enum ×5 (Normal, Additive, Multiply, Screen, Overlay) + spriteBlendModeName()
+- [x] SpriteAnimState enum ×5 (Idle, Playing, Paused, Stopped, Finished) + spriteAnimStateName()
+- [x] SpriteAsset (name, width, height, origin, blendMode, animState, frameCount, frameRate, looping, flippedH, flippedV, dirty)
+  - isAnimated (frameCount > 1), isPlaying, isPaused, isFinished, area()
+- [x] SpriteEditor (max 512 sprites)
+  - addSprite (duplicate rejected), removeSprite (clears activeSprite), findSprite, setActiveSprite
+  - spriteCount, dirtyCount, animatedCount, playingCount, loopingCount, countByBlendMode, countByOrigin
+- [x] 14 new editor tests (test_s38_editor.cpp), all passing
+
+## S38 Complete ✅
+
+---
+
+## G57 — Ice Storm System ✅
+
+- [x] IceThickness enum ×5 (Glaze, Light, Moderate, Heavy, Extreme) + iceThicknessName()
+- [x] IceStormPhase enum ×5 (Forming, Spreading, Intensifying, Freezing, Dissipating) + iceStormPhaseName()
+- [x] IceStormEvent (id, thickness, phase, intensity, coverage, active)
+  - activate, deactivate, isSevere (>= Heavy), isFreezing (Freezing phase), isWidespread (>= 400 km²), hazardScore
+- [x] IceStormRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, freezingCount, widespreadCount
+- [x] IceStormSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, freezingEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G57 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1923 tests, 0 failures (1899 existing + 14 S38 + 10 G57 = 1923).

@@ -9453,4 +9453,1279 @@ private:
     bool               m_looping = false;
 };
 
+// ── S30 — Gradient Editor ────────────────────────────────────────
+
+enum class GradientType : uint8_t {
+    Linear, Radial, Angular, Diamond, Square, Reflected, Conical, Custom
+};
+
+inline const char* gradientTypeName(GradientType t) {
+    switch (t) {
+        case GradientType::Linear:    return "Linear";
+        case GradientType::Radial:    return "Radial";
+        case GradientType::Angular:   return "Angular";
+        case GradientType::Diamond:   return "Diamond";
+        case GradientType::Square:    return "Square";
+        case GradientType::Reflected: return "Reflected";
+        case GradientType::Conical:   return "Conical";
+        case GradientType::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class GradientInterpolation : uint8_t {
+    Linear, Step, Spline, Constant
+};
+
+inline const char* gradientInterpolationName(GradientInterpolation i) {
+    switch (i) {
+        case GradientInterpolation::Linear:   return "Linear";
+        case GradientInterpolation::Step:     return "Step";
+        case GradientInterpolation::Spline:   return "Spline";
+        case GradientInterpolation::Constant: return "Constant";
+    }
+    return "Unknown";
+}
+
+struct GradientColorStop {
+    float                 position      = 0.0f; // [0,1]
+    float                 r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+    GradientInterpolation interpolation = GradientInterpolation::Linear;
+    bool                  selected      = false;
+
+    void select()   { selected = true;  }
+    void deselect() { selected = false; }
+    void setPosition(float p) { position = p; }
+};
+
+class GradientRamp {
+public:
+    static constexpr size_t MAX_STOPS = 64;
+
+    explicit GradientRamp(const std::string& name, GradientType type = GradientType::Linear)
+        : m_name(name), m_type(type) {}
+
+    [[nodiscard]] bool addStop(const GradientColorStop& s) {
+        for (auto& e : m_stops) {
+            if (e.position == s.position) return false;
+        }
+        if (m_stops.size() >= MAX_STOPS) return false;
+        m_stops.push_back(s);
+        return true;
+    }
+
+    [[nodiscard]] bool removeStop(float position) {
+        for (auto it = m_stops.begin(); it != m_stops.end(); ++it) {
+            if (it->position == position) { m_stops.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] GradientColorStop* findStop(float position) {
+        for (auto& s : m_stops)
+            if (s.position == position) return &s;
+        return nullptr;
+    }
+
+    void selectAll()   { for (auto& s : m_stops) s.select();   }
+    void deselectAll() { for (auto& s : m_stops) s.deselect(); }
+
+    [[nodiscard]] size_t stopCount()     const { return m_stops.size(); }
+    [[nodiscard]] size_t selectedCount() const {
+        size_t c = 0; for (auto& s : m_stops) if (s.selected) ++c; return c;
+    }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+    [[nodiscard]] GradientType       type() const { return m_type; }
+
+private:
+    std::string               m_name;
+    GradientType              m_type;
+    std::vector<GradientColorStop> m_stops;
+};
+
+class GradientEditorPanel {
+public:
+    static constexpr size_t MAX_RAMPS = 32;
+
+    [[nodiscard]] bool addRamp(const GradientRamp& ramp) {
+        for (auto& r : m_ramps)
+            if (r.name() == ramp.name()) return false;
+        if (m_ramps.size() >= MAX_RAMPS) return false;
+        m_ramps.push_back(ramp);
+        return true;
+    }
+
+    [[nodiscard]] bool removeRamp(const std::string& name) {
+        for (auto it = m_ramps.begin(); it != m_ramps.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeRamp == name) m_activeRamp.clear();
+                m_ramps.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] GradientRamp* findRamp(const std::string& name) {
+        for (auto& r : m_ramps)
+            if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveRamp(const std::string& name) {
+        for (auto& r : m_ramps) {
+            if (r.name() == name) { m_activeRamp = name; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeRamp()  const { return m_activeRamp; }
+    [[nodiscard]] size_t             rampCount()   const { return m_ramps.size(); }
+    [[nodiscard]] bool               isSymmetric() const { return m_symmetric; }
+    void                             setSymmetric(bool v) { m_symmetric = v; }
+
+    void selectAllStops()   { for (auto& r : m_ramps) r.selectAll();   }
+    void deselectAllStops() { for (auto& r : m_ramps) r.deselectAll(); }
+
+private:
+    std::vector<GradientRamp> m_ramps;
+    std::string               m_activeRamp;
+    bool                      m_symmetric = false;
+};
+
+// ── S31 — Timeline Editor ────────────────────────────────────────
+
+enum class TimelineEventType : uint8_t {
+    Keyframe, Marker, Clip, Trigger, Label, Camera, Audio, Custom
+};
+
+inline const char* timelineEventTypeName(TimelineEventType t) {
+    switch (t) {
+        case TimelineEventType::Keyframe: return "Keyframe";
+        case TimelineEventType::Marker:   return "Marker";
+        case TimelineEventType::Clip:     return "Clip";
+        case TimelineEventType::Trigger:  return "Trigger";
+        case TimelineEventType::Label:    return "Label";
+        case TimelineEventType::Camera:   return "Camera";
+        case TimelineEventType::Audio:    return "Audio";
+        case TimelineEventType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class TimelineTrackKind : uint8_t {
+    Animation, Audio, Event, Camera
+};
+
+inline const char* timelineTrackKindName(TimelineTrackKind k) {
+    switch (k) {
+        case TimelineTrackKind::Animation: return "Animation";
+        case TimelineTrackKind::Audio:     return "Audio";
+        case TimelineTrackKind::Event:     return "Event";
+        case TimelineTrackKind::Camera:    return "Camera";
+    }
+    return "Unknown";
+}
+
+struct TimelineEvent {
+    std::string       id;
+    TimelineEventType type     = TimelineEventType::Keyframe;
+    float             time     = 0.0f;
+    float             duration = 0.0f;
+    bool              selected = false;
+
+    void select()   { selected = true;  }
+    void deselect() { selected = false; }
+    void setTime(float t)     { time = t; }
+    void setDuration(float d) { duration = d; }
+};
+
+class TimelineTrack {
+public:
+    static constexpr size_t MAX_EVENTS = 128;
+
+    explicit TimelineTrack(const std::string& name, TimelineTrackKind kind = TimelineTrackKind::Animation)
+        : m_name(name), m_kind(kind) {}
+
+    [[nodiscard]] bool addEvent(const TimelineEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        if (m_events.size() >= MAX_EVENTS) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] TimelineEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void selectAll()   { for (auto& e : m_events) e.select();   }
+    void deselectAll() { for (auto& e : m_events) e.deselect(); }
+
+    [[nodiscard]] size_t eventCount()    const { return m_events.size(); }
+    [[nodiscard]] size_t selectedCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.selected) ++c; return c;
+    }
+    [[nodiscard]] float duration() const {
+        float d = 0.0f;
+        for (auto& e : m_events) { float end = e.time + e.duration; if (end > d) d = end; }
+        return d;
+    }
+    [[nodiscard]] bool                muted()  const { return m_muted; }
+    void                              setMuted(bool v) { m_muted = v; }
+    [[nodiscard]] const std::string&  name()   const { return m_name; }
+    [[nodiscard]] TimelineTrackKind   kind()   const { return m_kind; }
+
+private:
+    std::string              m_name;
+    TimelineTrackKind        m_kind;
+    std::vector<TimelineEvent> m_events;
+    bool                     m_muted = false;
+};
+
+class TimelineEditorPanel {
+public:
+    static constexpr size_t MAX_TRACKS = 64;
+
+    [[nodiscard]] bool addTrack(const TimelineTrack& track) {
+        for (auto& t : m_tracks) if (t.name() == track.name()) return false;
+        if (m_tracks.size() >= MAX_TRACKS) return false;
+        m_tracks.push_back(track);
+        return true;
+    }
+
+    [[nodiscard]] bool removeTrack(const std::string& name) {
+        for (auto it = m_tracks.begin(); it != m_tracks.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeTrack == name) m_activeTrack.clear();
+                m_tracks.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] TimelineTrack* findTrack(const std::string& name) {
+        for (auto& t : m_tracks) if (t.name() == name) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveTrack(const std::string& name) {
+        for (auto& t : m_tracks) {
+            if (t.name() == name) { m_activeTrack = name; return true; }
+        }
+        return false;
+    }
+
+    void setPlayhead(float t)  { m_playhead = t; }
+    void play()  { m_playing = true;  }
+    void pause() { m_playing = false; }
+    void stop()  { m_playing = false; m_playhead = 0.0f; }
+
+    [[nodiscard]] float              playhead()     const { return m_playhead; }
+    [[nodiscard]] bool               isPlaying()    const { return m_playing; }
+    [[nodiscard]] const std::string& activeTrack()  const { return m_activeTrack; }
+    [[nodiscard]] size_t             trackCount()   const { return m_tracks.size(); }
+
+    void selectAllEvents()   { for (auto& t : m_tracks) t.selectAll();   }
+    void deselectAllEvents() { for (auto& t : m_tracks) t.deselectAll(); }
+
+private:
+    std::vector<TimelineTrack> m_tracks;
+    std::string                m_activeTrack;
+    float                      m_playhead = 0.0f;
+    bool                       m_playing  = false;
+};
+
+// ── S32 — Particle Effect Editor ─────────────────────────────────
+
+enum class ParticleEmitterShape : uint8_t {
+    Point, Circle, Rectangle, Cone, Sphere, Ring, Line, Custom
+};
+
+inline const char* particleEmitterShapeName(ParticleEmitterShape s) {
+    switch (s) {
+        case ParticleEmitterShape::Point:     return "Point";
+        case ParticleEmitterShape::Circle:    return "Circle";
+        case ParticleEmitterShape::Rectangle: return "Rectangle";
+        case ParticleEmitterShape::Cone:      return "Cone";
+        case ParticleEmitterShape::Sphere:    return "Sphere";
+        case ParticleEmitterShape::Ring:      return "Ring";
+        case ParticleEmitterShape::Line:      return "Line";
+        case ParticleEmitterShape::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class ParticleBlendMode : uint8_t {
+    Additive, Alpha, Multiply, Screen
+};
+
+inline const char* particleBlendModeName(ParticleBlendMode b) {
+    switch (b) {
+        case ParticleBlendMode::Additive: return "Additive";
+        case ParticleBlendMode::Alpha:    return "Alpha";
+        case ParticleBlendMode::Multiply: return "Multiply";
+        case ParticleBlendMode::Screen:   return "Screen";
+    }
+    return "Unknown";
+}
+
+struct ParticleEmitterConfig {
+    std::string          id;
+    ParticleEmitterShape shape       = ParticleEmitterShape::Point;
+    ParticleBlendMode    blendMode   = ParticleBlendMode::Additive;
+    float                emitRate    = 10.0f;
+    float                lifetime    = 1.0f;
+    float                speed       = 1.0f;
+    float                size        = 1.0f;
+    bool                 looping     = true;
+
+    void setEmitRate(float r) { emitRate = r; }
+    void setLifetime(float l) { lifetime = l; }
+    void setSpeed(float s)    { speed = s; }
+    void setSize(float s)     { size = s; }
+
+    [[nodiscard]] bool isValid() const {
+        return emitRate > 0.0f && lifetime > 0.0f && size > 0.0f;
+    }
+};
+
+class ParticleEffectLayer {
+public:
+    static constexpr size_t MAX_EMITTERS = 64;
+
+    explicit ParticleEffectLayer(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEmitter(const ParticleEmitterConfig& cfg) {
+        for (auto& e : m_emitters) if (e.id == cfg.id) return false;
+        if (m_emitters.size() >= MAX_EMITTERS) return false;
+        m_emitters.push_back(cfg);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEmitter(const std::string& id) {
+        for (auto it = m_emitters.begin(); it != m_emitters.end(); ++it) {
+            if (it->id == id) { m_emitters.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ParticleEmitterConfig* findEmitter(const std::string& id) {
+        for (auto& e : m_emitters) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t emitterCount()   const { return m_emitters.size(); }
+    [[nodiscard]] bool   visible()        const { return m_visible; }
+    void                 setVisible(bool v)     { m_visible = v; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+private:
+    std::string                      m_name;
+    std::vector<ParticleEmitterConfig> m_emitters;
+    bool                             m_visible = true;
+};
+
+class ParticleEffectEditor {
+public:
+    static constexpr size_t MAX_LAYERS = 32;
+
+    [[nodiscard]] bool addLayer(const ParticleEffectLayer& layer) {
+        for (auto& l : m_layers) if (l.name() == layer.name()) return false;
+        if (m_layers.size() >= MAX_LAYERS) return false;
+        m_layers.push_back(layer);
+        return true;
+    }
+
+    [[nodiscard]] bool removeLayer(const std::string& name) {
+        for (auto it = m_layers.begin(); it != m_layers.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeLayer == name) m_activeLayer.clear();
+                m_layers.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ParticleEffectLayer* findLayer(const std::string& name) {
+        for (auto& l : m_layers) if (l.name() == name) return &l;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveLayer(const std::string& name) {
+        for (auto& l : m_layers) {
+            if (l.name() == name) { m_activeLayer = name; return true; }
+        }
+        return false;
+    }
+
+    void preview()  { m_previewing = true;  }
+    void stopPreview() { m_previewing = false; }
+
+    [[nodiscard]] bool               isPreviewing() const { return m_previewing; }
+    [[nodiscard]] const std::string& activeLayer()  const { return m_activeLayer; }
+    [[nodiscard]] size_t             layerCount()   const { return m_layers.size(); }
+
+    [[nodiscard]] size_t totalEmitterCount() const {
+        size_t c = 0;
+        for (auto& l : m_layers) c += l.emitterCount();
+        return c;
+    }
+
+private:
+    std::vector<ParticleEffectLayer> m_layers;
+    std::string                      m_activeLayer;
+    bool                             m_previewing = false;
+};
+
+// ── S33 — Shader Graph Editor ─────────────────────────────────────
+
+enum class ShaderNodeType : uint8_t {
+    Input, Output, Math, Texture, Color, Vector, Blend, Custom
+};
+
+inline const char* shaderNodeTypeName(ShaderNodeType t) {
+    switch (t) {
+        case ShaderNodeType::Input:   return "Input";
+        case ShaderNodeType::Output:  return "Output";
+        case ShaderNodeType::Math:    return "Math";
+        case ShaderNodeType::Texture: return "Texture";
+        case ShaderNodeType::Color:   return "Color";
+        case ShaderNodeType::Vector:  return "Vector";
+        case ShaderNodeType::Blend:   return "Blend";
+        case ShaderNodeType::Custom:  return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class ShaderPortKind : uint8_t {
+    Float, Vector2, Vector3, Vector4
+};
+
+inline const char* shaderPortKindName(ShaderPortKind k) {
+    switch (k) {
+        case ShaderPortKind::Float:   return "Float";
+        case ShaderPortKind::Vector2: return "Vector2";
+        case ShaderPortKind::Vector3: return "Vector3";
+        case ShaderPortKind::Vector4: return "Vector4";
+    }
+    return "Unknown";
+}
+
+struct ShaderNode {
+    std::string    id;
+    ShaderNodeType type     = ShaderNodeType::Math;
+    float          posX     = 0.0f;
+    float          posY     = 0.0f;
+    bool           selected = false;
+
+    void select()   { selected = true;  }
+    void deselect() { selected = false; }
+    void setPosition(float x, float y) { posX = x; posY = y; }
+};
+
+struct ShaderGraphEdge {
+    std::string  id;
+    std::string  fromNode;
+    std::string  toNode;
+    ShaderPortKind portKind = ShaderPortKind::Float;
+};
+
+class ShaderGraphEditor {
+public:
+    static constexpr size_t MAX_NODES = 256;
+    static constexpr size_t MAX_EDGES = 512;
+
+    [[nodiscard]] bool addNode(const ShaderNode& node) {
+        for (auto& n : m_nodes) if (n.id == node.id) return false;
+        if (m_nodes.size() >= MAX_NODES) return false;
+        m_nodes.push_back(node);
+        return true;
+    }
+
+    [[nodiscard]] bool removeNode(const std::string& id) {
+        for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+            if (it->id == id) {
+                // remove edges connected to this node
+                m_edges.erase(
+                    std::remove_if(m_edges.begin(), m_edges.end(),
+                        [&id](const ShaderGraphEdge& e) {
+                            return e.fromNode == id || e.toNode == id;
+                        }),
+                    m_edges.end());
+                if (m_activeNode == id) m_activeNode.clear();
+                m_nodes.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] ShaderNode* findNode(const std::string& id) {
+        for (auto& n : m_nodes) if (n.id == id) return &n;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool addEdge(const ShaderGraphEdge& edge) {
+        for (auto& e : m_edges) if (e.id == edge.id) return false;
+        if (m_edges.size() >= MAX_EDGES) return false;
+        // both endpoints must exist
+        if (!findNode(edge.fromNode) || !findNode(edge.toNode)) return false;
+        m_edges.push_back(edge);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEdge(const std::string& id) {
+        for (auto it = m_edges.begin(); it != m_edges.end(); ++it) {
+            if (it->id == id) { m_edges.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool setActiveNode(const std::string& id) {
+        for (auto& n : m_nodes) {
+            if (n.id == id) { m_activeNode = id; return true; }
+        }
+        return false;
+    }
+
+    void selectAll()   { for (auto& n : m_nodes) n.select();   }
+    void deselectAll() { for (auto& n : m_nodes) n.deselect(); }
+
+    [[nodiscard]] size_t nodeCount()     const { return m_nodes.size(); }
+    [[nodiscard]] size_t edgeCount()     const { return m_edges.size(); }
+    [[nodiscard]] size_t selectedCount() const {
+        size_t c = 0; for (auto& n : m_nodes) if (n.selected) ++c; return c;
+    }
+    [[nodiscard]] const std::string& activeNode() const { return m_activeNode; }
+
+private:
+    std::vector<ShaderNode>      m_nodes;
+    std::vector<ShaderGraphEdge> m_edges;
+    std::string                  m_activeNode;
+};
+
+// ── S34 — Material Editor ─────────────────────────────────────────
+
+enum class MaterialShadingModel : uint8_t {
+    Unlit, Lambert, Phong, BlinnPhong, PBR, Toon, Subsurface, Custom
+};
+
+inline const char* materialShadingModelName(MaterialShadingModel m) {
+    switch (m) {
+        case MaterialShadingModel::Unlit:      return "Unlit";
+        case MaterialShadingModel::Lambert:    return "Lambert";
+        case MaterialShadingModel::Phong:      return "Phong";
+        case MaterialShadingModel::BlinnPhong: return "BlinnPhong";
+        case MaterialShadingModel::PBR:        return "PBR";
+        case MaterialShadingModel::Toon:       return "Toon";
+        case MaterialShadingModel::Subsurface: return "Subsurface";
+        case MaterialShadingModel::Custom:     return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class MaterialBlendMode : uint8_t {
+    Opaque, Masked, Translucent, Additive
+};
+
+inline const char* materialBlendModeName(MaterialBlendMode b) {
+    switch (b) {
+        case MaterialBlendMode::Opaque:       return "Opaque";
+        case MaterialBlendMode::Masked:       return "Masked";
+        case MaterialBlendMode::Translucent:  return "Translucent";
+        case MaterialBlendMode::Additive:     return "Additive";
+    }
+    return "Unknown";
+}
+
+struct MaterialParameter {
+    std::string name;
+    float       value = 0.0f;
+    bool        exposed = false;
+
+    void expose()  { exposed = true;  }
+    void hide()    { exposed = false; }
+};
+
+class MaterialAsset {
+public:
+    explicit MaterialAsset(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addParameter(const MaterialParameter& p) {
+        for (auto& existing : m_params) if (existing.name == p.name) return false;
+        m_params.push_back(p);
+        return true;
+    }
+
+    [[nodiscard]] bool removeParameter(const std::string& name) {
+        for (auto it = m_params.begin(); it != m_params.end(); ++it) {
+            if (it->name == name) { m_params.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] MaterialParameter* findParameter(const std::string& name) {
+        for (auto& p : m_params) if (p.name == name) return &p;
+        return nullptr;
+    }
+
+    void setShadingModel(MaterialShadingModel m) { m_shadingModel = m; }
+    void setBlendMode(MaterialBlendMode b)        { m_blendMode = b; }
+    void setDirty(bool d)                         { m_dirty = d; }
+
+    [[nodiscard]] MaterialShadingModel shadingModel() const { return m_shadingModel; }
+    [[nodiscard]] MaterialBlendMode    blendMode()    const { return m_blendMode; }
+    [[nodiscard]] bool                 isDirty()      const { return m_dirty; }
+    [[nodiscard]] size_t               paramCount()   const { return m_params.size(); }
+    [[nodiscard]] size_t               exposedParamCount() const {
+        size_t c = 0; for (auto& p : m_params) if (p.exposed) ++c; return c;
+    }
+    [[nodiscard]] const std::string&   name()         const { return m_name; }
+
+private:
+    std::string                   m_name;
+    MaterialShadingModel          m_shadingModel = MaterialShadingModel::PBR;
+    MaterialBlendMode             m_blendMode    = MaterialBlendMode::Opaque;
+    bool                          m_dirty        = false;
+    std::vector<MaterialParameter> m_params;
+};
+
+class MaterialEditor {
+public:
+    static constexpr size_t MAX_ASSETS = 128;
+
+    [[nodiscard]] bool addAsset(const MaterialAsset& asset) {
+        for (auto& a : m_assets) if (a.name() == asset.name()) return false;
+        if (m_assets.size() >= MAX_ASSETS) return false;
+        m_assets.push_back(asset);
+        return true;
+    }
+
+    [[nodiscard]] bool removeAsset(const std::string& name) {
+        for (auto it = m_assets.begin(); it != m_assets.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeAsset == name) m_activeAsset.clear();
+                m_assets.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] MaterialAsset* findAsset(const std::string& name) {
+        for (auto& a : m_assets) if (a.name() == name) return &a;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveAsset(const std::string& name) {
+        for (auto& a : m_assets) {
+            if (a.name() == name) { m_activeAsset = name; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t            assetCount()   const { return m_assets.size(); }
+    [[nodiscard]] const std::string& activeAsset() const { return m_activeAsset; }
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t c = 0; for (auto& a : m_assets) if (a.isDirty()) ++c; return c;
+    }
+
+private:
+    std::vector<MaterialAsset> m_assets;
+    std::string                m_activeAsset;
+};
+
+// ── S35 — Texture Editor ──────────────────────────────────────────
+
+enum class TextureFormat : uint8_t {
+    R8, RG8, RGB8, RGBA8, R16F, RG16F, RGB16F, RGBA16F
+};
+
+inline const char* textureFormatName(TextureFormat f) {
+    switch (f) {
+        case TextureFormat::R8:      return "R8";
+        case TextureFormat::RG8:     return "RG8";
+        case TextureFormat::RGB8:    return "RGB8";
+        case TextureFormat::RGBA8:   return "RGBA8";
+        case TextureFormat::R16F:    return "R16F";
+        case TextureFormat::RG16F:   return "RG16F";
+        case TextureFormat::RGB16F:  return "RGB16F";
+        case TextureFormat::RGBA16F: return "RGBA16F";
+    }
+    return "Unknown";
+}
+
+enum class TextureFilter : uint8_t {
+    Nearest, Linear, NearestMipmapNearest, LinearMipmapLinear
+};
+
+inline const char* textureFilterName(TextureFilter f) {
+    switch (f) {
+        case TextureFilter::Nearest:               return "Nearest";
+        case TextureFilter::Linear:                return "Linear";
+        case TextureFilter::NearestMipmapNearest:  return "NearestMipmapNearest";
+        case TextureFilter::LinearMipmapLinear:    return "LinearMipmapLinear";
+    }
+    return "Unknown";
+}
+
+enum class TextureWrapMode : uint8_t {
+    Repeat, MirroredRepeat, ClampToEdge, ClampToBorder
+};
+
+inline const char* textureWrapModeName(TextureWrapMode w) {
+    switch (w) {
+        case TextureWrapMode::Repeat:          return "Repeat";
+        case TextureWrapMode::MirroredRepeat:  return "MirroredRepeat";
+        case TextureWrapMode::ClampToEdge:     return "ClampToEdge";
+        case TextureWrapMode::ClampToBorder:   return "ClampToBorder";
+    }
+    return "Unknown";
+}
+
+class TextureAsset {
+public:
+    explicit TextureAsset(const std::string& name,
+                          uint32_t width  = 1,
+                          uint32_t height = 1)
+        : m_name(name), m_width(width), m_height(height) {}
+
+    void setFormat(TextureFormat f)       { m_format = f; }
+    void setFilter(TextureFilter f)       { m_filter = f; }
+    void setWrapMode(TextureWrapMode w)   { m_wrap   = w; }
+    void setMipmapsEnabled(bool v)        { m_mipmaps = v; }
+    void setDirty(bool d)                 { m_dirty   = d; }
+    void resize(uint32_t w, uint32_t h)   { m_width = w; m_height = h; }
+
+    [[nodiscard]] TextureFormat   format()        const { return m_format; }
+    [[nodiscard]] TextureFilter   filter()        const { return m_filter; }
+    [[nodiscard]] TextureWrapMode wrapMode()      const { return m_wrap;   }
+    [[nodiscard]] bool            mipmapsEnabled()const { return m_mipmaps; }
+    [[nodiscard]] bool            isDirty()       const { return m_dirty;   }
+    [[nodiscard]] uint32_t        width()         const { return m_width;   }
+    [[nodiscard]] uint32_t        height()        const { return m_height;  }
+    [[nodiscard]] uint64_t        pixelCount()    const { return static_cast<uint64_t>(m_width) * m_height; }
+    [[nodiscard]] const std::string& name()       const { return m_name;    }
+
+    [[nodiscard]] bool isHDR() const {
+        return m_format == TextureFormat::R16F   ||
+               m_format == TextureFormat::RG16F  ||
+               m_format == TextureFormat::RGB16F ||
+               m_format == TextureFormat::RGBA16F;
+    }
+
+private:
+    std::string       m_name;
+    uint32_t          m_width   = 1;
+    uint32_t          m_height  = 1;
+    TextureFormat     m_format  = TextureFormat::RGBA8;
+    TextureFilter     m_filter  = TextureFilter::Linear;
+    TextureWrapMode   m_wrap    = TextureWrapMode::Repeat;
+    bool              m_mipmaps = false;
+    bool              m_dirty   = false;
+};
+
+class TextureEditor {
+public:
+    static constexpr size_t MAX_TEXTURES = 256;
+
+    [[nodiscard]] bool addTexture(const TextureAsset& tex) {
+        for (auto& t : m_textures) if (t.name() == tex.name()) return false;
+        if (m_textures.size() >= MAX_TEXTURES) return false;
+        m_textures.push_back(tex);
+        return true;
+    }
+
+    [[nodiscard]] bool removeTexture(const std::string& name) {
+        for (auto it = m_textures.begin(); it != m_textures.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeTexture == name) m_activeTexture.clear();
+                m_textures.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] TextureAsset* findTexture(const std::string& name) {
+        for (auto& t : m_textures) if (t.name() == name) return &t;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveTexture(const std::string& name) {
+        for (auto& t : m_textures) {
+            if (t.name() == name) { m_activeTexture = name; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t textureCount() const { return m_textures.size(); }
+    [[nodiscard]] const std::string& activeTexture() const { return m_activeTexture; }
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t c = 0; for (auto& t : m_textures) if (t.isDirty()) ++c; return c;
+    }
+    [[nodiscard]] size_t hdrCount() const {
+        size_t c = 0; for (auto& t : m_textures) if (t.isHDR()) ++c; return c;
+    }
+    [[nodiscard]] size_t mipmapCount() const {
+        size_t c = 0; for (auto& t : m_textures) if (t.mipmapsEnabled()) ++c; return c;
+    }
+
+private:
+    std::vector<TextureAsset> m_textures;
+    std::string               m_activeTexture;
+};
+
+// ── S36 — Font Editor ─────────────────────────────────────────────
+
+enum class FontStyle : uint8_t {
+    Normal, Italic, Oblique, Inherit
+};
+
+inline const char* fontStyleName(FontStyle s) {
+    switch (s) {
+        case FontStyle::Normal:  return "Normal";
+        case FontStyle::Italic:  return "Italic";
+        case FontStyle::Oblique: return "Oblique";
+        case FontStyle::Inherit: return "Inherit";
+    }
+    return "Unknown";
+}
+
+enum class FontWeight : uint8_t {
+    Thin, ExtraLight, Light, Regular, Medium, Bold
+};
+
+inline const char* fontWeightName(FontWeight w) {
+    switch (w) {
+        case FontWeight::Thin:       return "Thin";
+        case FontWeight::ExtraLight: return "ExtraLight";
+        case FontWeight::Light:      return "Light";
+        case FontWeight::Regular:    return "Regular";
+        case FontWeight::Medium:     return "Medium";
+        case FontWeight::Bold:       return "Bold";
+    }
+    return "Unknown";
+}
+
+enum class FontVariant : uint8_t {
+    Normal, SmallCaps, AllSmallCaps, PetiteCaps
+};
+
+inline const char* fontVariantName(FontVariant v) {
+    switch (v) {
+        case FontVariant::Normal:       return "Normal";
+        case FontVariant::SmallCaps:    return "SmallCaps";
+        case FontVariant::AllSmallCaps: return "AllSmallCaps";
+        case FontVariant::PetiteCaps:   return "PetiteCaps";
+    }
+    return "Unknown";
+}
+
+class FontAsset {
+public:
+    explicit FontAsset(const std::string& family,
+                       float              size = 12.0f)
+        : m_family(family), m_size(size) {}
+
+    void setStyle(FontStyle s)    { m_style   = s; }
+    void setWeight(FontWeight w)  { m_weight  = w; }
+    void setVariant(FontVariant v){ m_variant = v; }
+    void setSize(float s)         { m_size    = s; }
+    void setLineHeight(float lh)  { m_lineHeight = lh; }
+    void setLetterSpacing(float ls){ m_letterSpacing = ls; }
+    void setEmbedded(bool e)      { m_embedded = e; }
+    void setDirty(bool d)         { m_dirty    = d; }
+
+    [[nodiscard]] FontStyle   style()         const { return m_style;         }
+    [[nodiscard]] FontWeight  weight()        const { return m_weight;        }
+    [[nodiscard]] FontVariant variant()       const { return m_variant;       }
+    [[nodiscard]] float       size()          const { return m_size;          }
+    [[nodiscard]] float       lineHeight()    const { return m_lineHeight;    }
+    [[nodiscard]] float       letterSpacing() const { return m_letterSpacing; }
+    [[nodiscard]] bool        isEmbedded()    const { return m_embedded;      }
+    [[nodiscard]] bool        isDirty()       const { return m_dirty;         }
+    [[nodiscard]] const std::string& family() const { return m_family;        }
+
+    [[nodiscard]] bool isBold()   const { return m_weight == FontWeight::Bold || m_weight == FontWeight::Medium; }
+    [[nodiscard]] bool isItalic() const { return m_style  == FontStyle::Italic || m_style == FontStyle::Oblique; }
+
+private:
+    std::string m_family;
+    float       m_size          = 12.0f;
+    float       m_lineHeight    = 1.2f;
+    float       m_letterSpacing = 0.0f;
+    FontStyle   m_style         = FontStyle::Normal;
+    FontWeight  m_weight        = FontWeight::Regular;
+    FontVariant m_variant       = FontVariant::Normal;
+    bool        m_embedded      = false;
+    bool        m_dirty         = false;
+};
+
+class FontEditor {
+public:
+    static constexpr size_t MAX_FONTS = 128;
+
+    [[nodiscard]] bool addFont(const FontAsset& font) {
+        for (auto& f : m_fonts) if (f.family() == font.family()) return false;
+        if (m_fonts.size() >= MAX_FONTS) return false;
+        m_fonts.push_back(font);
+        return true;
+    }
+
+    [[nodiscard]] bool removeFont(const std::string& family) {
+        for (auto it = m_fonts.begin(); it != m_fonts.end(); ++it) {
+            if (it->family() == family) {
+                if (m_activeFont == family) m_activeFont.clear();
+                m_fonts.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] FontAsset* findFont(const std::string& family) {
+        for (auto& f : m_fonts) if (f.family() == family) return &f;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveFont(const std::string& family) {
+        for (auto& f : m_fonts) {
+            if (f.family() == family) { m_activeFont = family; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t fontCount()     const { return m_fonts.size(); }
+    [[nodiscard]] const std::string& activeFont() const { return m_activeFont; }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t c = 0; for (auto& f : m_fonts) if (f.isDirty()) ++c; return c;
+    }
+    [[nodiscard]] size_t embeddedCount() const {
+        size_t c = 0; for (auto& f : m_fonts) if (f.isEmbedded()) ++c; return c;
+    }
+    [[nodiscard]] size_t boldCount() const {
+        size_t c = 0; for (auto& f : m_fonts) if (f.isBold()) ++c; return c;
+    }
+    [[nodiscard]] size_t italicCount() const {
+        size_t c = 0; for (auto& f : m_fonts) if (f.isItalic()) ++c; return c;
+    }
+
+private:
+    std::vector<FontAsset> m_fonts;
+    std::string            m_activeFont;
+};
+
+// ── S37 — Icon Editor ─────────────────────────────────────────────
+
+enum class IconSize : uint8_t {
+    XSmall, Small, Medium, Large, XLarge
+};
+
+inline const char* iconSizeName(IconSize s) {
+    switch (s) {
+        case IconSize::XSmall: return "XSmall";
+        case IconSize::Small:  return "Small";
+        case IconSize::Medium: return "Medium";
+        case IconSize::Large:  return "Large";
+        case IconSize::XLarge: return "XLarge";
+    }
+    return "Unknown";
+}
+
+enum class IconTheme : uint8_t {
+    Light, Dark, HighContrast, Monochrome
+};
+
+inline const char* iconThemeName(IconTheme t) {
+    switch (t) {
+        case IconTheme::Light:        return "Light";
+        case IconTheme::Dark:         return "Dark";
+        case IconTheme::HighContrast: return "HighContrast";
+        case IconTheme::Monochrome:   return "Monochrome";
+    }
+    return "Unknown";
+}
+
+enum class IconState : uint8_t {
+    Normal, Hover, Pressed, Disabled, Selected
+};
+
+inline const char* iconStateName(IconState s) {
+    switch (s) {
+        case IconState::Normal:   return "Normal";
+        case IconState::Hover:    return "Hover";
+        case IconState::Pressed:  return "Pressed";
+        case IconState::Disabled: return "Disabled";
+        case IconState::Selected: return "Selected";
+    }
+    return "Unknown";
+}
+
+class IconAsset {
+public:
+    explicit IconAsset(const std::string& name,
+                       IconSize           size = IconSize::Medium)
+        : m_name(name), m_size(size) {}
+
+    void setTheme(IconTheme t)  { m_theme = t; }
+    void setState(IconState s)  { m_state = s; }
+    void setSize(IconSize s)    { m_size  = s; }
+    void setScalable(bool v)    { m_scalable = v; }
+    void setDirty(bool v)       { m_dirty    = v; }
+    void setPixelDensity(float f){ m_pixelDensity = f; }
+
+    [[nodiscard]] const std::string& name()         const { return m_name;         }
+    [[nodiscard]] IconSize           size()          const { return m_size;         }
+    [[nodiscard]] IconTheme          theme()         const { return m_theme;        }
+    [[nodiscard]] IconState          state()         const { return m_state;        }
+    [[nodiscard]] bool               isScalable()   const { return m_scalable;     }
+    [[nodiscard]] bool               isDirty()      const { return m_dirty;        }
+    [[nodiscard]] float              pixelDensity() const { return m_pixelDensity; }
+
+    [[nodiscard]] bool isDisabled()  const { return m_state == IconState::Disabled; }
+    [[nodiscard]] bool isSelected()  const { return m_state == IconState::Selected; }
+    [[nodiscard]] bool isHighDPI()   const { return m_pixelDensity >= 2.0f; }
+
+private:
+    std::string m_name;
+    IconSize    m_size         = IconSize::Medium;
+    IconTheme   m_theme        = IconTheme::Light;
+    IconState   m_state        = IconState::Normal;
+    float       m_pixelDensity = 1.0f;
+    bool        m_scalable     = false;
+    bool        m_dirty        = false;
+};
+
+class IconEditor {
+public:
+    static constexpr size_t MAX_ICONS = 256;
+
+    [[nodiscard]] bool addIcon(const IconAsset& icon) {
+        for (auto& i : m_icons) if (i.name() == icon.name()) return false;
+        if (m_icons.size() >= MAX_ICONS) return false;
+        m_icons.push_back(icon);
+        return true;
+    }
+
+    [[nodiscard]] bool removeIcon(const std::string& name) {
+        for (auto it = m_icons.begin(); it != m_icons.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeIcon == name) m_activeIcon.clear();
+                m_icons.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] IconAsset* findIcon(const std::string& name) {
+        for (auto& i : m_icons) if (i.name() == name) return &i;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveIcon(const std::string& name) {
+        for (auto& i : m_icons) {
+            if (i.name() == name) { m_activeIcon = name; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t iconCount()      const { return m_icons.size(); }
+    [[nodiscard]] const std::string& activeIcon() const { return m_activeIcon; }
+
+    [[nodiscard]] size_t dirtyCount()    const {
+        size_t c = 0; for (auto& i : m_icons) if (i.isDirty())    ++c; return c;
+    }
+    [[nodiscard]] size_t scalableCount() const {
+        size_t c = 0; for (auto& i : m_icons) if (i.isScalable()) ++c; return c;
+    }
+    [[nodiscard]] size_t disabledCount() const {
+        size_t c = 0; for (auto& i : m_icons) if (i.isDisabled()) ++c; return c;
+    }
+    [[nodiscard]] size_t highDPICount()  const {
+        size_t c = 0; for (auto& i : m_icons) if (i.isHighDPI())  ++c; return c;
+    }
+    [[nodiscard]] size_t countByTheme(IconTheme t) const {
+        size_t c = 0; for (auto& i : m_icons) if (i.theme() == t) ++c; return c;
+    }
+    [[nodiscard]] size_t countBySize(IconSize s) const {
+        size_t c = 0; for (auto& i : m_icons) if (i.size() == s)  ++c; return c;
+    }
+
+private:
+    std::vector<IconAsset> m_icons;
+    std::string            m_activeIcon;
+};
+
+// ── S38 — Sprite Editor ───────────────────────────────────────────
+
+enum class SpriteOrigin : uint8_t {
+    TopLeft, TopCenter, Center, BottomLeft, BottomCenter
+};
+
+inline const char* spriteOriginName(SpriteOrigin o) {
+    switch (o) {
+        case SpriteOrigin::TopLeft:      return "TopLeft";
+        case SpriteOrigin::TopCenter:    return "TopCenter";
+        case SpriteOrigin::Center:       return "Center";
+        case SpriteOrigin::BottomLeft:   return "BottomLeft";
+        case SpriteOrigin::BottomCenter: return "BottomCenter";
+    }
+    return "Unknown";
+}
+
+enum class SpriteBlendMode : uint8_t {
+    Normal, Additive, Multiply, Screen, Overlay
+};
+
+inline const char* spriteBlendModeName(SpriteBlendMode b) {
+    switch (b) {
+        case SpriteBlendMode::Normal:   return "Normal";
+        case SpriteBlendMode::Additive: return "Additive";
+        case SpriteBlendMode::Multiply: return "Multiply";
+        case SpriteBlendMode::Screen:   return "Screen";
+        case SpriteBlendMode::Overlay:  return "Overlay";
+    }
+    return "Unknown";
+}
+
+enum class SpriteAnimState : uint8_t {
+    Idle, Playing, Paused, Stopped, Finished
+};
+
+inline const char* spriteAnimStateName(SpriteAnimState s) {
+    switch (s) {
+        case SpriteAnimState::Idle:     return "Idle";
+        case SpriteAnimState::Playing:  return "Playing";
+        case SpriteAnimState::Paused:   return "Paused";
+        case SpriteAnimState::Stopped:  return "Stopped";
+        case SpriteAnimState::Finished: return "Finished";
+    }
+    return "Unknown";
+}
+
+class SpriteAsset {
+public:
+    explicit SpriteAsset(const std::string& name,
+                         uint32_t width  = 32,
+                         uint32_t height = 32)
+        : m_name(name), m_width(width), m_height(height) {}
+
+    void setOrigin(SpriteOrigin o)      { m_origin    = o; }
+    void setBlendMode(SpriteBlendMode b){ m_blendMode = b; }
+    void setAnimState(SpriteAnimState s){ m_animState = s; }
+    void setFrameCount(uint32_t n)      { m_frameCount = n; }
+    void setFrameRate(float fps)        { m_frameRate  = fps; }
+    void setLooping(bool v)             { m_looping    = v; }
+    void setFlippedH(bool v)            { m_flippedH   = v; }
+    void setFlippedV(bool v)            { m_flippedV   = v; }
+    void setDirty(bool v)               { m_dirty      = v; }
+
+    [[nodiscard]] const std::string& name()       const { return m_name;       }
+    [[nodiscard]] uint32_t           width()      const { return m_width;      }
+    [[nodiscard]] uint32_t           height()     const { return m_height;     }
+    [[nodiscard]] SpriteOrigin       origin()     const { return m_origin;     }
+    [[nodiscard]] SpriteBlendMode    blendMode()  const { return m_blendMode;  }
+    [[nodiscard]] SpriteAnimState    animState()  const { return m_animState;  }
+    [[nodiscard]] uint32_t           frameCount() const { return m_frameCount; }
+    [[nodiscard]] float              frameRate()  const { return m_frameRate;  }
+    [[nodiscard]] bool               isLooping()  const { return m_looping;    }
+    [[nodiscard]] bool               isFlippedH() const { return m_flippedH;   }
+    [[nodiscard]] bool               isFlippedV() const { return m_flippedV;   }
+    [[nodiscard]] bool               isDirty()    const { return m_dirty;      }
+
+    [[nodiscard]] bool isAnimated()    const { return m_frameCount > 1; }
+    [[nodiscard]] bool isPlaying()     const { return m_animState == SpriteAnimState::Playing; }
+    [[nodiscard]] bool isPaused()      const { return m_animState == SpriteAnimState::Paused;  }
+    [[nodiscard]] bool isFinished()    const { return m_animState == SpriteAnimState::Finished;}
+    [[nodiscard]] uint32_t area()      const { return m_width * m_height; }
+
+private:
+    std::string      m_name;
+    uint32_t         m_width      = 32;
+    uint32_t         m_height     = 32;
+    SpriteOrigin     m_origin     = SpriteOrigin::Center;
+    SpriteBlendMode  m_blendMode  = SpriteBlendMode::Normal;
+    SpriteAnimState  m_animState  = SpriteAnimState::Idle;
+    uint32_t         m_frameCount = 1;
+    float            m_frameRate  = 24.0f;
+    bool             m_looping    = false;
+    bool             m_flippedH   = false;
+    bool             m_flippedV   = false;
+    bool             m_dirty      = false;
+};
+
+class SpriteEditor {
+public:
+    static constexpr size_t MAX_SPRITES = 512;
+
+    [[nodiscard]] bool addSprite(const SpriteAsset& sprite) {
+        for (auto& s : m_sprites) if (s.name() == sprite.name()) return false;
+        if (m_sprites.size() >= MAX_SPRITES) return false;
+        m_sprites.push_back(sprite);
+        return true;
+    }
+
+    [[nodiscard]] bool removeSprite(const std::string& name) {
+        for (auto it = m_sprites.begin(); it != m_sprites.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeSprite == name) m_activeSprite.clear();
+                m_sprites.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SpriteAsset* findSprite(const std::string& name) {
+        for (auto& s : m_sprites) if (s.name() == name) return &s;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveSprite(const std::string& name) {
+        for (auto& s : m_sprites) {
+            if (s.name() == name) { m_activeSprite = name; return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t spriteCount()   const { return m_sprites.size();  }
+    [[nodiscard]] const std::string& activeSprite() const { return m_activeSprite; }
+
+    [[nodiscard]] size_t dirtyCount()    const {
+        size_t c = 0; for (auto& s : m_sprites) if (s.isDirty())    ++c; return c;
+    }
+    [[nodiscard]] size_t animatedCount() const {
+        size_t c = 0; for (auto& s : m_sprites) if (s.isAnimated()) ++c; return c;
+    }
+    [[nodiscard]] size_t playingCount()  const {
+        size_t c = 0; for (auto& s : m_sprites) if (s.isPlaying())  ++c; return c;
+    }
+    [[nodiscard]] size_t loopingCount()  const {
+        size_t c = 0; for (auto& s : m_sprites) if (s.isLooping())  ++c; return c;
+    }
+    [[nodiscard]] size_t countByBlendMode(SpriteBlendMode b) const {
+        size_t c = 0; for (auto& s : m_sprites) if (s.blendMode() == b) ++c; return c;
+    }
+    [[nodiscard]] size_t countByOrigin(SpriteOrigin o) const {
+        size_t c = 0; for (auto& s : m_sprites) if (s.origin() == o) ++c; return c;
+    }
+
+private:
+    std::vector<SpriteAsset> m_sprites;
+    std::string              m_activeSprite;
+};
+
 } // namespace NF

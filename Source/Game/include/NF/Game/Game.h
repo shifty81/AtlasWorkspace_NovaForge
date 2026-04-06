@@ -10358,4 +10358,1288 @@ private:
     size_t                          m_tickCount = 0;
 };
 
+// G49 — Aurora System
+
+enum class AuroraType : uint8_t {
+    Borealis, Australis, Polar, Substorm, Diffuse, Discrete, Pulsating, Custom
+};
+
+inline const char* auroraTypeName(AuroraType t) {
+    switch (t) {
+        case AuroraType::Borealis:  return "Borealis";
+        case AuroraType::Australis: return "Australis";
+        case AuroraType::Polar:     return "Polar";
+        case AuroraType::Substorm:  return "Substorm";
+        case AuroraType::Diffuse:   return "Diffuse";
+        case AuroraType::Discrete:  return "Discrete";
+        case AuroraType::Pulsating: return "Pulsating";
+        case AuroraType::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class AuroraIntensity : uint8_t {
+    Faint, Quiet, Active, Storm, Severe, Extreme
+};
+
+inline const char* auroraIntensityName(AuroraIntensity i) {
+    switch (i) {
+        case AuroraIntensity::Faint:   return "Faint";
+        case AuroraIntensity::Quiet:   return "Quiet";
+        case AuroraIntensity::Active:  return "Active";
+        case AuroraIntensity::Storm:   return "Storm";
+        case AuroraIntensity::Severe:  return "Severe";
+        case AuroraIntensity::Extreme: return "Extreme";
+    }
+    return "Unknown";
+}
+
+struct AuroraEvent {
+    std::string     id;
+    AuroraType      type       = AuroraType::Borealis;
+    AuroraIntensity intensity  = AuroraIntensity::Quiet;
+    float           duration   = 1.0f;
+    float           colorShift = 0.0f;
+    bool            active     = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isVisible() const {
+        return static_cast<uint8_t>(intensity) >= static_cast<uint8_t>(AuroraIntensity::Active);
+    }
+    [[nodiscard]] bool isStorm() const {
+        return static_cast<uint8_t>(intensity) >= static_cast<uint8_t>(AuroraIntensity::Storm);
+    }
+    [[nodiscard]] float radiationIndex() const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * duration;
+    }
+};
+
+class AuroraRegion {
+public:
+    explicit AuroraRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const AuroraEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] AuroraEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()  const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t stormCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isStorm()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string              m_name;
+    std::vector<AuroraEvent> m_events;
+    size_t                   m_tickCount = 0;
+};
+
+class AuroraSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    AuroraRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] AuroraRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t stormEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.stormCount();
+        return c;
+    }
+
+private:
+    std::vector<AuroraRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
+// G50 — Heatwave System
+
+enum class HeatwaveType : uint8_t {
+    Regional, Urban, Coastal, Continental, Desert, Tropical, Polar, Custom
+};
+
+inline const char* heatwaveTypeName(HeatwaveType t) {
+    switch (t) {
+        case HeatwaveType::Regional:     return "Regional";
+        case HeatwaveType::Urban:        return "Urban";
+        case HeatwaveType::Coastal:      return "Coastal";
+        case HeatwaveType::Continental:  return "Continental";
+        case HeatwaveType::Desert:       return "Desert";
+        case HeatwaveType::Tropical:     return "Tropical";
+        case HeatwaveType::Polar:        return "Polar";
+        case HeatwaveType::Custom:       return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class HeatwaveSeverity : uint8_t {
+    Mild, Moderate, Severe, Extreme, Catastrophic, Unprecedented
+};
+
+inline const char* heatwaveSeverityName(HeatwaveSeverity s) {
+    switch (s) {
+        case HeatwaveSeverity::Mild:          return "Mild";
+        case HeatwaveSeverity::Moderate:      return "Moderate";
+        case HeatwaveSeverity::Severe:        return "Severe";
+        case HeatwaveSeverity::Extreme:       return "Extreme";
+        case HeatwaveSeverity::Catastrophic:  return "Catastrophic";
+        case HeatwaveSeverity::Unprecedented: return "Unprecedented";
+    }
+    return "Unknown";
+}
+
+struct HeatwaveEvent {
+    std::string      id;
+    HeatwaveType     type       = HeatwaveType::Regional;
+    HeatwaveSeverity severity   = HeatwaveSeverity::Mild;
+    float            duration   = 1.0f;
+    float            peakTemp   = 30.0f;
+    bool             active     = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isDangerous() const {
+        return static_cast<uint8_t>(severity) >= static_cast<uint8_t>(HeatwaveSeverity::Severe);
+    }
+    [[nodiscard]] bool isExtreme() const {
+        return static_cast<uint8_t>(severity) >= static_cast<uint8_t>(HeatwaveSeverity::Extreme);
+    }
+    [[nodiscard]] float heatIndex() const {
+        return (static_cast<float>(static_cast<uint8_t>(severity)) + 1.0f) * peakTemp;
+    }
+};
+
+class HeatwaveRegion {
+public:
+    explicit HeatwaveRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const HeatwaveEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] HeatwaveEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()     const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t extremeCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isExtreme()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<HeatwaveEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class HeatwaveSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    HeatwaveRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] HeatwaveRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t extremeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.extremeCount();
+        return c;
+    }
+
+private:
+    std::vector<HeatwaveRegion> m_regions;
+    size_t                      m_tickCount = 0;
+};
+
+// G51 — Blizzard System
+
+enum class BlizzardType : uint8_t {
+    Arctic, Alpine, Coastal, Prairie, Lake, Polar, Nor_easter, Custom
+};
+
+inline const char* blizzardTypeName(BlizzardType t) {
+    switch (t) {
+        case BlizzardType::Arctic:    return "Arctic";
+        case BlizzardType::Alpine:    return "Alpine";
+        case BlizzardType::Coastal:   return "Coastal";
+        case BlizzardType::Prairie:   return "Prairie";
+        case BlizzardType::Lake:      return "Lake";
+        case BlizzardType::Polar:     return "Polar";
+        case BlizzardType::Nor_easter: return "Nor'easter";
+        case BlizzardType::Custom:    return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class BlizzardIntensity : uint8_t {
+    Light, Moderate, Heavy, Severe, Extreme, Whiteout
+};
+
+inline const char* blizzardIntensityName(BlizzardIntensity i) {
+    switch (i) {
+        case BlizzardIntensity::Light:    return "Light";
+        case BlizzardIntensity::Moderate: return "Moderate";
+        case BlizzardIntensity::Heavy:    return "Heavy";
+        case BlizzardIntensity::Severe:   return "Severe";
+        case BlizzardIntensity::Extreme:  return "Extreme";
+        case BlizzardIntensity::Whiteout: return "Whiteout";
+    }
+    return "Unknown";
+}
+
+struct BlizzardEvent {
+    std::string       id;
+    BlizzardType      type      = BlizzardType::Arctic;
+    BlizzardIntensity intensity = BlizzardIntensity::Light;
+    float             duration  = 1.0f;
+    float             windSpeed = 0.0f;
+    bool              active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere() const {
+        return static_cast<uint8_t>(intensity) >= static_cast<uint8_t>(BlizzardIntensity::Severe);
+    }
+    [[nodiscard]] bool isWhiteout() const {
+        return intensity == BlizzardIntensity::Whiteout;
+    }
+    [[nodiscard]] float visibilityIndex() const {
+        float base = static_cast<float>(static_cast<uint8_t>(BlizzardIntensity::Whiteout)
+                                        - static_cast<uint8_t>(intensity));
+        return base;
+    }
+};
+
+class BlizzardRegion {
+public:
+    explicit BlizzardRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const BlizzardEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] BlizzardEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()   const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere()) ++c; return c;
+    }
+    [[nodiscard]] size_t whiteoutCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWhiteout()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<BlizzardEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class BlizzardSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    BlizzardRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] BlizzardRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.activeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t severeEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.severeCount();
+        return c;
+    }
+
+    [[nodiscard]] size_t whiteoutEventCount() const {
+        size_t c = 0;
+        for (auto& r : m_regions) c += r.whiteoutCount();
+        return c;
+    }
+
+private:
+    std::vector<BlizzardRegion> m_regions;
+    size_t                      m_tickCount = 0;
+};
+
+// ── G52 — Sandstorm System ────────────────────────────────────────
+
+enum class SandstormType : uint8_t {
+    Haboob, Simoom, Khamsin, Shamal, Harmattan, Sirocco, Zonda, Custom
+};
+
+inline const char* sandstormTypeName(SandstormType t) {
+    switch (t) {
+        case SandstormType::Haboob:   return "Haboob";
+        case SandstormType::Simoom:   return "Simoom";
+        case SandstormType::Khamsin:  return "Khamsin";
+        case SandstormType::Shamal:   return "Shamal";
+        case SandstormType::Harmattan: return "Harmattan";
+        case SandstormType::Sirocco:  return "Sirocco";
+        case SandstormType::Zonda:    return "Zonda";
+        case SandstormType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class SandstormSeverity : uint8_t {
+    Dust, Moderate, Strong, Severe, Violent, Catastrophic
+};
+
+inline const char* sandstormSeverityName(SandstormSeverity s) {
+    switch (s) {
+        case SandstormSeverity::Dust:         return "Dust";
+        case SandstormSeverity::Moderate:     return "Moderate";
+        case SandstormSeverity::Strong:       return "Strong";
+        case SandstormSeverity::Severe:       return "Severe";
+        case SandstormSeverity::Violent:      return "Violent";
+        case SandstormSeverity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct SandstormEvent {
+    std::string       id;
+    SandstormType     type      = SandstormType::Haboob;
+    SandstormSeverity severity  = SandstormSeverity::Dust;
+    float             duration  = 1.0f;
+    float             windSpeed = 0.0f;
+    bool              active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere() const {
+        return static_cast<uint8_t>(severity) >= static_cast<uint8_t>(SandstormSeverity::Severe);
+    }
+    [[nodiscard]] bool isCatastrophic() const {
+        return severity == SandstormSeverity::Catastrophic;
+    }
+    [[nodiscard]] float particleDensity() const {
+        return static_cast<float>(static_cast<uint8_t>(severity) + 1) * windSpeed;
+    }
+};
+
+class SandstormRegion {
+public:
+    explicit SandstormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const SandstormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SandstormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()        const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere()) ++c; return c;
+    }
+    [[nodiscard]] size_t catastrophicCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isCatastrophic()) ++c; return c;
+    }
+
+    void tick()  { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                m_name;
+    std::vector<SandstormEvent> m_events;
+    size_t                     m_tickCount = 0;
+};
+
+class SandstormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    SandstormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] SandstormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t severeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount(); return c;
+    }
+    [[nodiscard]] size_t catastrophicEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.catastrophicCount(); return c;
+    }
+
+private:
+    std::vector<SandstormRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
+// ── G53 — Cyclone System ──────────────────────────────────────────
+
+enum class CycloneCategory : uint8_t {
+    TropicalDepression, TropicalStorm, Cat1, Cat2, Cat3, Cat4
+};
+
+inline const char* cycloneCategoryName(CycloneCategory c) {
+    switch (c) {
+        case CycloneCategory::TropicalDepression: return "TropicalDepression";
+        case CycloneCategory::TropicalStorm:      return "TropicalStorm";
+        case CycloneCategory::Cat1:               return "Cat1";
+        case CycloneCategory::Cat2:               return "Cat2";
+        case CycloneCategory::Cat3:               return "Cat3";
+        case CycloneCategory::Cat4:               return "Cat4";
+    }
+    return "Unknown";
+}
+
+enum class CycloneStage : uint8_t {
+    Forming, Intensifying, Peak, Weakening, Dissipating, Remnant
+};
+
+inline const char* cycloneStageName(CycloneStage s) {
+    switch (s) {
+        case CycloneStage::Forming:      return "Forming";
+        case CycloneStage::Intensifying: return "Intensifying";
+        case CycloneStage::Peak:         return "Peak";
+        case CycloneStage::Weakening:    return "Weakening";
+        case CycloneStage::Dissipating:  return "Dissipating";
+        case CycloneStage::Remnant:      return "Remnant";
+    }
+    return "Unknown";
+}
+
+struct CycloneEvent {
+    std::string    id;
+    CycloneCategory category = CycloneCategory::TropicalDepression;
+    CycloneStage    stage    = CycloneStage::Forming;
+    float           windSpeed = 0.0f;
+    float           pressure  = 1013.0f;
+    bool            active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isMajor() const {
+        return static_cast<uint8_t>(category) >= static_cast<uint8_t>(CycloneCategory::Cat3);
+    }
+    [[nodiscard]] bool isAtPeak() const { return stage == CycloneStage::Peak; }
+    [[nodiscard]] float stormSurge() const {
+        return (static_cast<float>(static_cast<uint8_t>(category) + 1)) * 0.5f * windSpeed / 100.0f;
+    }
+};
+
+class CycloneRegion {
+public:
+    explicit CycloneRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const CycloneEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] CycloneEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()  const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t majorCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isMajor()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<CycloneEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class CycloneSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    CycloneRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] CycloneRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t majorEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.majorCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+
+private:
+    std::vector<CycloneRegion> m_regions;
+    size_t                     m_tickCount = 0;
+};
+
+// ── G54 — Tornado System ──────────────────────────────────────────
+
+enum class TornadoScale : uint8_t {
+    EF0, EF1, EF2, EF3, EF4, EF5
+};
+
+inline const char* tornadoScaleName(TornadoScale s) {
+    switch (s) {
+        case TornadoScale::EF0: return "EF0";
+        case TornadoScale::EF1: return "EF1";
+        case TornadoScale::EF2: return "EF2";
+        case TornadoScale::EF3: return "EF3";
+        case TornadoScale::EF4: return "EF4";
+        case TornadoScale::EF5: return "EF5";
+    }
+    return "Unknown";
+}
+
+enum class TornadoStage : uint8_t {
+    Organizing, Mature, Shrinking, Rope, Dissipating, Remnant
+};
+
+inline const char* tornadoStageName(TornadoStage s) {
+    switch (s) {
+        case TornadoStage::Organizing:  return "Organizing";
+        case TornadoStage::Mature:      return "Mature";
+        case TornadoStage::Shrinking:   return "Shrinking";
+        case TornadoStage::Rope:        return "Rope";
+        case TornadoStage::Dissipating: return "Dissipating";
+        case TornadoStage::Remnant:     return "Remnant";
+    }
+    return "Unknown";
+}
+
+struct TornadoEvent {
+    std::string  id;
+    TornadoScale scale    = TornadoScale::EF0;
+    TornadoStage stage    = TornadoStage::Organizing;
+    float        windSpeed = 0.0f;
+    float        pathLength = 0.0f;
+    bool         active   = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isViolent() const {
+        return static_cast<uint8_t>(scale) >= static_cast<uint8_t>(TornadoScale::EF4);
+    }
+    [[nodiscard]] bool isAtPeak() const { return stage == TornadoStage::Mature; }
+    [[nodiscard]] float destructionIndex() const {
+        return (static_cast<float>(static_cast<uint8_t>(scale) + 1)) * windSpeed / 100.0f;
+    }
+};
+
+class TornadoRegion {
+public:
+    explicit TornadoRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const TornadoEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] TornadoEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()    const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t violentCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isViolent()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name; }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string               m_name;
+    std::vector<TornadoEvent> m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class TornadoSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    TornadoRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] TornadoRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount() const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()   const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t violentEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.violentCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()    const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+
+private:
+    std::vector<TornadoRegion> m_regions;
+    size_t                     m_tickCount = 0;
+};
+
+// ── G55 — Dust Storm System ───────────────────────────────────────
+
+enum class DustDensity : uint8_t {
+    Trace, Light, Moderate, Heavy, Extreme
+};
+
+inline const char* dustDensityName(DustDensity d) {
+    switch (d) {
+        case DustDensity::Trace:    return "Trace";
+        case DustDensity::Light:    return "Light";
+        case DustDensity::Moderate: return "Moderate";
+        case DustDensity::Heavy:    return "Heavy";
+        case DustDensity::Extreme:  return "Extreme";
+    }
+    return "Unknown";
+}
+
+enum class DustStormPhase : uint8_t {
+    Forming, Advancing, Peak, Retreating, Clearing
+};
+
+inline const char* dustStormPhaseName(DustStormPhase p) {
+    switch (p) {
+        case DustStormPhase::Forming:    return "Forming";
+        case DustStormPhase::Advancing:  return "Advancing";
+        case DustStormPhase::Peak:       return "Peak";
+        case DustStormPhase::Retreating: return "Retreating";
+        case DustStormPhase::Clearing:   return "Clearing";
+    }
+    return "Unknown";
+}
+
+struct DustStormEvent {
+    std::string    id;
+    DustDensity    density   = DustDensity::Light;
+    DustStormPhase phase     = DustStormPhase::Forming;
+    float          windSpeed = 0.0f;
+    float          visibility = 1000.0f; // metres
+    bool           active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isHazardous() const {
+        return static_cast<uint8_t>(density) >= static_cast<uint8_t>(DustDensity::Heavy);
+    }
+    [[nodiscard]] bool isAtPeak() const { return phase == DustStormPhase::Peak; }
+    [[nodiscard]] bool isLowVisibility() const { return visibility < 200.0f; }
+    [[nodiscard]] float hazardScore() const {
+        return (static_cast<float>(static_cast<uint8_t>(density) + 1)) * windSpeed / 50.0f;
+    }
+};
+
+class DustStormRegion {
+public:
+    explicit DustStormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const DustStormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] DustStormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()     const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t hazardousCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isHazardous()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+    [[nodiscard]] size_t lowVisCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isLowVisibility()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                  m_name;
+    std::vector<DustStormEvent>  m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class DustStormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    DustStormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] DustStormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()      const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount;      }
+    [[nodiscard]] size_t activeEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t hazardousEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.hazardousCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+
+private:
+    std::vector<DustStormRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
+// ── G56 — Hail Storm System ───────────────────────────────────────
+
+enum class HailSize : uint8_t {
+    Pea, Marble, Golf, Baseball, Grapefruit
+};
+
+inline const char* hailSizeName(HailSize h) {
+    switch (h) {
+        case HailSize::Pea:        return "Pea";
+        case HailSize::Marble:     return "Marble";
+        case HailSize::Golf:       return "Golf";
+        case HailSize::Baseball:   return "Baseball";
+        case HailSize::Grapefruit: return "Grapefruit";
+    }
+    return "Unknown";
+}
+
+enum class HailStormPhase : uint8_t {
+    Developing, Intensifying, Peak, Weakening, Dissipating
+};
+
+inline const char* hailStormPhaseName(HailStormPhase p) {
+    switch (p) {
+        case HailStormPhase::Developing:  return "Developing";
+        case HailStormPhase::Intensifying:return "Intensifying";
+        case HailStormPhase::Peak:        return "Peak";
+        case HailStormPhase::Weakening:   return "Weakening";
+        case HailStormPhase::Dissipating: return "Dissipating";
+    }
+    return "Unknown";
+}
+
+struct HailStormEvent {
+    std::string     id;
+    HailSize        hailSize  = HailSize::Pea;
+    HailStormPhase  phase     = HailStormPhase::Developing;
+    float           intensity = 0.0f;   // 0–100
+    float           coverage  = 0.0f;   // km²
+    bool            active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()     const {
+        return static_cast<uint8_t>(hailSize) >= static_cast<uint8_t>(HailSize::Golf);
+    }
+    [[nodiscard]] bool isAtPeak()     const { return phase == HailStormPhase::Peak; }
+    [[nodiscard]] bool isWidespread() const { return coverage >= 500.0f; }
+    [[nodiscard]] float damageScore() const {
+        return (static_cast<float>(static_cast<uint8_t>(hailSize) + 1)) * intensity / 100.0f;
+    }
+};
+
+class HailStormRegion {
+public:
+    explicit HailStormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const HailStormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] HailStormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()      const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere()) ++c; return c;
+    }
+    [[nodiscard]] size_t peakCount()       const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isAtPeak()) ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                  m_name;
+    std::vector<HailStormEvent>  m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class HailStormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    HailStormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] HailStormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()       const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()         const { return m_tickCount;      }
+    [[nodiscard]] size_t activeEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount(); return c;
+    }
+    [[nodiscard]] size_t severeEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount(); return c;
+    }
+    [[nodiscard]] size_t peakEventCount()    const {
+        size_t c = 0; for (auto& r : m_regions) c += r.peakCount(); return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount(); return c;
+    }
+
+private:
+    std::vector<HailStormRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
+// ── G57 — Ice Storm System ────────────────────────────────────────
+
+enum class IceThickness : uint8_t {
+    Glaze, Light, Moderate, Heavy, Extreme
+};
+
+inline const char* iceThicknessName(IceThickness t) {
+    switch (t) {
+        case IceThickness::Glaze:    return "Glaze";
+        case IceThickness::Light:    return "Light";
+        case IceThickness::Moderate: return "Moderate";
+        case IceThickness::Heavy:    return "Heavy";
+        case IceThickness::Extreme:  return "Extreme";
+    }
+    return "Unknown";
+}
+
+enum class IceStormPhase : uint8_t {
+    Forming, Spreading, Intensifying, Freezing, Dissipating
+};
+
+inline const char* iceStormPhaseName(IceStormPhase p) {
+    switch (p) {
+        case IceStormPhase::Forming:      return "Forming";
+        case IceStormPhase::Spreading:    return "Spreading";
+        case IceStormPhase::Intensifying: return "Intensifying";
+        case IceStormPhase::Freezing:     return "Freezing";
+        case IceStormPhase::Dissipating:  return "Dissipating";
+    }
+    return "Unknown";
+}
+
+struct IceStormEvent {
+    std::string    id;
+    IceThickness   thickness = IceThickness::Glaze;
+    IceStormPhase  phase     = IceStormPhase::Forming;
+    float          intensity = 0.0f;   // 0–100
+    float          coverage  = 0.0f;   // km²
+    bool           active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()      const {
+        return static_cast<uint8_t>(thickness) >= static_cast<uint8_t>(IceThickness::Heavy);
+    }
+    [[nodiscard]] bool isFreezing()    const { return phase == IceStormPhase::Freezing;     }
+    [[nodiscard]] bool isWidespread()  const { return coverage >= 400.0f;                   }
+    [[nodiscard]] float hazardScore()  const {
+        return (static_cast<float>(static_cast<uint8_t>(thickness) + 1)) * intensity / 100.0f;
+    }
+};
+
+class IceStormRegion {
+public:
+    explicit IceStormRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const IceStormEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] IceStormEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    [[nodiscard]] size_t eventCount()      const { return m_events.size(); }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active) ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())     ++c; return c;
+    }
+    [[nodiscard]] size_t freezingCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isFreezing())   ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread()) ++c; return c;
+    }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()      const { return m_name;      }
+    [[nodiscard]] size_t             tickCount() const { return m_tickCount; }
+
+private:
+    std::string                 m_name;
+    std::vector<IceStormEvent>  m_events;
+    size_t                      m_tickCount = 0;
+};
+
+class IceStormSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    IceStormRegion* createRegion(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+
+    [[nodiscard]] IceStormRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount;      }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();     return c;
+    }
+    [[nodiscard]] size_t severeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();     return c;
+    }
+    [[nodiscard]] size_t freezingEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.freezingCount();   return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount(); return c;
+    }
+
+private:
+    std::vector<IceStormRegion> m_regions;
+    size_t                      m_tickCount = 0;
+};
+
 } // namespace NF
