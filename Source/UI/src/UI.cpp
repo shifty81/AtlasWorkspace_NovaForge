@@ -4,10 +4,18 @@
 namespace NF {
 
 void UIRenderer::endFrame() {
-    // Flush batched geometry to the active backend (if any).
+    // 1. Flush batched geometry to the active backend (if any).
     if (m_backend && !m_vertices.empty()) {
         m_backend->flush(m_vertices.data(), m_vertices.size(),
                          m_indices.data(), m_indices.size());
+    }
+    // 2. Flush text commands after geometry so glyphs appear on top of
+    //    background rectangles.  The backend renders actual text via its
+    //    drawText() override (e.g. GDIBackend uses TextOutA).
+    if (m_backend) {
+        for (const auto& tc : m_textCmds) {
+            m_backend->drawText(tc.x, tc.y, tc.text, tc.color);
+        }
     }
     m_lastFrameQuadCount = m_quadCount;
     m_lastFrameTextCount = m_textDrawCount;

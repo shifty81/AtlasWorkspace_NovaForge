@@ -1,5 +1,5 @@
 #pragma once
-// NF::UI — Custom 2D renderer (quad batching + stb_easy_font). No ImGui.
+// NF::UI — Custom 2D renderer (quad batching + native text). No ImGui.
 #include "NF/Core/Core.h"
 
 namespace NF {
@@ -10,6 +10,15 @@ class UIBackend;
 struct UIVertex {
     Vec2 position;
     Vec2 uv;
+    uint32_t color = 0xFFFFFFFF;
+};
+
+// Text draw command stored separately from geometry so the backend can render
+// actual glyphs (e.g. via TextOutA on Win32) instead of coloured rectangles.
+struct UITextCmd {
+    float    x     = 0.f;
+    float    y     = 0.f;
+    std::string text;
     uint32_t color = 0xFFFFFFFF;
 };
 
@@ -28,6 +37,7 @@ public:
         m_viewportH = viewportH;
         m_vertices.clear();
         m_indices.clear();
+        m_textCmds.clear();
         m_quadCount = 0;
         m_textDrawCount = 0;
     }
@@ -57,17 +67,10 @@ public:
     }
 
     void drawText(float x, float y, std::string_view text, uint32_t color = 0xFFFFFFFF) {
-        constexpr float kCharWidth = 8.f;
-        constexpr float kCharHeight = 14.f;
-        float cx = x;
-        for (char ch : text) {
-            if (ch == '\n') { cx = x; y += kCharHeight + 2.f; continue; }
-            if (ch == ' ')  { cx += kCharWidth; continue; }
-
-            Rect charRect{cx, y, kCharWidth, kCharHeight};
-            drawRect(charRect, color);
-            cx += kCharWidth;
-        }
+        // Store as a text command so the backend can render actual glyphs.
+        // Previously this loop drew one solid rectangle per character, which
+        // caused every character to appear as a coloured square on screen.
+        m_textCmds.push_back({x, y, std::string(text), color});
         ++m_textDrawCount;
     }
 
@@ -161,6 +164,7 @@ public:
     // ── Queries ──────────────────────────────────────────────────
     [[nodiscard]] const std::vector<UIVertex>& vertices() const { return m_vertices; }
     [[nodiscard]] const std::vector<uint32_t>& indices() const { return m_indices; }
+    [[nodiscard]] const std::vector<UITextCmd>& textCmds() const { return m_textCmds; }
     [[nodiscard]] size_t quadCount() const { return m_lastFrameQuadCount; }
     [[nodiscard]] size_t textDrawCount() const { return m_lastFrameTextCount; }
     [[nodiscard]] float viewportWidth() const { return m_viewportW; }
@@ -174,6 +178,7 @@ private:
     float m_viewportW = 0.f, m_viewportH = 0.f;
     std::vector<UIVertex> m_vertices;
     std::vector<uint32_t> m_indices;
+    std::vector<UITextCmd> m_textCmds;
     size_t m_quadCount = 0;
     size_t m_textDrawCount = 0;
     size_t m_lastFrameQuadCount = 0;
