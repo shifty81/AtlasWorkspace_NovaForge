@@ -2324,3 +2324,51 @@ Total: 1600 tests, 0 failures (1576 existing + 14 S25 + 10 G44 = 1600).
 ## Build Verification ✅
 
 Total: 1624 tests, 0 failures (1600 existing + 14 S26 + 10 G45 = 1624).
+
+---
+
+## S27 — Theme Manager ✅
+
+- [x] ThemeMode enum ×4 (Light, Dark, HighContrast, Custom)
+  - themeModeName() for all 4 modes
+- [x] ThemeColor enum ×8 (Background, Foreground, Primary, Secondary, Accent, Border, Error, Warning)
+  - themeColorName() for all 8 colors
+- [x] ThemeToken struct (key, value, mode)
+  - matches(ThemeMode), update(newValue)
+- [x] Theme struct (name, mode, version, tokens)
+  - addToken (duplicate key rejected), removeToken, findToken
+  - tokenCount, mode, bumpVersion
+- [x] ThemeManager class — registry with active theme (max 32)
+  - addTheme (duplicate/full rejected), removeTheme, setActive
+  - active, find, themeCount, hasActive, applyMode
+- [x] 14 new editor tests (test_s27_editor.cpp), all passing
+
+## S27 Complete ✅
+
+---
+
+## G46 — Epidemic System ✅
+
+- [x] EpidemicType enum ×8 (Viral, Bacterial, Fungal, Parasitic, Prion, Zoonotic, Waterborne, Airborne)
+  - epidemicTypeName() for all 8 types
+- [x] EpidemicPhase enum ×5 (Outbreak, Epidemic, Endemic, Pandemic, Resolved)
+  - epidemicPhaseName() for all 5 phases
+- [x] EpidemicVector struct (id, infectedCount, populationSize, active)
+  - infect (clamps to populationSize), recover (clamps to 0), activate, deactivate
+  - infectionRate, isContained (< 5%), isCritical (>= 50%)
+- [x] EpidemicZone class — per-zone epidemic state + vector list
+  - setType, setPhase, addVector (duplicate id rejected)
+  - infectAll, recoverAll, vectorCount, criticalCount
+  - name, type, phase, isContained (all vectors contained), tick
+- [x] EpidemicSystem — multi-zone coordinator (max 64)
+  - createZone (duplicate/full rejected), byName, tick propagation
+  - zoneCount, tickCount, criticalZoneCount, containedZoneCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G46 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 1648 tests, 0 failures (1624 existing + 14 S27 + 10 G46 = 1648).

@@ -9912,4 +9912,147 @@ private:
     size_t                   m_tickCount = 0;
 };
 
+// ============================================================
+// G46 — Epidemic System
+// ============================================================
+
+enum class EpidemicType : uint8_t { Viral, Bacterial, Fungal, Parasitic, Prion, Zoonotic, Waterborne, Airborne };
+
+inline const char* epidemicTypeName(EpidemicType t) {
+    switch (t) {
+        case EpidemicType::Viral:      return "Viral";
+        case EpidemicType::Bacterial:  return "Bacterial";
+        case EpidemicType::Fungal:     return "Fungal";
+        case EpidemicType::Parasitic:  return "Parasitic";
+        case EpidemicType::Prion:      return "Prion";
+        case EpidemicType::Zoonotic:   return "Zoonotic";
+        case EpidemicType::Waterborne: return "Waterborne";
+        case EpidemicType::Airborne:   return "Airborne";
+        default:                       return "Unknown";
+    }
+}
+
+enum class EpidemicPhase : uint8_t { Outbreak, Epidemic, Endemic, Pandemic, Resolved };
+
+inline const char* epidemicPhaseName(EpidemicPhase p) {
+    switch (p) {
+        case EpidemicPhase::Outbreak:  return "Outbreak";
+        case EpidemicPhase::Epidemic:  return "Epidemic";
+        case EpidemicPhase::Endemic:   return "Endemic";
+        case EpidemicPhase::Pandemic:  return "Pandemic";
+        case EpidemicPhase::Resolved:  return "Resolved";
+        default:                       return "Unknown";
+    }
+}
+
+struct EpidemicVector {
+    std::string id;
+    size_t      infectedCount  = 0;
+    size_t      populationSize = 1000;
+    bool        active         = false;
+
+    void infect(size_t count) {
+        infectedCount = (infectedCount + count > populationSize) ? populationSize : infectedCount + count;
+    }
+
+    void recover(size_t count) {
+        infectedCount = (count > infectedCount) ? 0 : infectedCount - count;
+    }
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] float infectionRate() const {
+        if (populationSize == 0) return 0.f;
+        return static_cast<float>(infectedCount) / static_cast<float>(populationSize);
+    }
+
+    [[nodiscard]] bool isContained() const { return infectionRate() < 0.05f; }
+    [[nodiscard]] bool isCritical()  const { return infectionRate() >= 0.5f; }
+};
+
+class EpidemicZone {
+public:
+    explicit EpidemicZone(const std::string& name) : m_name(name) {}
+
+    void setType(EpidemicType t)   { m_type  = t; }
+    void setPhase(EpidemicPhase p) { m_phase = p; }
+
+    bool addVector(EpidemicVector v) {
+        for (auto& existing : m_vectors) if (existing.id == v.id) return false;
+        m_vectors.push_back(std::move(v));
+        return true;
+    }
+
+    void infectAll(size_t count)  { for (auto& v : m_vectors) v.infect(count);  }
+    void recoverAll(size_t count) { for (auto& v : m_vectors) v.recover(count); }
+
+    [[nodiscard]] size_t vectorCount() const { return m_vectors.size(); }
+
+    [[nodiscard]] size_t criticalCount() const {
+        size_t c = 0;
+        for (auto& v : m_vectors) if (v.isCritical()) c++;
+        return c;
+    }
+
+    [[nodiscard]] const std::string& name()  const { return m_name;  }
+    [[nodiscard]] EpidemicType       type()  const { return m_type;  }
+    [[nodiscard]] EpidemicPhase      phase() const { return m_phase; }
+
+    [[nodiscard]] bool isContained() const {
+        for (auto& v : m_vectors) if (!v.isContained()) return false;
+        return true;
+    }
+
+    void tick() { m_tickCount++; }
+
+private:
+    std::string                 m_name;
+    EpidemicType                m_type      = EpidemicType::Viral;
+    EpidemicPhase               m_phase     = EpidemicPhase::Outbreak;
+    std::vector<EpidemicVector> m_vectors;
+    size_t                      m_tickCount = 0;
+};
+
+class EpidemicSystem {
+public:
+    static constexpr size_t MAX_ZONES = 64;
+
+    EpidemicZone* createZone(const std::string& name) {
+        if (m_zones.size() >= MAX_ZONES) return nullptr;
+        for (auto& z : m_zones) if (z.name() == name) return nullptr;
+        m_zones.emplace_back(name);
+        return &m_zones.back();
+    }
+
+    [[nodiscard]] EpidemicZone* byName(const std::string& name) {
+        for (auto& z : m_zones) if (z.name() == name) return &z;
+        return nullptr;
+    }
+
+    void tick() {
+        for (auto& z : m_zones) z.tick();
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t zoneCount()  const { return m_zones.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount;    }
+
+    [[nodiscard]] size_t criticalZoneCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.criticalCount() > 0) c++;
+        return c;
+    }
+
+    [[nodiscard]] size_t containedZoneCount() const {
+        size_t c = 0;
+        for (auto& z : m_zones) if (z.isContained()) c++;
+        return c;
+    }
+
+private:
+    std::vector<EpidemicZone> m_zones;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF

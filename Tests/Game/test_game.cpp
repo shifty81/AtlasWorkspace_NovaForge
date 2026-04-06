@@ -7857,3 +7857,124 @@ TEST_CASE("DroughtSystem criticalCount and tick", "[Game][G45][Drought]") {
     sys.tick(); sys.tick();
     REQUIRE(sys.tickCount() == 2);
 }
+
+TEST_CASE("EpidemicType names cover all 8 values", "[Game][G46][Epidemic]") {
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Viral))      == "Viral");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Bacterial))  == "Bacterial");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Fungal))     == "Fungal");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Parasitic))  == "Parasitic");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Prion))      == "Prion");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Zoonotic))   == "Zoonotic");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Waterborne)) == "Waterborne");
+    REQUIRE(std::string(NF::epidemicTypeName(NF::EpidemicType::Airborne))   == "Airborne");
+}
+
+TEST_CASE("EpidemicPhase names cover all 5 values", "[Game][G46][Epidemic]") {
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Outbreak))  == "Outbreak");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Epidemic))  == "Epidemic");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Endemic))   == "Endemic");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Pandemic))  == "Pandemic");
+    REQUIRE(std::string(NF::epidemicPhaseName(NF::EpidemicPhase::Resolved))  == "Resolved");
+}
+
+TEST_CASE("EpidemicVector infect clamps to populationSize", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v1"; v.populationSize = 100;
+
+    v.infect(60);
+    REQUIRE(v.infectedCount == 60);
+    v.infect(60); // would exceed 100
+    REQUIRE(v.infectedCount == 100);
+}
+
+TEST_CASE("EpidemicVector recover clamps to 0", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v2"; v.populationSize = 100;
+
+    v.infect(40);
+    v.recover(20);
+    REQUIRE(v.infectedCount == 20);
+    v.recover(50); // would go below 0
+    REQUIRE(v.infectedCount == 0);
+}
+
+TEST_CASE("EpidemicVector infectionRate calculation", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v3"; v.populationSize = 1000;
+
+    v.infect(500);
+    REQUIRE(v.infectionRate() == Catch::Approx(0.5f));
+
+    NF::EpidemicVector empty;
+    empty.id = "v4"; empty.populationSize = 0;
+    REQUIRE(empty.infectionRate() == Catch::Approx(0.f));
+}
+
+TEST_CASE("EpidemicVector isContained and isCritical thresholds", "[Game][G46][Epidemic]") {
+    NF::EpidemicVector v;
+    v.id = "v5"; v.populationSize = 1000;
+
+    REQUIRE(v.isContained());  // 0% < 5%
+    REQUIRE_FALSE(v.isCritical());
+
+    v.infect(500);
+    REQUIRE_FALSE(v.isContained());
+    REQUIRE(v.isCritical()); // 50% >= 50%
+}
+
+TEST_CASE("EpidemicZone addVector and duplicate rejection", "[Game][G46][Epidemic]") {
+    NF::EpidemicZone zone("test-zone");
+
+    NF::EpidemicVector a; a.id = "vec-a";
+    NF::EpidemicVector b; b.id = "vec-b";
+    NF::EpidemicVector dup; dup.id = "vec-a";
+
+    REQUIRE(zone.addVector(a));
+    REQUIRE(zone.addVector(b));
+    REQUIRE_FALSE(zone.addVector(dup));
+    REQUIRE(zone.vectorCount() == 2);
+}
+
+TEST_CASE("EpidemicZone infectAll and recoverAll", "[Game][G46][Epidemic]") {
+    NF::EpidemicZone zone("spread-zone");
+
+    NF::EpidemicVector a; a.id = "a"; a.populationSize = 100;
+    NF::EpidemicVector b; b.id = "b"; b.populationSize = 200;
+    zone.addVector(a);
+    zone.addVector(b);
+
+    // infect all, then verify criticalCount
+    zone.infectAll(600); // clamps both to their population size
+    REQUIRE(zone.criticalCount() == 2); // both at 100% >= 50% threshold
+
+    zone.recoverAll(1000); // clamp both back to 0
+    REQUIRE(zone.criticalCount() == 0);
+}
+
+TEST_CASE("EpidemicSystem createZone and duplicate rejection", "[Game][G46][Epidemic]") {
+    NF::EpidemicSystem sys;
+    REQUIRE(sys.createZone("zone-1") != nullptr);
+    REQUIRE(sys.createZone("zone-2") != nullptr);
+    REQUIRE(sys.createZone("zone-1") == nullptr); // duplicate
+    REQUIRE(sys.zoneCount() == 2);
+}
+
+TEST_CASE("EpidemicSystem criticalZoneCount and containedZoneCount", "[Game][G46][Epidemic]") {
+    NF::EpidemicSystem sys;
+    sys.createZone("z1");
+    sys.createZone("z2");
+
+    NF::EpidemicVector cv; cv.id = "cv1"; cv.populationSize = 100;
+    cv.infect(80); // 80% — critical
+    sys.byName("z1")->addVector(cv);
+
+    NF::EpidemicVector sv; sv.id = "sv1"; sv.populationSize = 100;
+    // no infection — contained
+    sys.byName("z2")->addVector(sv);
+
+    REQUIRE(sys.criticalZoneCount()   == 1);
+    REQUIRE(sys.containedZoneCount()  == 1);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount() == 2);
+}

@@ -75,7 +75,8 @@
 | **G43** — Flood System | FloodType×8, FloodSeverity×5, FloodWaterLevel, FloodZone, FloodSystem | ✅ Done |
 | **G44** — Landslide System | LandslideType×8, LandslideSeverity×5, LandslideDebrisFlow, LandslideZone, LandslideSystem | ✅ Done |
 | **G45** — Drought System | DroughtType×8, DroughtIntensity×5, DroughtRegion, DroughtZone, DroughtSystem | ✅ Done |
-| **G46** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G46** — Epidemic System | EpidemicType×8, EpidemicPhase×5, EpidemicVector, EpidemicZone, EpidemicSystem | ✅ Done |
+| **G47** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -132,7 +133,8 @@
 | **S24** — Notification System | NotificationSeverity×8, NotificationState×4, Notification, NotificationChannel, NotificationSystem | ✅ Done |
 | **S25** — Undo/Redo System | UndoActionType×8, UndoActionState×4, UndoAction, UndoGroup, UndoRedoSystem | ✅ Done |
 | **S26** — Command Palette | CommandPaletteCategory×8, CommandPaletteState×4, PaletteCommand, PaletteCommandGroup, CommandPalette | ✅ Done |
-| **S27** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S27** — Theme Manager | ThemeMode×4, ThemeColor×8, ThemeToken, Theme, ThemeManager | ✅ Done |
+| **S28** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
