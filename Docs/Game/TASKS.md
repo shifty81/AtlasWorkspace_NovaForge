@@ -1641,7 +1641,7 @@ Total: 1322 tests, 0 failures (1303 existing + 19 new = 1322).
 
 ## S15 — Scripting Console ✅
 
-- [x] ScriptLanguage enum ×8 (Lua, Python, JavaScript, TypeScript, Bash, Ruby, Csharp, DSL)
+- [x] ScriptLanguage enum ×8 (Lua, Python, JavaScript, TypeScript, Bash, Ruby, CSharp, DSL)
   - scriptLanguageName() for all 8 languages
 - [x] ScriptVariable struct (name, value, typeName, readOnly)
   - isValid(), isReadOnly(), set(value) with readonly guard

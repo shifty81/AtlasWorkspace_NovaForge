@@ -7089,7 +7089,7 @@ enum class ScriptLanguage : uint8_t {
     TypeScript = 3,
     Bash       = 4,
     Ruby       = 5,
-    Csharp     = 6,
+    CSharp     = 6,
     DSL        = 7
 };
 
@@ -7101,7 +7101,7 @@ inline const char* scriptLanguageName(ScriptLanguage lang) {
         case ScriptLanguage::TypeScript: return "TypeScript";
         case ScriptLanguage::Bash:       return "Bash";
         case ScriptLanguage::Ruby:       return "Ruby";
-        case ScriptLanguage::Csharp:     return "Csharp";
+        case ScriptLanguage::CSharp:     return "CSharp";
         case ScriptLanguage::DSL:        return "DSL";
         default:                         return "Unknown";
     }

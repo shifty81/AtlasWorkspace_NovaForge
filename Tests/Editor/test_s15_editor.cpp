@@ -12,7 +12,7 @@ TEST_CASE("ScriptLanguage names", "[Editor][S15]") {
     REQUIRE(std::string(scriptLanguageName(ScriptLanguage::TypeScript)) == "TypeScript");
     REQUIRE(std::string(scriptLanguageName(ScriptLanguage::Bash))       == "Bash");
     REQUIRE(std::string(scriptLanguageName(ScriptLanguage::Ruby))       == "Ruby");
-    REQUIRE(std::string(scriptLanguageName(ScriptLanguage::Csharp))     == "Csharp");
+    REQUIRE(std::string(scriptLanguageName(ScriptLanguage::CSharp))     == "CSharp");
     REQUIRE(std::string(scriptLanguageName(ScriptLanguage::DSL))        == "DSL");
 }
 
