@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <set>
+#include <map>
 #include <deque>
 
 namespace NF {
@@ -5613,6 +5614,663 @@ private:
     bool m_initialized = false;
     size_t m_tickCount = 0;
     float m_tickAccumulator = 0.f;
+};
+
+// ── S10 — Performance Profiler ───────────────────────────────────
+
+enum class ProfileMetricType : uint8_t {
+    FrameTime,
+    CpuUsage,
+    GpuUsage,
+    MemoryAlloc,
+    DrawCalls,
+    TriangleCount,
+    ScriptTime,
+    NetworkLatency
+};
+
+inline const char* profileMetricTypeName(ProfileMetricType t) noexcept {
+    switch (t) {
+        case ProfileMetricType::FrameTime:       return "FrameTime";
+        case ProfileMetricType::CpuUsage:        return "CpuUsage";
+        case ProfileMetricType::GpuUsage:        return "GpuUsage";
+        case ProfileMetricType::MemoryAlloc:     return "MemoryAlloc";
+        case ProfileMetricType::DrawCalls:        return "DrawCalls";
+        case ProfileMetricType::TriangleCount:   return "TriangleCount";
+        case ProfileMetricType::ScriptTime:      return "ScriptTime";
+        case ProfileMetricType::NetworkLatency:  return "NetworkLatency";
+        default:                                  return "Unknown";
+    }
+}
+
+struct ProfileSample {
+    ProfileMetricType type = ProfileMetricType::FrameTime;
+    float value = 0.f;
+    double timestamp = 0.0;
+    std::string tag;
+
+    [[nodiscard]] bool hasTag() const { return !tag.empty(); }
+};
+
+struct ProfileSession {
+    std::string name;
+    double startTime = 0.0;
+    double endTime = 0.0;
+    bool active = false;
+    size_t sampleCount = 0;
+
+    void start(double time) { startTime = time; active = true; sampleCount = 0; }
+    void stop(double time) { endTime = time; active = false; }
+    [[nodiscard]] double duration() const { return active ? 0.0 : endTime - startTime; }
+    [[nodiscard]] bool isActive() const { return active; }
+};
+
+class FrameProfiler {
+public:
+    void beginFrame(double timestamp) {
+        m_frameStart = timestamp;
+        m_inFrame = true;
+    }
+
+    void endFrame(double timestamp) {
+        if (!m_inFrame) return;
+        float frameDuration = static_cast<float>(timestamp - m_frameStart);
+        ProfileSample sample;
+        sample.type = ProfileMetricType::FrameTime;
+        sample.value = frameDuration;
+        sample.timestamp = timestamp;
+        if (m_samples.size() < kMaxSamples) {
+            m_samples.push_back(sample);
+        }
+        m_totalFrames++;
+        m_totalFrameTime += frameDuration;
+        if (frameDuration > m_peakFrameTime) m_peakFrameTime = frameDuration;
+        m_inFrame = false;
+    }
+
+    void recordMetric(ProfileMetricType type, float value, double timestamp,
+                      const std::string& tag = "") {
+        ProfileSample sample;
+        sample.type = type;
+        sample.value = value;
+        sample.timestamp = timestamp;
+        sample.tag = tag;
+        if (m_samples.size() < kMaxSamples) {
+            m_samples.push_back(sample);
+        }
+    }
+
+    [[nodiscard]] const std::vector<ProfileSample>& samples() const { return m_samples; }
+    [[nodiscard]] size_t sampleCount() const { return m_samples.size(); }
+    [[nodiscard]] size_t totalFrames() const { return m_totalFrames; }
+
+    [[nodiscard]] float averageFrameTime() const {
+        return m_totalFrames > 0 ? m_totalFrameTime / static_cast<float>(m_totalFrames) : 0.f;
+    }
+
+    [[nodiscard]] float peakFrameTime() const { return m_peakFrameTime; }
+
+    [[nodiscard]] std::vector<ProfileSample> samplesByType(ProfileMetricType type) const {
+        std::vector<ProfileSample> result;
+        for (const auto& s : m_samples) {
+            if (s.type == type) result.push_back(s);
+        }
+        return result;
+    }
+
+    void clear() {
+        m_samples.clear();
+        m_totalFrames = 0;
+        m_totalFrameTime = 0.f;
+        m_peakFrameTime = 0.f;
+        m_inFrame = false;
+    }
+
+    static constexpr size_t kMaxSamples = 4096;
+
+private:
+    std::vector<ProfileSample> m_samples;
+    size_t m_totalFrames = 0;
+    float m_totalFrameTime = 0.f;
+    float m_peakFrameTime = 0.f;
+    double m_frameStart = 0.0;
+    bool m_inFrame = false;
+};
+
+class MemoryProfiler {
+public:
+    void trackAllocation(size_t bytes, const std::string& tag = "") {
+        m_currentUsage += bytes;
+        m_allocationCount++;
+        m_totalAllocated += bytes;
+        if (m_currentUsage > m_peakUsage) m_peakUsage = m_currentUsage;
+        if (!tag.empty()) m_taggedUsage[tag] += bytes;
+    }
+
+    void trackFree(size_t bytes, const std::string& tag = "") {
+        m_currentUsage = (bytes > m_currentUsage) ? 0 : m_currentUsage - bytes;
+        m_freeCount++;
+        if (!tag.empty()) {
+            auto it = m_taggedUsage.find(tag);
+            if (it != m_taggedUsage.end()) {
+                it->second = (bytes > it->second) ? 0 : it->second - bytes;
+            }
+        }
+    }
+
+    [[nodiscard]] size_t currentUsage() const { return m_currentUsage; }
+    [[nodiscard]] size_t peakUsage() const { return m_peakUsage; }
+    [[nodiscard]] size_t allocationCount() const { return m_allocationCount; }
+    [[nodiscard]] size_t freeCount() const { return m_freeCount; }
+    [[nodiscard]] size_t totalAllocated() const { return m_totalAllocated; }
+
+    [[nodiscard]] size_t taggedUsage(const std::string& tag) const {
+        auto it = m_taggedUsage.find(tag);
+        return it != m_taggedUsage.end() ? it->second : 0;
+    }
+
+    void reset() {
+        m_currentUsage = 0;
+        m_peakUsage = 0;
+        m_allocationCount = 0;
+        m_freeCount = 0;
+        m_totalAllocated = 0;
+        m_taggedUsage.clear();
+    }
+
+private:
+    size_t m_currentUsage = 0;
+    size_t m_peakUsage = 0;
+    size_t m_allocationCount = 0;
+    size_t m_freeCount = 0;
+    size_t m_totalAllocated = 0;
+    std::map<std::string, size_t> m_taggedUsage;
+};
+
+struct ProfileMarker {
+    std::string label;
+    double timestamp = 0.0;
+    float duration = 0.f;
+    std::string category;
+
+    [[nodiscard]] double endTime() const { return timestamp + static_cast<double>(duration); }
+};
+
+class ProfilerTimeline {
+public:
+    void addMarker(const std::string& label, double timestamp, float duration,
+                   const std::string& category = "") {
+        if (m_markers.size() >= kMaxMarkers) return;
+        ProfileMarker m;
+        m.label = label;
+        m.timestamp = timestamp;
+        m.duration = duration;
+        m.category = category;
+        m_markers.push_back(m);
+    }
+
+    [[nodiscard]] std::vector<ProfileMarker> markersInRange(double start, double end) const {
+        std::vector<ProfileMarker> result;
+        for (const auto& m : m_markers) {
+            if (m.timestamp >= start && m.timestamp <= end) result.push_back(m);
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<ProfileMarker> markersByCategory(const std::string& category) const {
+        std::vector<ProfileMarker> result;
+        for (const auto& m : m_markers) {
+            if (m.category == category) result.push_back(m);
+        }
+        return result;
+    }
+
+    [[nodiscard]] size_t markerCount() const { return m_markers.size(); }
+    [[nodiscard]] const std::vector<ProfileMarker>& markers() const { return m_markers; }
+
+    void clear() { m_markers.clear(); }
+
+    static constexpr size_t kMaxMarkers = 2048;
+
+private:
+    std::vector<ProfileMarker> m_markers;
+};
+
+struct PerformanceProfilerConfig {
+    bool autoCapture = true;
+    size_t maxFrameSamples = 4096;
+    size_t maxTimelineMarkers = 2048;
+    float warningFrameTimeMs = 33.33f;
+    float criticalFrameTimeMs = 50.f;
+};
+
+class PerformanceProfiler {
+public:
+    void init(const PerformanceProfilerConfig& config = {}) {
+        m_config = config;
+        m_initialized = true;
+    }
+
+    void shutdown() {
+        m_frameProfiler.clear();
+        m_memoryProfiler.reset();
+        m_timeline.clear();
+        m_initialized = false;
+        m_sessionCount = 0;
+    }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+    void startSession(const std::string& name, double time) {
+        if (!m_initialized) return;
+        m_session.name = name;
+        m_session.start(time);
+        m_sessionCount++;
+    }
+
+    void stopSession(double time) {
+        if (!m_initialized || !m_session.isActive()) return;
+        m_session.stop(time);
+    }
+
+    void beginFrame(double timestamp) {
+        if (!m_initialized) return;
+        m_frameProfiler.beginFrame(timestamp);
+    }
+
+    void endFrame(double timestamp) {
+        if (!m_initialized) return;
+        m_frameProfiler.endFrame(timestamp);
+    }
+
+    void recordMetric(ProfileMetricType type, float value, double timestamp,
+                      const std::string& tag = "") {
+        if (!m_initialized) return;
+        m_frameProfiler.recordMetric(type, value, timestamp, tag);
+    }
+
+    void trackAllocation(size_t bytes, const std::string& tag = "") {
+        if (!m_initialized) return;
+        m_memoryProfiler.trackAllocation(bytes, tag);
+    }
+
+    void trackFree(size_t bytes, const std::string& tag = "") {
+        if (!m_initialized) return;
+        m_memoryProfiler.trackFree(bytes, tag);
+    }
+
+    void addTimelineMarker(const std::string& label, double timestamp, float duration,
+                           const std::string& category = "") {
+        if (!m_initialized) return;
+        m_timeline.addMarker(label, timestamp, duration, category);
+    }
+
+    void tick(float /*dt*/) {
+        if (!m_initialized) return;
+        m_tickCount++;
+    }
+
+    [[nodiscard]] const FrameProfiler& frameProfiler() const { return m_frameProfiler; }
+    [[nodiscard]] const MemoryProfiler& memoryProfiler() const { return m_memoryProfiler; }
+    [[nodiscard]] const ProfilerTimeline& timeline() const { return m_timeline; }
+    [[nodiscard]] const ProfileSession& session() const { return m_session; }
+    [[nodiscard]] const PerformanceProfilerConfig& config() const { return m_config; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+    [[nodiscard]] size_t sessionCount() const { return m_sessionCount; }
+    [[nodiscard]] size_t frameSampleCount() const { return m_frameProfiler.sampleCount(); }
+    [[nodiscard]] size_t memoryPeakBytes() const { return m_memoryProfiler.peakUsage(); }
+    [[nodiscard]] size_t timelineMarkerCount() const { return m_timeline.markerCount(); }
+
+private:
+    PerformanceProfilerConfig m_config;
+    FrameProfiler m_frameProfiler;
+    MemoryProfiler m_memoryProfiler;
+    ProfilerTimeline m_timeline;
+    ProfileSession m_session;
+    bool m_initialized = false;
+    size_t m_tickCount = 0;
+    size_t m_sessionCount = 0;
+};
+
+// ── S11 — Live Collaboration System ─────────────────────────────
+
+enum class CollabUserRole : uint8_t {
+    Owner,
+    Admin,
+    Editor,
+    Reviewer,
+    Viewer,
+    Builder,
+    Tester,
+    Guest
+};
+
+inline const char* collabUserRoleName(CollabUserRole r) noexcept {
+    switch (r) {
+        case CollabUserRole::Owner:    return "Owner";
+        case CollabUserRole::Admin:    return "Admin";
+        case CollabUserRole::Editor:   return "Editor";
+        case CollabUserRole::Reviewer: return "Reviewer";
+        case CollabUserRole::Viewer:   return "Viewer";
+        case CollabUserRole::Builder:  return "Builder";
+        case CollabUserRole::Tester:   return "Tester";
+        case CollabUserRole::Guest:    return "Guest";
+        default:                       return "Unknown";
+    }
+}
+
+struct CollabUser {
+    std::string userId;
+    std::string displayName;
+    CollabUserRole role = CollabUserRole::Guest;
+    bool connected = false;
+    double lastActivityTime = 0.0;
+
+    [[nodiscard]] bool canEdit() const {
+        return role == CollabUserRole::Owner ||
+               role == CollabUserRole::Admin ||
+               role == CollabUserRole::Editor;
+    }
+
+    [[nodiscard]] bool canReview() const {
+        return canEdit() || role == CollabUserRole::Reviewer;
+    }
+
+    [[nodiscard]] bool isConnected() const { return connected; }
+    void connect(double time) { connected = true; lastActivityTime = time; }
+    void disconnect() { connected = false; }
+    void touch(double time) { lastActivityTime = time; }
+};
+
+enum class CollabEditType : uint8_t {
+    Insert,
+    Delete,
+    Modify,
+    Move,
+    Rename,
+    Create,
+    Lock,
+    Unlock
+};
+
+inline const char* collabEditTypeName(CollabEditType t) noexcept {
+    switch (t) {
+        case CollabEditType::Insert:  return "Insert";
+        case CollabEditType::Delete:  return "Delete";
+        case CollabEditType::Modify:  return "Modify";
+        case CollabEditType::Move:    return "Move";
+        case CollabEditType::Rename:  return "Rename";
+        case CollabEditType::Create:  return "Create";
+        case CollabEditType::Lock:    return "Lock";
+        case CollabEditType::Unlock:  return "Unlock";
+        default:                      return "Unknown";
+    }
+}
+
+struct CollabEditAction {
+    std::string actionId;
+    std::string userId;
+    CollabEditType type = CollabEditType::Modify;
+    std::string targetPath;
+    std::string payload;
+    double timestamp = 0.0;
+    size_t sequenceNum = 0;
+    bool applied = false;
+    bool conflicted = false;
+
+    [[nodiscard]] bool isValid() const { return !actionId.empty() && !userId.empty() && !targetPath.empty(); }
+    void markApplied() { applied = true; }
+    void markConflicted() { conflicted = true; }
+};
+
+class CollabSession {
+public:
+    explicit CollabSession(const std::string& sessionName)
+        : m_name(sessionName) {}
+
+    bool addUser(const CollabUser& user) {
+        if (m_users.size() >= kMaxUsers) return false;
+        for (const auto& u : m_users) {
+            if (u.userId == user.userId) return false;
+        }
+        m_users.push_back(user);
+        return true;
+    }
+
+    bool removeUser(const std::string& userId) {
+        for (auto it = m_users.begin(); it != m_users.end(); ++it) {
+            if (it->userId == userId) {
+                m_users.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] CollabUser* findUser(const std::string& userId) {
+        for (auto& u : m_users) {
+            if (u.userId == userId) return &u;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const CollabUser* findUser(const std::string& userId) const {
+        for (const auto& u : m_users) {
+            if (u.userId == userId) return &u;
+        }
+        return nullptr;
+    }
+
+    bool submitAction(const CollabEditAction& action) {
+        if (!action.isValid()) return false;
+        auto* user = findUser(action.userId);
+        if (!user || !user->canEdit()) return false;
+        if (m_actions.size() >= kMaxActions) return false;
+
+        CollabEditAction a = action;
+        a.sequenceNum = m_nextSeqNum++;
+        a.applied = true;
+
+        // Check for conflicts on same path
+        for (const auto& existing : m_actions) {
+            if (existing.targetPath == a.targetPath && !existing.conflicted &&
+                existing.applied && existing.sequenceNum > 0 &&
+                existing.userId != a.userId) {
+                // Potential conflict detected if same path edited by different user recently
+                if (a.timestamp - existing.timestamp < m_conflictWindowSec) {
+                    a.markConflicted();
+                    m_conflictCount++;
+                    break;
+                }
+            }
+        }
+
+        m_actions.push_back(a);
+        user->touch(a.timestamp);
+        return true;
+    }
+
+    [[nodiscard]] size_t userCount() const { return m_users.size(); }
+    [[nodiscard]] size_t actionCount() const { return m_actions.size(); }
+    [[nodiscard]] size_t conflictCount() const { return m_conflictCount; }
+    [[nodiscard]] const std::string& name() const { return m_name; }
+    [[nodiscard]] const std::vector<CollabUser>& users() const { return m_users; }
+    [[nodiscard]] const std::vector<CollabEditAction>& actions() const { return m_actions; }
+
+    [[nodiscard]] size_t connectedCount() const {
+        size_t count = 0;
+        for (const auto& u : m_users) {
+            if (u.isConnected()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t editorCount() const {
+        size_t count = 0;
+        for (const auto& u : m_users) {
+            if (u.canEdit()) ++count;
+        }
+        return count;
+    }
+
+    void setConflictWindow(double seconds) { m_conflictWindowSec = seconds; }
+
+    static constexpr size_t kMaxUsers = 32;
+    static constexpr size_t kMaxActions = 4096;
+
+private:
+    std::string m_name;
+    std::vector<CollabUser> m_users;
+    std::vector<CollabEditAction> m_actions;
+    size_t m_nextSeqNum = 1;
+    size_t m_conflictCount = 0;
+    double m_conflictWindowSec = 2.0;
+};
+
+class CollabConflictResolver {
+public:
+    struct Resolution {
+        std::string actionId;
+        bool autoResolved = false;
+        std::string strategy;
+    };
+
+    Resolution resolve(const CollabEditAction& a, const CollabEditAction& b) {
+        Resolution res;
+        res.actionId = a.actionId;
+        m_totalResolutions++;
+
+        if (a.targetPath != b.targetPath) {
+            res.autoResolved = true;
+            res.strategy = "no_conflict";
+            m_autoResolved++;
+            return res;
+        }
+
+        // Same path — last-writer-wins if same edit type
+        if (a.type == b.type) {
+            res.autoResolved = true;
+            res.strategy = "last_writer_wins";
+            m_autoResolved++;
+            return res;
+        }
+
+        // Different types on same path — needs manual resolution
+        res.autoResolved = false;
+        res.strategy = "manual";
+        m_manualRequired++;
+        return res;
+    }
+
+    [[nodiscard]] size_t totalResolutions() const { return m_totalResolutions; }
+    [[nodiscard]] size_t autoResolved() const { return m_autoResolved; }
+    [[nodiscard]] size_t manualRequired() const { return m_manualRequired; }
+
+    void reset() {
+        m_totalResolutions = 0;
+        m_autoResolved = 0;
+        m_manualRequired = 0;
+    }
+
+private:
+    size_t m_totalResolutions = 0;
+    size_t m_autoResolved = 0;
+    size_t m_manualRequired = 0;
+};
+
+struct LiveCollabConfig {
+    std::string serverAddress = "localhost";
+    uint16_t port = 9090;
+    double heartbeatIntervalSec = 5.0;
+    double inactivityTimeoutSec = 300.0;
+    size_t maxSessions = 16;
+    size_t maxUsersPerSession = 32;
+};
+
+class LiveCollaborationSystem {
+public:
+    void init(const LiveCollabConfig& config = {}) {
+        m_config = config;
+        m_initialized = true;
+    }
+
+    void shutdown() {
+        m_sessions.clear();
+        m_initialized = false;
+        m_tickCount = 0;
+    }
+
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
+    int createSession(const std::string& sessionName) {
+        if (!m_initialized) return -1;
+        if (m_sessions.size() >= m_config.maxSessions) return -1;
+        for (const auto& s : m_sessions) {
+            if (s.name() == sessionName) return -1;
+        }
+        m_sessions.emplace_back(sessionName);
+        return static_cast<int>(m_sessions.size()) - 1;
+    }
+
+    [[nodiscard]] CollabSession* session(int index) {
+        if (index < 0 || index >= static_cast<int>(m_sessions.size())) return nullptr;
+        return &m_sessions[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] CollabSession* sessionByName(const std::string& name) {
+        for (auto& s : m_sessions) {
+            if (s.name() == name) return &s;
+        }
+        return nullptr;
+    }
+
+    bool joinSession(const std::string& sessionName, const CollabUser& user) {
+        auto* s = sessionByName(sessionName);
+        if (!s) return false;
+        return s->addUser(user);
+    }
+
+    bool leaveSession(const std::string& sessionName, const std::string& userId) {
+        auto* s = sessionByName(sessionName);
+        if (!s) return false;
+        return s->removeUser(userId);
+    }
+
+    void tick(float /*dt*/) {
+        if (!m_initialized) return;
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t sessionCount() const { return m_sessions.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+    [[nodiscard]] const LiveCollabConfig& config() const { return m_config; }
+    [[nodiscard]] CollabConflictResolver& resolver() { return m_resolver; }
+    [[nodiscard]] const CollabConflictResolver& resolver() const { return m_resolver; }
+
+    [[nodiscard]] size_t totalConnectedUsers() const {
+        size_t count = 0;
+        for (const auto& s : m_sessions) count += s.connectedCount();
+        return count;
+    }
+
+    [[nodiscard]] size_t totalActions() const {
+        size_t count = 0;
+        for (const auto& s : m_sessions) count += s.actionCount();
+        return count;
+    }
+
+    [[nodiscard]] size_t totalConflicts() const {
+        size_t count = 0;
+        for (const auto& s : m_sessions) count += s.conflictCount();
+        return count;
+    }
+
+private:
+    LiveCollabConfig m_config;
+    std::vector<CollabSession> m_sessions;
+    CollabConflictResolver m_resolver;
+    bool m_initialized = false;
+    size_t m_tickCount = 0;
 };
 
 } // namespace NF

@@ -7088,4 +7088,262 @@ private:
     size_t m_tickCount = 0;
 };
 
+// ── G30 — Espionage System ───────────────────────────────────────
+
+enum class EspionageMissionType : uint8_t {
+    Infiltration,
+    Sabotage,
+    Surveillance,
+    DataTheft,
+    Assassination,
+    Recruitment,
+    CounterIntel,
+    Extraction
+};
+
+inline const char* espionageMissionTypeName(EspionageMissionType t) noexcept {
+    switch (t) {
+        case EspionageMissionType::Infiltration: return "Infiltration";
+        case EspionageMissionType::Sabotage:     return "Sabotage";
+        case EspionageMissionType::Surveillance:  return "Surveillance";
+        case EspionageMissionType::DataTheft:    return "DataTheft";
+        case EspionageMissionType::Assassination: return "Assassination";
+        case EspionageMissionType::Recruitment:  return "Recruitment";
+        case EspionageMissionType::CounterIntel: return "CounterIntel";
+        case EspionageMissionType::Extraction:   return "Extraction";
+        default:                                  return "Unknown";
+    }
+}
+
+struct SpyAgent {
+    std::string id;
+    std::string name;
+    float skillLevel = 1.f;
+    float loyalty = 1.f;
+    float coverStrength = 1.f;
+    size_t missionsCompleted = 0;
+    bool deployed = false;
+    bool compromised = false;
+    bool captured = false;
+
+    [[nodiscard]] bool isAvailable() const { return !deployed && !compromised && !captured; }
+    [[nodiscard]] bool isActive() const { return deployed && !compromised && !captured; }
+    void deploy() { deployed = true; }
+    void recall() { deployed = false; }
+    void compromise() { compromised = true; coverStrength = 0.f; }
+    void capture() { captured = true; deployed = false; }
+    void rescue() { captured = false; compromised = false; coverStrength = 0.3f; }
+};
+
+struct EspionageMission {
+    std::string id;
+    EspionageMissionType type = EspionageMissionType::Infiltration;
+    std::string targetFaction;
+    std::string agentId;
+    float difficulty = 1.f;
+    float progress = 0.f;
+    float durationSeconds = 0.f;
+    float elapsedSeconds = 0.f;
+    bool completed = false;
+    bool failed = false;
+
+    [[nodiscard]] float progressFraction() const {
+        return durationSeconds > 0.f ? std::min(1.f, elapsedSeconds / durationSeconds) : 0.f;
+    }
+
+    [[nodiscard]] bool isComplete() const { return completed; }
+    [[nodiscard]] bool isFailed() const { return failed; }
+    [[nodiscard]] bool isInProgress() const { return !completed && !failed && elapsedSeconds > 0.f; }
+
+    void advance(float dt) {
+        if (completed || failed) return;
+        elapsedSeconds += dt;
+        progress = progressFraction();
+        if (durationSeconds > 0.f && elapsedSeconds >= durationSeconds) {
+            completed = true;
+            progress = 1.f;
+        }
+    }
+
+    void fail() { failed = true; }
+};
+
+class IntelligenceNetwork {
+public:
+    explicit IntelligenceNetwork(const std::string& ownerFaction)
+        : m_owner(ownerFaction) {}
+
+    bool addAgent(const SpyAgent& agent) {
+        if (m_agents.size() >= kMaxAgents) return false;
+        for (const auto& a : m_agents) {
+            if (a.id == agent.id) return false;
+        }
+        m_agents.push_back(agent);
+        return true;
+    }
+
+    bool removeAgent(const std::string& agentId) {
+        for (auto it = m_agents.begin(); it != m_agents.end(); ++it) {
+            if (it->id == agentId && !it->deployed) {
+                m_agents.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] SpyAgent* findAgent(const std::string& agentId) {
+        for (auto& a : m_agents) {
+            if (a.id == agentId) return &a;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const SpyAgent* findAgent(const std::string& agentId) const {
+        for (const auto& a : m_agents) {
+            if (a.id == agentId) return &a;
+        }
+        return nullptr;
+    }
+
+    bool launchMission(const std::string& agentId, EspionageMissionType type,
+                       const std::string& targetFaction, float duration) {
+        auto* agent = findAgent(agentId);
+        if (!agent || !agent->isAvailable()) return false;
+        if (m_missions.size() >= kMaxMissions) return false;
+
+        EspionageMission mission;
+        mission.id = "mission_" + std::to_string(m_nextMissionId++);
+        mission.type = type;
+        mission.targetFaction = targetFaction;
+        mission.agentId = agentId;
+        mission.difficulty = 1.f;
+        mission.durationSeconds = duration;
+        agent->deploy();
+        m_missions.push_back(mission);
+        return true;
+    }
+
+    void tick(float dt) {
+        for (auto& mission : m_missions) {
+            if (mission.isInProgress() || (!mission.completed && !mission.failed && mission.elapsedSeconds == 0.f)) {
+                mission.advance(dt);
+                if (mission.isComplete()) {
+                    auto* agent = findAgent(mission.agentId);
+                    if (agent) {
+                        agent->recall();
+                        agent->missionsCompleted++;
+                        m_intelGathered++;
+                    }
+                }
+            }
+        }
+    }
+
+    [[nodiscard]] size_t agentCount() const { return m_agents.size(); }
+    [[nodiscard]] size_t missionCount() const { return m_missions.size(); }
+    [[nodiscard]] size_t intelGathered() const { return m_intelGathered; }
+    [[nodiscard]] const std::string& owner() const { return m_owner; }
+    [[nodiscard]] const std::vector<SpyAgent>& agents() const { return m_agents; }
+    [[nodiscard]] const std::vector<EspionageMission>& missions() const { return m_missions; }
+
+    [[nodiscard]] size_t availableAgentCount() const {
+        size_t count = 0;
+        for (const auto& a : m_agents) {
+            if (a.isAvailable()) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t activeMissionCount() const {
+        size_t count = 0;
+        for (const auto& m : m_missions) {
+            if (m.isInProgress() || (!m.completed && !m.failed && m.elapsedSeconds == 0.f)) ++count;
+        }
+        return count;
+    }
+
+    [[nodiscard]] size_t completedMissionCount() const {
+        size_t count = 0;
+        for (const auto& m : m_missions) {
+            if (m.isComplete()) ++count;
+        }
+        return count;
+    }
+
+    static constexpr size_t kMaxAgents = 16;
+    static constexpr size_t kMaxMissions = 64;
+
+private:
+    std::string m_owner;
+    std::vector<SpyAgent> m_agents;
+    std::vector<EspionageMission> m_missions;
+    size_t m_nextMissionId = 1;
+    size_t m_intelGathered = 0;
+};
+
+class EspionageSystem {
+public:
+    int createNetwork(const std::string& factionName) {
+        if (m_networks.size() >= kMaxNetworks) return -1;
+        for (const auto& n : m_networks) {
+            if (n.owner() == factionName) return -1;
+        }
+        m_networks.emplace_back(factionName);
+        return static_cast<int>(m_networks.size()) - 1;
+    }
+
+    [[nodiscard]] IntelligenceNetwork* network(int index) {
+        if (index < 0 || index >= static_cast<int>(m_networks.size())) return nullptr;
+        return &m_networks[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] IntelligenceNetwork* networkByName(const std::string& factionName) {
+        for (auto& n : m_networks) {
+            if (n.owner() == factionName) return &n;
+        }
+        return nullptr;
+    }
+
+    bool recruitAgent(const std::string& factionName, const SpyAgent& agent) {
+        auto* net = networkByName(factionName);
+        if (!net) return false;
+        return net->addAgent(agent);
+    }
+
+    bool launchMission(const std::string& factionName, const std::string& agentId,
+                       EspionageMissionType type, const std::string& targetFaction,
+                       float duration) {
+        auto* net = networkByName(factionName);
+        if (!net) return false;
+        return net->launchMission(agentId, type, targetFaction, duration);
+    }
+
+    void tick(float dt) {
+        for (auto& n : m_networks) n.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t networkCount() const { return m_networks.size(); }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+    [[nodiscard]] size_t totalActiveMissions() const {
+        size_t count = 0;
+        for (const auto& n : m_networks) count += n.activeMissionCount();
+        return count;
+    }
+
+    [[nodiscard]] size_t totalIntelGathered() const {
+        size_t count = 0;
+        for (const auto& n : m_networks) count += n.intelGathered();
+        return count;
+    }
+
+    static constexpr size_t kMaxNetworks = 8;
+
+private:
+    std::vector<IntelligenceNetwork> m_networks;
+    size_t m_tickCount = 0;
+};
+
 } // namespace NF

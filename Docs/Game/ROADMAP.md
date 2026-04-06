@@ -59,7 +59,8 @@
 | **G27** — Vehicle System | VehicleType×8, VehicleSeat, VehicleComponent, Vehicle, VehicleSystem | ✅ Done |
 | **G28** — Research System | ResearchCategory×8, ResearchProject, ResearchLab, ResearchTree, ResearchSystem | ✅ Done |
 | **G29** — Diplomacy System | DiplomacyAction×8, DiplomaticStance×5, DiplomaticRelation, Treaty, DiplomaticChannel, DiplomacySystem | ✅ Done |
-| **G30** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G30** — Espionage System | EspionageMissionType×8, SpyAgent, EspionageMission, IntelligenceNetwork, EspionageSystem | ✅ Done |
+| **G31** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -99,7 +100,9 @@
 | **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | ✅ Done |
 | **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | ✅ Done |
 | **S9** — AtlasAI Integration | AIInsightType×8, AIAnalysisEngine, AIProactiveSuggester, AIPipelineBridge, AtlasAIIntegration | ✅ Done |
-| **S10** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S10** — Performance Profiler | ProfileMetricType×8, ProfileSample, ProfileSession, FrameProfiler, MemoryProfiler, ProfilerTimeline, PerformanceProfiler | ✅ Done |
+| **S11** — Live Collaboration | CollabUserRole×8, CollabEditType×8, CollabUser, CollabEditAction, CollabSession, CollabConflictResolver, LiveCollaborationSystem | ✅ Done |
+| **S12** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 
