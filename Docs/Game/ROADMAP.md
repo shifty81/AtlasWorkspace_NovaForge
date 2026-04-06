@@ -62,7 +62,8 @@
 | **G30** — Espionage System | EspionageMissionType×8, SpyAgent, EspionageMission, IntelligenceNetwork, EspionageSystem | ✅ Done |
 | **G31** — Colony Management | ColonyRole×8, Colonist, ColonyBuilding, Colony, ColonySystem | ✅ Done |
 | **G32** — Archaeology System | ArtifactRarity×8, Artifact, ExcavationSite, ArtifactCollection, ArchaeologySystem | ✅ Done |
-| **G33** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G33** — Migration System | MigrationTrigger×8, Migrant, MigrationWave, MigrationRoute, MigrationSystem | ✅ Done |
+| **G34** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -106,7 +107,8 @@
 | **S11** — Live Collaboration | CollabUserRole×8, CollabEditType×8, CollabUser, CollabEditAction, CollabSession, CollabConflictResolver, LiveCollaborationSystem | ✅ Done |
 | **S12** — Version Control Integration | VCSProviderType×8, VCSFileStatus×8, VCSCommitInfo, VCSBranchInfo, VCSDiffEntry, VCSRepository, VersionControlSystem | ✅ Done |
 | **S13** — Localization System | LocaleId×8, LocalizedString, TranslationEntry, TranslationTable, LocaleManager, LocalizationSystem | ✅ Done |
-| **S14** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S14** — Plugin System | PluginState×8, PluginManifest, PluginInstance, PluginRegistry, PluginLoader, PluginSystem | ✅ Done |
+| **S15** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

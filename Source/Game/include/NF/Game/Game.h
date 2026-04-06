@@ -7827,4 +7827,200 @@ private:
     size_t m_totalArtifactsFound = 0;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G33 — Migration System
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class MigrationTrigger : uint8_t {
+    Economic = 0,
+    Environmental,
+    Political,
+    Cultural,
+    War,
+    Famine,
+    Disease,
+    Opportunity
+};
+
+inline const char* migrationTriggerName(MigrationTrigger t) {
+    switch (t) {
+        case MigrationTrigger::Economic:      return "Economic";
+        case MigrationTrigger::Environmental: return "Environmental";
+        case MigrationTrigger::Political:     return "Political";
+        case MigrationTrigger::Cultural:      return "Cultural";
+        case MigrationTrigger::War:           return "War";
+        case MigrationTrigger::Famine:        return "Famine";
+        case MigrationTrigger::Disease:       return "Disease";
+        case MigrationTrigger::Opportunity:   return "Opportunity";
+        default:                              return "Unknown";
+    }
+}
+
+struct Migrant {
+    std::string id;
+    std::string name;
+    std::string originRegion;
+    std::string destinationRegion;
+    MigrationTrigger trigger = MigrationTrigger::Economic;
+    float journeyProgress = 0.f; // 0..1
+    bool arrived = false;
+
+    [[nodiscard]] bool isInTransit() const { return !arrived && journeyProgress > 0.f; }
+    [[nodiscard]] bool hasArrived()  const { return arrived; }
+
+    void advance(float amount) {
+        if (arrived) return;
+        journeyProgress += amount;
+        if (journeyProgress >= 1.f) {
+            journeyProgress = 1.f;
+            arrived = true;
+        }
+    }
+};
+
+struct MigrationWave {
+    std::string id;
+    std::string originRegion;
+    std::string destinationRegion;
+    MigrationTrigger trigger = MigrationTrigger::Economic;
+    size_t totalMigrants  = 0;
+    size_t arrivedCount   = 0;
+    float  speed          = 0.1f; // progress per tick
+
+    [[nodiscard]] bool isComplete() const { return totalMigrants > 0 && arrivedCount >= totalMigrants; }
+    [[nodiscard]] float completionFraction() const {
+        return totalMigrants > 0 ? static_cast<float>(arrivedCount) / static_cast<float>(totalMigrants) : 0.f;
+    }
+};
+
+class MigrationRoute {
+public:
+    static constexpr size_t kMaxMigrants = 256;
+
+    explicit MigrationRoute(const std::string& origin, const std::string& destination)
+        : m_origin(origin), m_destination(destination) {}
+
+    [[nodiscard]] const std::string& origin()      const { return m_origin; }
+    [[nodiscard]] const std::string& destination() const { return m_destination; }
+
+    bool addMigrant(const Migrant& migrant) {
+        if (m_migrants.size() >= kMaxMigrants) return false;
+        for (const auto& m : m_migrants) {
+            if (m.id == migrant.id) return false;
+        }
+        m_migrants.push_back(migrant);
+        return true;
+    }
+
+    bool removeMigrant(const std::string& migrantId) {
+        for (auto it = m_migrants.begin(); it != m_migrants.end(); ++it) {
+            if (it->id == migrantId) { m_migrants.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] Migrant* findMigrant(const std::string& migrantId) {
+        for (auto& m : m_migrants) { if (m.id == migrantId) return &m; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t migrantCount()  const { return m_migrants.size(); }
+    [[nodiscard]] size_t arrivedCount()  const {
+        size_t count = 0;
+        for (const auto& m : m_migrants) { if (m.arrived) ++count; }
+        return count;
+    }
+    [[nodiscard]] size_t inTransitCount() const {
+        size_t count = 0;
+        for (const auto& m : m_migrants) { if (m.isInTransit()) ++count; }
+        return count;
+    }
+
+    void tick(float dt) {
+        for (auto& m : m_migrants) m.advance(dt * 0.1f);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string            m_origin;
+    std::string            m_destination;
+    std::vector<Migrant>   m_migrants;
+    size_t                 m_tickCount = 0;
+};
+
+class MigrationSystem {
+public:
+    static constexpr size_t kMaxRoutes = 32;
+    static constexpr size_t kMaxWaves  = 16;
+
+    int createRoute(const std::string& origin, const std::string& destination) {
+        if (m_routes.size() >= kMaxRoutes) return -1;
+        for (const auto& r : m_routes) {
+            if (r.origin() == origin && r.destination() == destination) return -1;
+        }
+        m_routes.emplace_back(origin, destination);
+        return static_cast<int>(m_routes.size()) - 1;
+    }
+
+    [[nodiscard]] MigrationRoute* route(int index) {
+        if (index < 0 || index >= static_cast<int>(m_routes.size())) return nullptr;
+        return &m_routes[static_cast<size_t>(index)];
+    }
+
+    [[nodiscard]] MigrationRoute* routeByEndpoints(const std::string& origin, const std::string& destination) {
+        for (auto& r : m_routes) {
+            if (r.origin() == origin && r.destination() == destination) return &r;
+        }
+        return nullptr;
+    }
+
+    bool addWave(const MigrationWave& wave) {
+        if (m_waves.size() >= kMaxWaves) return false;
+        for (const auto& w : m_waves) {
+            if (w.id == wave.id) return false;
+        }
+        m_waves.push_back(wave);
+        return true;
+    }
+
+    [[nodiscard]] MigrationWave* waveById(const std::string& id) {
+        for (auto& w : m_waves) { if (w.id == id) return &w; }
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& r : m_routes) r.tick(dt);
+        for (auto& w : m_waves) {
+            if (!w.isComplete()) {
+                w.arrivedCount += static_cast<size_t>(w.speed * dt);
+                if (w.arrivedCount > w.totalMigrants) w.arrivedCount = w.totalMigrants;
+            }
+        }
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t routeCount() const { return m_routes.size(); }
+    [[nodiscard]] size_t waveCount()  const { return m_waves.size(); }
+    [[nodiscard]] size_t tickCount()  const { return m_tickCount; }
+
+    [[nodiscard]] size_t completedWaveCount() const {
+        size_t count = 0;
+        for (const auto& w : m_waves) { if (w.isComplete()) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] size_t totalMigrantsInTransit() const {
+        size_t count = 0;
+        for (const auto& r : m_routes) count += r.inTransitCount();
+        return count;
+    }
+
+private:
+    std::vector<MigrationRoute> m_routes;
+    std::vector<MigrationWave>  m_waves;
+    size_t                      m_tickCount = 0;
+};
+
 } // namespace NF

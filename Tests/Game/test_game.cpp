@@ -6210,3 +6210,138 @@ TEST_CASE("ArchaeologySystem totalDecodedArtifacts", "[Game][G32][Archaeology]")
 
     REQUIRE(sys.totalDecodedArtifacts() == 1);
 }
+
+
+
+// ── G33 Tests: Migration System ──────────────────────────────────────────────
+
+TEST_CASE("MigrationTrigger names", "[Game][G33][Migration]") {
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Economic))      == "Economic");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Environmental)) == "Environmental");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Political))     == "Political");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Cultural))      == "Cultural");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::War))           == "War");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Famine))        == "Famine");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Disease))       == "Disease");
+    REQUIRE(std::string(NF::migrationTriggerName(NF::MigrationTrigger::Opportunity))   == "Opportunity");
+}
+
+TEST_CASE("Migrant advance + arrive", "[Game][G33][Migration]") {
+    NF::Migrant m;
+    m.id = "m1"; m.name = "Alice";
+    m.originRegion = "Zone A"; m.destinationRegion = "Zone B";
+    REQUIRE_FALSE(m.isInTransit());
+    REQUIRE_FALSE(m.hasArrived());
+
+    m.advance(0.5f); // 0.5 * 0.1 handled by route, direct advance here
+    // advance takes amount directly in Migrant
+    NF::Migrant m2;
+    m2.id = "m2";
+    m2.advance(0.3f);
+    REQUIRE(m2.isInTransit());
+    REQUIRE_FALSE(m2.hasArrived());
+
+    m2.advance(0.8f); // total > 1
+    REQUIRE(m2.hasArrived());
+    REQUIRE_FALSE(m2.isInTransit());
+}
+
+TEST_CASE("MigrationWave completionFraction + isComplete", "[Game][G33][Migration]") {
+    NF::MigrationWave wave;
+    wave.id = "wave1";
+    wave.totalMigrants = 100;
+    wave.arrivedCount = 0;
+    REQUIRE_FALSE(wave.isComplete());
+    REQUIRE(wave.completionFraction() == Catch::Approx(0.f));
+
+    wave.arrivedCount = 50;
+    REQUIRE(wave.completionFraction() == Catch::Approx(0.5f));
+
+    wave.arrivedCount = 100;
+    REQUIRE(wave.isComplete());
+    REQUIRE(wave.completionFraction() == Catch::Approx(1.f));
+}
+
+TEST_CASE("MigrationRoute addMigrant + duplicate rejection", "[Game][G33][Migration]") {
+    NF::MigrationRoute route("Zone A", "Zone B");
+    NF::Migrant m1; m1.id = "m1";
+    NF::Migrant m2; m2.id = "m1"; // duplicate id
+
+    REQUIRE(route.addMigrant(m1));
+    REQUIRE(route.migrantCount() == 1);
+    REQUIRE_FALSE(route.addMigrant(m2));
+    REQUIRE(route.migrantCount() == 1);
+}
+
+TEST_CASE("MigrationRoute removeMigrant", "[Game][G33][Migration]") {
+    NF::MigrationRoute route("A", "B");
+    NF::Migrant m; m.id = "m1";
+    route.addMigrant(m);
+    REQUIRE(route.removeMigrant("m1"));
+    REQUIRE(route.migrantCount() == 0);
+    REQUIRE_FALSE(route.removeMigrant("nonexistent"));
+}
+
+TEST_CASE("MigrationRoute arrivedCount + inTransitCount", "[Game][G33][Migration]") {
+    NF::MigrationRoute route("A", "B");
+    NF::Migrant m1; m1.id = "m1"; m1.journeyProgress = 0.5f; // in transit
+    NF::Migrant m2; m2.id = "m2"; m2.arrived = true;
+    NF::Migrant m3; m3.id = "m3"; m3.arrived = true;
+    route.addMigrant(m1);
+    route.addMigrant(m2);
+    route.addMigrant(m3);
+
+    REQUIRE(route.arrivedCount()  == 2);
+    REQUIRE(route.inTransitCount() == 1);
+}
+
+TEST_CASE("MigrationRoute tick advances migrants", "[Game][G33][Migration]") {
+    NF::MigrationRoute route("A", "B");
+    NF::Migrant m; m.id = "m1"; m.journeyProgress = 0.f;
+    route.addMigrant(m);
+
+    route.tick(1.f); // advances by 0.1
+    REQUIRE(route.tickCount() == 1);
+    auto* found = route.findMigrant("m1");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->journeyProgress == Catch::Approx(0.1f));
+}
+
+TEST_CASE("MigrationSystem createRoute + duplicate rejection", "[Game][G33][Migration]") {
+    NF::MigrationSystem sys;
+    REQUIRE(sys.createRoute("North", "South") == 0);
+    REQUIRE(sys.createRoute("East",  "West")  == 1);
+    REQUIRE(sys.createRoute("North", "South") == -1); // duplicate
+    REQUIRE(sys.routeCount() == 2);
+}
+
+TEST_CASE("MigrationSystem routeByEndpoints", "[Game][G33][Migration]") {
+    NF::MigrationSystem sys;
+    sys.createRoute("A", "B");
+    REQUIRE(sys.routeByEndpoints("A", "B") != nullptr);
+    REQUIRE(sys.routeByEndpoints("A", "B")->origin() == "A");
+    REQUIRE(sys.routeByEndpoints("X", "Y") == nullptr);
+}
+
+TEST_CASE("MigrationSystem addWave + completedWaveCount", "[Game][G33][Migration]") {
+    NF::MigrationSystem sys;
+    NF::MigrationWave w1; w1.id = "w1"; w1.totalMigrants = 10; w1.arrivedCount = 10;
+    NF::MigrationWave w2; w2.id = "w2"; w2.totalMigrants = 20; w2.arrivedCount = 5;
+    REQUIRE(sys.addWave(w1));
+    REQUIRE(sys.addWave(w2));
+    REQUIRE(sys.waveCount() == 2);
+    REQUIRE_FALSE(sys.addWave(w1)); // duplicate
+    REQUIRE(sys.completedWaveCount() == 1);
+}
+
+TEST_CASE("MigrationSystem tick + totalMigrantsInTransit", "[Game][G33][Migration]") {
+    NF::MigrationSystem sys;
+    sys.createRoute("A", "B");
+    auto* r = sys.routeByEndpoints("A", "B");
+    NF::Migrant m; m.id = "m1"; m.journeyProgress = 0.5f;
+    r->addMigrant(m);
+
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 1);
+    REQUIRE(sys.totalMigrantsInTransit() == 1);
+}
