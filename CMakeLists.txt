@@ -46,15 +46,8 @@ foreach(CFG Debug Release RelWithDebInfo MinSizeRel)
 endforeach()
 
 # ── Third-party packages ──────────────────────────────────────────
-find_package(imgui CONFIG QUIET)
-if(NOT imgui_FOUND)
-    # Provide a stub target so downstream targets can link without error.
-    if(NOT TARGET imgui::imgui)
-        add_library(imgui_stub INTERFACE)
-        add_library(imgui::imgui ALIAS imgui_stub)
-    endif()
-    message(STATUS "imgui not found — using stub (ImGui features disabled)")
-endif()
+# ImGui is banned — the project uses NF::UI (Atlas UI) exclusively.
+# See ATLAS_CORE_CONTRACT.md §6.
 
 # ── Build mode ────────────────────────────────────────────────────
 option(NF_STANDALONE "Standalone build (all targets enabled by default)" ON)

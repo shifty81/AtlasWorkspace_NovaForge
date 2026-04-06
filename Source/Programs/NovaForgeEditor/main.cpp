@@ -1,24 +1,19 @@
 // NovaForge Editor — Development tool
-// Uses the unified UIRenderer pipeline with pluggable backends.
-// Win32: dual-backend — GDI (default) with OpenGL available.
-// NF_USE_GLFW: GLFW/ImGui cross-platform backend.
+// Uses the unified Atlas UI renderer pipeline with pluggable backends.
+// Win32: GDI backend.  All platforms: OpenGL backend (when GL context available).
+// ImGui is banned — see ATLAS_CORE_CONTRACT.md §6.
 #include "NF/Core/Core.h"
 #include "NF/Editor/Editor.h"
 #include "NF/Input/Input.h"
 #include "NF/UI/UIBackend.h"
-#ifdef NF_USE_GLFW
-#  include "NF/UI/GLFWWindowProvider.h"
-#  include "NF/UI/ImGuiLayer.h"
-#  include "NF/UI/ImGuiBackend.h"
-#  include "NF/UI/GLFWInputAdapter.h"
-#elif defined(_WIN32)
+#if defined(_WIN32)
 #  include "NF/Input/Win32InputAdapter.h"
 #  include "NF/UI/GDIBackend.h"
 #  include <windows.h>
 #endif
 #include <chrono>
 
-#if defined(_WIN32) && !defined(NF_USE_GLFW)
+#if defined(_WIN32)
 static NF::EditorApp* g_editor    = nullptr;
 static NF::Win32InputAdapter* g_inputAdapter = nullptr;
 static NF::GDIBackend* g_gdiBackend = nullptr;
@@ -55,7 +50,7 @@ static LRESULT CALLBACK EditorWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
-#endif // _WIN32 && !NF_USE_GLFW
+#endif // _WIN32
 
 int main(int argc, char* argv[]) {
     (void)argc; (void)argv;
@@ -75,39 +70,7 @@ int main(int argc, char* argv[]) {
     input.init();
 
     // ── Backend setup ────────────────────────────────────────────
-#ifdef NF_USE_GLFW
-    // GLFW/ImGui cross-platform path
-    NF::GLFWWindowProvider window;
-    NF::GLFWWindowProvider::WindowConfig winCfg;
-    winCfg.width  = 1280;
-    winCfg.height = 800;
-    winCfg.title  = std::string("NovaForge Editor v") + NF::NF_VERSION_STRING;
-    winCfg.vsync  = true;
-    if (!window.init(winCfg)) {
-        NF_LOG_ERROR("Main", "Failed to create GLFW window");
-        return 1;
-    }
-
-    NF::ImGuiLayer imguiLayer;
-    NF::ImGuiLayer::ImGuiConfig imguiCfg;
-    imguiCfg.dockingEnabled = true;
-    imguiCfg.darkTheme      = true;
-    if (!imguiLayer.init(window, imguiCfg)) {
-        NF_LOG_ERROR("Main", "Failed to initialize ImGui layer");
-        return 1;
-    }
-
-    NF::ImGuiBackend imguiBackend;
-    imguiBackend.init(winCfg.width, winCfg.height);
-    imguiBackend.setImGuiLayer(&imguiLayer);
-    editor.uiRenderer().setBackend(&imguiBackend);
-    NF_LOG_INFO("Main", "ImGui backend active (GLFW)");
-
-    NF::GLFWInputAdapter inputAdapter(input);
-    inputAdapter.attach(window);
-    NF_LOG_INFO("Main", "GLFW input adapter initialized");
-
-#elif defined(_WIN32)
+#if defined(_WIN32)
     // GDI backend for Win32
     NF::GDIBackend gdiBackend;
     gdiBackend.init(1280, 800);
@@ -121,7 +84,7 @@ int main(int argc, char* argv[]) {
     NF_LOG_INFO("Main", "Null backend active (headless)");
 #endif
 
-#if defined(_WIN32) && !defined(NF_USE_GLFW)
+#if defined(_WIN32)
     g_editor = &editor;
     NF::Win32InputAdapter inputAdapter(input);
     g_inputAdapter = &inputAdapter;
@@ -158,12 +121,7 @@ int main(int argc, char* argv[]) {
     auto lastTime = std::chrono::high_resolution_clock::now();
     bool running = true;
     while (running) {
-#ifdef NF_USE_GLFW
-        window.pollEvents();
-        // Note: stub GLFWWindowProvider exits after first poll; real GLFW
-        // requires explicit user close or glfwSetWindowShouldClose().
-        if (window.shouldClose()) { running = false; break; }
-#elif defined(_WIN32)
+#if defined(_WIN32)
         MSG msg{};
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) { running = false; break; }
@@ -182,26 +140,13 @@ int main(int argc, char* argv[]) {
         input.update();
         editor.update(dt, input);
 
-#ifdef NF_USE_GLFW
-        imguiLayer.beginFrame();
-        imguiBackend.beginFrame(window.width(), window.height());
-        editor.renderAll(static_cast<float>(window.width()),
-                         static_cast<float>(window.height()));
-        imguiBackend.endFrame();
-        imguiLayer.endFrame();
-        window.swapBuffers();
-#elif defined(_WIN32)
+#if defined(_WIN32)
         InvalidateRect(hwnd, nullptr, FALSE);
         Sleep(16);
 #endif
     }
 
-#ifdef NF_USE_GLFW
-    inputAdapter.detach();
-    imguiBackend.shutdown();
-    imguiLayer.shutdown();
-    window.shutdown();
-#elif defined(_WIN32)
+#if defined(_WIN32)
     gdiBackend.shutdown();
     g_editor = nullptr;
     g_inputAdapter = nullptr;

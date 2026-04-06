@@ -12,15 +12,7 @@
       "name": "opengl",
       "platform": "windows"
     },
-    {
-      "name": "imgui",
-      "features": [
-        "dx12-binding",
-        "vulkan-binding",
-        "opengl3-binding",
-        "glfw-binding"
-      ]
-    },
+
     "vulkan-headers",
     "openal-soft",
     "bullet3",
