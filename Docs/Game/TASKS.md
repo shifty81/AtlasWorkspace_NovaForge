@@ -2995,3 +2995,41 @@ Total: 1968 tests, 0 failures (1945 existing + 14 S40 + 10 G59 = 1969 — note: 
 ## Build Verification ✅
 
 Total: 1991 tests, 0 failures (1968 existing + 14 S41 + 10 G60 = 1992 — note: 1 offset = 1991).
+
+## S42 — Scene Prefab Editor ✅
+
+- [x] PrefabCategory enum ×5 (Prop, Character, Vehicle, Structure, Effect) + prefabCategoryName()
+- [x] PrefabState enum ×5 (Unloaded, Loaded, Instanced, Modified, Broken) + prefabStateName()
+- [x] PrefabLOD enum ×5 (Full, High, Medium, Low, Proxy) + prefabLODName()
+- [x] PrefabAsset (name, category, state, lod, componentCount, childCount, overridable, nested, dirty)
+  - isInstanced, isModified, isBroken, isComplex (componentCount>=10)
+- [x] ScenePrefabEditor (max 256 prefabs)
+  - addPrefab, removePrefab (clears activePrefab), findPrefab, setActivePrefab
+  - prefabCount, dirtyCount, instancedCount, overridableCount, nestedCount, complexCount, countByCategory, countByState
+- [x] 14 new editor tests (test_s42_editor.cpp), all passing
+
+## S42 Complete ✅
+
+---
+
+## G61 — Cosmic Ray System ✅
+
+- [x] CosmicRayType enum ×5 (Proton, Alpha, HeavyIon, Electron, Positron) + cosmicRayTypeName()
+- [x] CosmicRayIntensity enum ×5 (Background, Elevated, High, Severe, Extreme) + cosmicRayIntensityName()
+- [x] CosmicRayEvent (id, type, intensity, dosageRate, coverage, active)
+  - activate, deactivate, isSevere (>= Severe), isHighEnergy (<= HeavyIon), isWidespread (>= 50%), hazardScore
+- [x] CosmicRayRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, highEnergyCount, widespreadCount
+- [x] CosmicRaySystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, highEnergyEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G61 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2014 tests, 0 failures (1991 existing + 14 S42 + 10 G61 = 2015 — note: 1 offset = 2014).

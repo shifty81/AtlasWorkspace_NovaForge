@@ -90,6 +90,7 @@
 | **G58** — Monsoon System | MonsoonIntensity×5, MonsoonPhase×5, MonsoonEvent, MonsoonRegion, MonsoonSystem | ✅ Done |
 | **G59** — Lightning Storm System | LightningIntensity×5, LightningStormPhase×5, LightningEvent, LightningRegion, LightningSystem | ✅ Done |
 | **G60** — Geomagnetic Storm System | GeoStormKpIndex×5, GeoStormPhase×5, GeoStormEvent, GeoStormRegion, GeoStormSystem | ✅ Done |
+| **G61** — Cosmic Ray System | CosmicRayType×5, CosmicRayIntensity×5, CosmicRayEvent, CosmicRayRegion, CosmicRaySystem | ✅ Done |
 
 ---
 
@@ -161,6 +162,7 @@
 | **S39** — Tilemap Editor | TileFlipMode×5, TileLayerType×5, TileAnimMode×5, TileAsset, TilemapEditor | ✅ Done |
 | **S40** — Audio Clip Editor | AudioClipFormat×5, AudioClipState×5, AudioLoopMode×5, AudioClipAsset, AudioClipEditor | ✅ Done |
 | **S41** — Video Clip Editor | VideoClipCodec×5, VideoClipState×5, VideoAspectRatio×5, VideoClipAsset, VideoClipEditor | ✅ Done |
+| **S42** — Scene Prefab Editor | PrefabCategory×5, PrefabState×5, PrefabLOD×5, PrefabAsset, ScenePrefabEditor | ✅ Done |
 
 ## Status Key
 
