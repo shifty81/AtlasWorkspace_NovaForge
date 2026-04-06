@@ -6345,3 +6345,146 @@ TEST_CASE("MigrationSystem tick + totalMigrantsInTransit", "[Game][G33][Migratio
     REQUIRE(sys.tickCount() == 1);
     REQUIRE(sys.totalMigrantsInTransit() == 1);
 }
+
+
+// ── G34 Tests: Insurgency System ─────────────────────────────────────────────
+
+TEST_CASE("InsurgencyType names", "[Game][G34][Insurgency]") {
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Political))   == "Political");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Religious))   == "Religious");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Economic))    == "Economic");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Military))    == "Military");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Cultural))    == "Cultural");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Ecological))  == "Ecological");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Corporate))   == "Corporate");
+    REQUIRE(std::string(NF::insurgencyTypeName(NF::InsurgencyType::Territorial)) == "Territorial");
+}
+
+TEST_CASE("Insurgent status transitions", "[Game][G34][Insurgency]") {
+    NF::Insurgent ins;
+    ins.id   = "i1";
+    ins.name = "Raven";
+    REQUIRE(ins.isActive());
+    REQUIRE_FALSE(ins.isCaptured());
+
+    REQUIRE(ins.goUnderground());
+    REQUIRE(ins.isUnderground());
+    REQUIRE_FALSE(ins.isActive());
+
+    REQUIRE(ins.capture()); // can capture from underground
+    REQUIRE(ins.isCaptured());
+
+    REQUIRE_FALSE(ins.capture()); // already captured
+}
+
+TEST_CASE("Insurgent eliminate lifecycle", "[Game][G34][Insurgency]") {
+    NF::Insurgent ins;
+    ins.id     = "i2";
+    ins.status = NF::InsurgentStatus::Active;
+    REQUIRE(ins.eliminate());
+    REQUIRE(ins.isEliminated());
+    REQUIRE_FALSE(ins.eliminate()); // already eliminated
+}
+
+TEST_CASE("Insurgent goUnderground only from Active", "[Game][G34][Insurgency]") {
+    NF::Insurgent ins;
+    ins.status = NF::InsurgentStatus::Captured;
+    REQUIRE_FALSE(ins.goUnderground()); // cannot go underground from captured
+}
+
+TEST_CASE("InsurgencyCell isOperational + totalStrength", "[Game][G34][Insurgency]") {
+    NF::InsurgencyCell cell;
+    cell.id = "cell1"; cell.region = "Sector 7";
+    REQUIRE_FALSE(cell.isOperational()); // no members, no level
+
+    cell.addMembers(10);
+    cell.operationalLevel = 0.8f;
+    REQUIRE(cell.isOperational());
+    REQUIRE(cell.totalStrength() == Catch::Approx(8.f));
+}
+
+TEST_CASE("InsurgencyCell resources", "[Game][G34][Insurgency]") {
+    NF::InsurgencyCell cell;
+    cell.id = "cell2";
+    REQUIRE_FALSE(cell.isFunded());
+
+    cell.addResources(100.f);
+    REQUIRE(cell.isFunded());
+    REQUIRE(cell.resourcePool == Catch::Approx(100.f));
+
+    REQUIRE(cell.drainResources(40.f));
+    REQUIRE(cell.resourcePool == Catch::Approx(60.f));
+
+    REQUIRE_FALSE(cell.drainResources(200.f)); // not enough
+    REQUIRE(cell.resourcePool == Catch::Approx(60.f));
+}
+
+TEST_CASE("InsurgencyMovement addCell + duplicate rejection", "[Game][G34][Insurgency]") {
+    NF::InsurgencyMovement mv("FreedomFront");
+    NF::InsurgencyCell c1; c1.id = "c1"; c1.region = "North";
+    NF::InsurgencyCell c2; c2.id = "c1"; // duplicate
+
+    REQUIRE(mv.addCell(c1));
+    REQUIRE(mv.cellCount() == 1);
+    REQUIRE_FALSE(mv.addCell(c2));
+    REQUIRE(mv.cellCount() == 1);
+}
+
+TEST_CASE("InsurgencyMovement removeCell + activeCellCount + totalMembers", "[Game][G34][Insurgency]") {
+    NF::InsurgencyMovement mv("RedDawn");
+    NF::InsurgencyCell c1; c1.id = "c1"; c1.memberCount = 5; c1.operationalLevel = 1.f;
+    NF::InsurgencyCell c2; c2.id = "c2"; c2.memberCount = 3; c2.operationalLevel = 0.f; // inactive
+    mv.addCell(c1);
+    mv.addCell(c2);
+
+    REQUIRE(mv.totalMembers()    == 8);
+    REQUIRE(mv.activeCellCount() == 1);
+
+    REQUIRE(mv.removeCell("c1"));
+    REQUIRE(mv.cellCount()    == 1);
+    REQUIRE(mv.totalMembers() == 3);
+    REQUIRE_FALSE(mv.removeCell("nonexistent"));
+}
+
+TEST_CASE("InsurgencySystem createMovement + duplicate rejection", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    REQUIRE(sys.createMovement("FreedomFront") != nullptr);
+    REQUIRE(sys.createMovement("RedDawn")      != nullptr);
+    REQUIRE(sys.createMovement("FreedomFront") == nullptr); // duplicate
+    REQUIRE(sys.movementCount() == 2);
+}
+
+TEST_CASE("InsurgencySystem movementByName", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    sys.createMovement("Shadow");
+    REQUIRE(sys.movementByName("Shadow") != nullptr);
+    REQUIRE(sys.movementByName("Shadow")->name() == "Shadow");
+    REQUIRE(sys.movementByName("Unknown") == nullptr);
+}
+
+TEST_CASE("InsurgencySystem addInsurgent + activeInsurgentCount", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    NF::Insurgent i1; i1.id = "i1"; i1.status = NF::InsurgentStatus::Active;
+    NF::Insurgent i2; i2.id = "i2"; i2.status = NF::InsurgentStatus::Captured;
+    NF::Insurgent i3; i3.id = "i3"; i3.status = NF::InsurgentStatus::Active;
+    REQUIRE(sys.addInsurgent(i1));
+    REQUIRE(sys.addInsurgent(i2));
+    REQUIRE(sys.addInsurgent(i3));
+    REQUIRE_FALSE(sys.addInsurgent(i1)); // duplicate
+
+    REQUIRE(sys.totalInsurgentCount()    == 3);
+    REQUIRE(sys.activeInsurgentCount()   == 2);
+    REQUIRE(sys.capturedInsurgentCount() == 1);
+}
+
+TEST_CASE("InsurgencySystem tick + totalCells", "[Game][G34][Insurgency]") {
+    NF::InsurgencySystem sys;
+    auto* mv = sys.createMovement("TestMovement");
+    NF::InsurgencyCell cell; cell.id = "c1"; cell.memberCount = 5; cell.operationalLevel = 1.f;
+    mv->addCell(cell);
+
+    sys.tick(1.f);
+    sys.tick(1.f);
+    REQUIRE(sys.tickCount() == 2);
+    REQUIRE(sys.totalCells() == 1);
+}

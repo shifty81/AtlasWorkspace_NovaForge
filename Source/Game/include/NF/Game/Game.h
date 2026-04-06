@@ -8023,4 +8023,209 @@ private:
     size_t                      m_tickCount = 0;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G34 — Insurgency System
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class InsurgencyType : uint8_t {
+    Political   = 0,
+    Religious   = 1,
+    Economic    = 2,
+    Military    = 3,
+    Cultural    = 4,
+    Ecological  = 5,
+    Corporate   = 6,
+    Territorial = 7
+};
+
+inline const char* insurgencyTypeName(InsurgencyType t) {
+    switch (t) {
+        case InsurgencyType::Political:   return "Political";
+        case InsurgencyType::Religious:   return "Religious";
+        case InsurgencyType::Economic:    return "Economic";
+        case InsurgencyType::Military:    return "Military";
+        case InsurgencyType::Cultural:    return "Cultural";
+        case InsurgencyType::Ecological:  return "Ecological";
+        case InsurgencyType::Corporate:   return "Corporate";
+        case InsurgencyType::Territorial: return "Territorial";
+        default:                          return "Unknown";
+    }
+}
+
+enum class InsurgentStatus : uint8_t {
+    Active      = 0,
+    Captured    = 1,
+    Eliminated  = 2,
+    Underground = 3
+};
+
+struct Insurgent {
+    std::string     id;
+    std::string     name;
+    InsurgencyType  type      = InsurgencyType::Political;
+    InsurgentStatus status    = InsurgentStatus::Active;
+    float           loyalty   = 1.f;
+    float           influence = 0.f;
+
+    [[nodiscard]] bool isActive()      const { return status == InsurgentStatus::Active; }
+    [[nodiscard]] bool isCaptured()    const { return status == InsurgentStatus::Captured; }
+    [[nodiscard]] bool isEliminated()  const { return status == InsurgentStatus::Eliminated; }
+    [[nodiscard]] bool isUnderground() const { return status == InsurgentStatus::Underground; }
+
+    bool capture() {
+        if (status != InsurgentStatus::Active && status != InsurgentStatus::Underground) return false;
+        status = InsurgentStatus::Captured;
+        return true;
+    }
+
+    bool eliminate() {
+        if (status == InsurgentStatus::Eliminated) return false;
+        status = InsurgentStatus::Eliminated;
+        return true;
+    }
+
+    bool goUnderground() {
+        if (status != InsurgentStatus::Active) return false;
+        status = InsurgentStatus::Underground;
+        return true;
+    }
+};
+
+struct InsurgencyCell {
+    std::string    id;
+    std::string    region;
+    InsurgencyType type             = InsurgencyType::Political;
+    size_t         memberCount      = 0;
+    float          resourcePool     = 0.f;
+    float          operationalLevel = 0.f;
+
+    [[nodiscard]] bool  isOperational() const { return operationalLevel > 0.f && memberCount > 0; }
+    [[nodiscard]] bool  isFunded()      const { return resourcePool > 0.f; }
+    [[nodiscard]] float totalStrength() const { return static_cast<float>(memberCount) * operationalLevel; }
+
+    void addMembers(size_t count) { memberCount += count; }
+    bool removeMembers(size_t count) {
+        if (count > memberCount) return false;
+        memberCount -= count;
+        return true;
+    }
+
+    void addResources(float amount)  { if (amount > 0.f) resourcePool += amount; }
+    bool drainResources(float amount) {
+        if (amount > resourcePool) return false;
+        resourcePool -= amount;
+        return true;
+    }
+};
+
+class InsurgencyMovement {
+public:
+    static constexpr size_t kMaxCells = 32;
+
+    explicit InsurgencyMovement(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] const std::string& name() const { return m_name; }
+
+    bool addCell(const InsurgencyCell& cell) {
+        if (m_cells.size() >= kMaxCells) return false;
+        for (const auto& c : m_cells) { if (c.id == cell.id) return false; }
+        m_cells.push_back(cell);
+        return true;
+    }
+
+    bool removeCell(const std::string& cellId) {
+        for (auto it = m_cells.begin(); it != m_cells.end(); ++it) {
+            if (it->id == cellId) { m_cells.erase(it); return true; }
+        }
+        return false;
+    }
+
+    [[nodiscard]] InsurgencyCell* findCell(const std::string& cellId) {
+        for (auto& c : m_cells) { if (c.id == cellId) return &c; }
+        return nullptr;
+    }
+
+    [[nodiscard]] size_t cellCount()       const { return m_cells.size(); }
+    [[nodiscard]] size_t activeCellCount() const {
+        size_t count = 0;
+        for (const auto& c : m_cells) { if (c.isOperational()) ++count; }
+        return count;
+    }
+    [[nodiscard]] size_t totalMembers() const {
+        size_t total = 0;
+        for (const auto& c : m_cells) { total += c.memberCount; }
+        return total;
+    }
+
+    void tick(float /*dt*/) { m_tickCount++; }
+    [[nodiscard]] size_t tickCount() const { return m_tickCount; }
+
+private:
+    std::string                 m_name;
+    std::vector<InsurgencyCell> m_cells;
+    size_t                      m_tickCount = 0;
+};
+
+class InsurgencySystem {
+public:
+    static constexpr size_t kMaxMovements  = 8;
+    static constexpr size_t kMaxInsurgents = 256;
+
+    InsurgencyMovement* createMovement(const std::string& name) {
+        if (m_movements.size() >= kMaxMovements) return nullptr;
+        for (const auto& mv : m_movements) { if (mv.name() == name) return nullptr; }
+        m_movements.emplace_back(name);
+        return &m_movements.back();
+    }
+
+    [[nodiscard]] InsurgencyMovement* movementByName(const std::string& name) {
+        for (auto& mv : m_movements) { if (mv.name() == name) return &mv; }
+        return nullptr;
+    }
+
+    bool addInsurgent(const Insurgent& insurgent) {
+        if (m_insurgents.size() >= kMaxInsurgents) return false;
+        for (const auto& i : m_insurgents) { if (i.id == insurgent.id) return false; }
+        m_insurgents.push_back(insurgent);
+        return true;
+    }
+
+    [[nodiscard]] Insurgent* findInsurgent(const std::string& id) {
+        for (auto& i : m_insurgents) { if (i.id == id) return &i; }
+        return nullptr;
+    }
+
+    void tick(float dt) {
+        for (auto& mv : m_movements) mv.tick(dt);
+        m_tickCount++;
+    }
+
+    [[nodiscard]] size_t movementCount()       const { return m_movements.size(); }
+    [[nodiscard]] size_t totalInsurgentCount() const { return m_insurgents.size(); }
+    [[nodiscard]] size_t tickCount()           const { return m_tickCount; }
+
+    [[nodiscard]] size_t activeInsurgentCount() const {
+        size_t count = 0;
+        for (const auto& i : m_insurgents) { if (i.isActive()) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] size_t capturedInsurgentCount() const {
+        size_t count = 0;
+        for (const auto& i : m_insurgents) { if (i.isCaptured()) ++count; }
+        return count;
+    }
+
+    [[nodiscard]] size_t totalCells() const {
+        size_t count = 0;
+        for (const auto& mv : m_movements) count += mv.cellCount();
+        return count;
+    }
+
+private:
+    std::vector<InsurgencyMovement> m_movements;
+    std::vector<Insurgent>          m_insurgents;
+    size_t                          m_tickCount = 0;
+};
+
 } // namespace NF

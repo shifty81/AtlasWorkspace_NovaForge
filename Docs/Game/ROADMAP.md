@@ -63,7 +63,8 @@
 | **G31** — Colony Management | ColonyRole×8, Colonist, ColonyBuilding, Colony, ColonySystem | ✅ Done |
 | **G32** — Archaeology System | ArtifactRarity×8, Artifact, ExcavationSite, ArtifactCollection, ArchaeologySystem | ✅ Done |
 | **G33** — Migration System | MigrationTrigger×8, Migrant, MigrationWave, MigrationRoute, MigrationSystem | ✅ Done |
-| **G34** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G34** — Insurgency System | InsurgencyType×8, InsurgentStatus×4, Insurgent, InsurgencyCell, InsurgencyMovement, InsurgencySystem | ✅ Done |
+| **G35** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -108,7 +109,8 @@
 | **S12** — Version Control Integration | VCSProviderType×8, VCSFileStatus×8, VCSCommitInfo, VCSBranchInfo, VCSDiffEntry, VCSRepository, VersionControlSystem | ✅ Done |
 | **S13** — Localization System | LocaleId×8, LocalizedString, TranslationEntry, TranslationTable, LocaleManager, LocalizationSystem | ✅ Done |
 | **S14** — Plugin System | PluginState×8, PluginManifest, PluginInstance, PluginRegistry, PluginLoader, PluginSystem | ✅ Done |
-| **S15** — *(next)* | TBD — next workspace phase | 📋 Far future |
+| **S15** — Scripting Console | ScriptLanguage×8, ScriptVariable, ScriptResult, ScriptContext, ScriptConsole | ✅ Done |
+| **S16** — *(next)* | TBD — next workspace phase | 📋 Far future |
 
 ## Status Key
 

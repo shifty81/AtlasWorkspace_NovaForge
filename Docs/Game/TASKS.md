@@ -1636,3 +1636,72 @@ G33 (Migration System) fully delivered:
 ## Build Verification ✅
 
 Total: 1322 tests, 0 failures (1303 existing + 19 new = 1322).
+
+---
+
+## S15 — Scripting Console ✅
+
+- [x] ScriptLanguage enum ×8 (Lua, Python, JavaScript, TypeScript, Bash, Ruby, Csharp, DSL)
+  - scriptLanguageName() for all 8 languages
+- [x] ScriptVariable struct (name, value, typeName, readOnly)
+  - isValid(), isReadOnly(), set(value) with readonly guard
+- [x] ScriptResult struct (output, errorMessage, exitCode, durationMs)
+  - isSuccess(), hasOutput(), hasError()
+- [x] ScriptContext class — execution environment with variable scoping
+  - setVariable/getVariable/removeVariable (max 128), hasVariable, variableCount
+  - clear(), language, name
+- [x] ScriptConsole class — top-level scripting console
+  - init/shutdown lifecycle, isInitialized()
+  - execute(code, context) -> ScriptResult
+  - createContext (max 16, unique names), contextByName
+  - tick loop, executionCount, errorCount, totalContexts
+- [x] 15 new editor tests (test_s15_editor.cpp), all passing
+
+## S15 Complete ✅
+
+S15 (Scripting Console) fully delivered:
+- ScriptLanguage×8 with name helpers
+- ScriptVariable and ScriptResult data structures with full semantics
+- ScriptContext with variable management and language scoping
+- ScriptConsole as top-level coordinator with execution tracking
+- 15 new editor tests, all passing
+
+---
+
+## G34 — Insurgency System ✅
+
+- [x] InsurgencyType enum ×8 (Political, Religious, Economic, Military, Cultural, Ecological, Corporate, Territorial)
+  - insurgencyTypeName() for all 8 types
+- [x] InsurgentStatus enum ×4 (Active, Captured, Eliminated, Underground)
+- [x] Insurgent struct (id, name, type, status, loyalty, influence)
+  - isActive(), isCaptured(), isEliminated(), isUnderground()
+  - capture/eliminate/goUnderground lifecycle transitions
+- [x] InsurgencyCell struct (id, region, type, memberCount, resourcePool, operationalLevel)
+  - isOperational(), isFunded(), totalStrength()
+  - addMembers/removeMembers, addResources/drainResources
+- [x] InsurgencyMovement class — multi-cell movement management
+  - addCell/removeCell (max 32, no duplicates), findCell
+  - activeCellCount, totalMembers
+  - tick propagation
+- [x] InsurgencySystem class — top-level coordinator
+  - createMovement (max 8, unique names), movementByName
+  - addInsurgent (max 256, no duplicates), findInsurgent
+  - tick loop, activeInsurgentCount, capturedInsurgentCount, totalCells
+- [x] 12 new game tests (in test_game.cpp), all passing
+
+## G34 Complete ✅
+
+G34 (Insurgency System) fully delivered:
+- InsurgencyType×8 with name helpers
+- InsurgentStatus×4 for full lifecycle tracking
+- Insurgent with status transitions (active/underground/captured/eliminated)
+- InsurgencyCell with operational state, member, and resource management
+- InsurgencyMovement with multi-cell grouping and tick propagation
+- InsurgencySystem as top-level coordinator with movement and insurgent management
+- 12 new game tests, all passing
+
+---
+
+## Build Verification ✅
+
+Total: 1349 tests, 0 failures (1322 existing + 15 S15 + 12 G34 = 1349).
