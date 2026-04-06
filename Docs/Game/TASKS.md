@@ -1142,3 +1142,73 @@ G26 (Power Grid System) fully delivered:
 - PowerGridSystem with multi-grid simulation, load shedding, and restoration
 - 15 new game tests, all passing
 Total: 1080 tests, 0 failures.
+
+---
+
+## S7 — Logic Wiring UI ✅
+
+- [x] S7-1: LogicPinType enum (Flow, Bool, Int, Float, String, Vector, Event, Object)
+  - logicPinTypeName() for all 8 types
+- [x] S7-2: LogicPin struct (id, name, type, isOutput, connected, value)
+- [x] S7-3: LogicNodeType enum (AndGate, OrGate, NotGate, Latch, Delay, Switch, Compare, MathOp)
+  - logicNodeTypeName() for all 8 types
+  - LogicNodeDef struct (name, nodeType, inputs, outputs, description)
+- [x] S7-4: LogicWireNode class — evaluable logic node
+  - addInput/addOutput (max 16 pins each)
+  - findInput/findOutput by pin id
+  - evaluate() — gate logic (AND, OR, NOT, Latch, Compare, MathOp, Delay, Switch)
+- [x] S7-5: LogicWire struct + LogicWireGraph class
+  - addNode/removeNode (max 128), findNode
+  - addWire (max 256, validates endpoints), removeWire
+  - isValid() wire endpoint validation
+  - evaluate() all nodes
+- [x] S7-6: LogicGraphTemplate struct + LogicTemplateLibrary class
+  - addTemplate/removeTemplate (max 64), findTemplate
+  - templatesInCategory(), categoryCount()
+  - Duplicate name rejection
+- [x] S7-7: test_s7_editor.cpp — 21 new Catch2 test cases
+- [x] Build verification: 1116/1116 tests pass
+
+## S7 Complete ✅
+
+S7 (Logic Wiring UI) fully delivered:
+- LogicPinType×8 typed pin system for entity logic graphs
+- LogicNodeType×8 gate types with evaluable LogicWireNode
+- LogicWireGraph for node/wire management with validation
+- LogicTemplateLibrary for reusable graph templates with category filtering
+- 21 new editor tests, all passing
+
+---
+
+## G27 — Vehicle System ✅
+
+- [x] G27-1: VehicleType enum (Rover, Hoverbike, Mech, Shuttle, Crawler, Speeder, Tank, Dropship)
+  - vehicleTypeName() for all 8 types
+- [x] G27-2: VehicleSeat struct (id, label, isDriver, occupied, occupantId)
+  - enter()/exit() occupant management
+- [x] G27-3: VehicleComponent struct (id, name, health, maxHealth, functional)
+  - healthFraction(), applyDamage(), repair(), isDestroyed()
+- [x] G27-4: Vehicle class — single vehicle entity
+  - Seat management (max 8): addSeat/removeSeat/findSeat
+  - Component management (max 16): addComponent/removeComponent/findComponent
+  - Fuel system: fuel/maxFuel/consumeFuel/hasFuel/fuelFraction
+  - Physics: speed/maxSpeed/position/engineActive
+  - occupantCount(), hasDriver(), isOperational(), canOperate()
+- [x] G27-5: VehicleSystem class — central vehicle management
+  - createVehicle (max 16), vehicle access
+  - tickVehicle (fuel consumption + position update)
+  - applyDamage/repairAll for all components
+  - operationalCount()
+- [x] G27-6: 15 new Catch2 test cases in test_game.cpp
+- [x] Build verification: 1116/1116 tests pass (1080 existing + 21 S7 + 15 G27)
+
+## G27 Complete ✅
+
+G27 (Vehicle System) fully delivered:
+- VehicleType×8 with name helper
+- VehicleSeat with enter/exit occupant tracking
+- VehicleComponent with health/damage/repair model
+- Vehicle with seats, components, fuel, physics state, and operational checks
+- VehicleSystem with multi-vehicle management, tick physics, and damage/repair
+- 15 new game tests, all passing
+Total: 1116 tests, 0 failures.

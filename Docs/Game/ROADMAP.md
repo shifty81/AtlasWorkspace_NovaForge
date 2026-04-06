@@ -56,7 +56,8 @@
 | **G24** — Base Building | BasePartCategory×8, BaseLayout, BaseDefense, BaseSystem | ✅ Done |
 | **G25** — Habitat System | HabitatZoneType×8, HabitatZone, LifeSupportModule, HabitatSystem | ✅ Done |
 | **G26** — Power Grid System | PowerSourceType×8, PowerNode, PowerConduit, PowerGrid, PowerGridSystem | ✅ Done |
-| **G27** — *(next)* | TBD — next locked game phase | ⬜ Queued |
+| **G27** — Vehicle System | VehicleType×8, VehicleSeat, VehicleComponent, Vehicle, VehicleSystem | ✅ Done |
+| **G28** — *(next)* | TBD — next locked game phase | ⬜ Queued |
 
 ---
 
@@ -93,7 +94,7 @@
 | **S4** — Blender Bridge | novaforge_bridge.py add-on (BG-1→5), engine-side auto-import | ✅ Done |
 | **S5** — Character & Animation Suite | FPSHandRig, TwoJointIK, AnimationBlendGraph, CharacterGroundingSystem | ✅ Done |
 | **S6** — PCG World Tuning | BiomePainter, structure seed overrides, ore-seam editor, PCG preview | ✅ Done |
-| **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | 📋 Planned |
+| **S7** — Logic Wiring UI | Entity logic graphs (GraphVM), event pins, graph templates | ✅ Done |
 | **S8** — Tool Ecosystem | SwissAgent, ArbiterAI, ContractScanner, ReplayMinimizer as real standalones | 📋 Planned |
 | **S9** — AtlasAI Integration | Pipeline intelligence, proactive suggestions, tool orchestration | 📋 Far future |
 
