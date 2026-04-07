@@ -9,7 +9,7 @@ void InspectorPanel::paint(IPaintContext& context) {
     context.fillRect(m_bounds, Theme::ColorToken::Surface);
     context.drawRect(m_bounds, Theme::ColorToken::Border);
 
-    // Title bar
+    // Title bar (outside clip so the header is never truncated)
     NF::Rect hdr = m_bounds;
     hdr.h = 22.f;
     context.fillRect(hdr, Theme::ColorToken::SurfaceAlt);
@@ -19,6 +19,9 @@ void InspectorPanel::paint(IPaintContext& context) {
     float y = m_bounds.y + 26.f;
     const float left = m_bounds.x + 8.f;
     const float contentW = m_bounds.w - 16.f;
+
+    // Clip content to panel bounds to prevent text overflow
+    context.pushClip(m_bounds);
 
     if (m_selectedEntityId >= 0) {
         // Entity ID
@@ -57,6 +60,8 @@ void InspectorPanel::paint(IPaintContext& context) {
     } else {
         context.drawText({left, y, contentW, 16.f}, "No entity selected", 0, Theme::ColorToken::TextMuted);
     }
+
+    context.popClip();
 }
 
 } // namespace NF::UI::AtlasUI

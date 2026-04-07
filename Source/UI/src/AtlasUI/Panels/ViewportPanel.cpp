@@ -9,6 +9,9 @@ void ViewportPanel::paint(IPaintContext& context) {
     // Viewport background (darker than normal panels)
     context.fillRect(m_bounds, Theme::ColorToken::Background);
 
+    // Clip all viewport content to the panel bounds
+    context.pushClip(m_bounds);
+
     // Grid overlay
     if (m_gridEnabled) {
         const float step = 40.f;
@@ -40,6 +43,8 @@ void ViewportPanel::paint(IPaintContext& context) {
     std::snprintf(camText, sizeof(camText), "Cam: %.1f, %.1f, %.1f", m_camX, m_camY, m_camZ);
     context.drawText({m_bounds.x + 8.f, m_bounds.y + m_bounds.h - 20.f, 200.f, 14.f},
                      camText, 0, Theme::ColorToken::TextMuted);
+
+    context.popClip();
 }
 
 } // namespace NF::UI::AtlasUI
