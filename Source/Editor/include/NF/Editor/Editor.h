@@ -12930,4 +12930,616 @@ private:
     std::string              m_activeAsset;
 };
 
+// ── S45 — Level Sequence Editor ──────────────────────────────────
+
+enum class SeqTrackType : uint8_t {
+    Actor, Camera, Audio, Event, Property
+};
+inline const char* seqTrackTypeName(SeqTrackType t) {
+    switch (t) {
+        case SeqTrackType::Actor:    return "Actor";
+        case SeqTrackType::Camera:   return "Camera";
+        case SeqTrackType::Audio:    return "Audio";
+        case SeqTrackType::Event:    return "Event";
+        case SeqTrackType::Property: return "Property";
+    }
+    return "Unknown";
+}
+
+enum class SeqPlaybackMode : uint8_t {
+    Once, Loop, PingPong, Hold, Custom
+};
+inline const char* seqPlaybackModeName(SeqPlaybackMode m) {
+    switch (m) {
+        case SeqPlaybackMode::Once:     return "Once";
+        case SeqPlaybackMode::Loop:     return "Loop";
+        case SeqPlaybackMode::PingPong: return "PingPong";
+        case SeqPlaybackMode::Hold:     return "Hold";
+        case SeqPlaybackMode::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class SeqState : uint8_t {
+    Idle, Playing, Paused, Recording, Finished
+};
+inline const char* seqStateName(SeqState s) {
+    switch (s) {
+        case SeqState::Idle:      return "Idle";
+        case SeqState::Playing:   return "Playing";
+        case SeqState::Paused:    return "Paused";
+        case SeqState::Recording: return "Recording";
+        case SeqState::Finished:  return "Finished";
+    }
+    return "Unknown";
+}
+
+class LevelSequenceAsset {
+public:
+    explicit LevelSequenceAsset(const std::string& name,
+                                 uint32_t trackCount = 0,
+                                 uint32_t clipCount  = 0)
+        : m_name(name), m_trackCount(trackCount), m_clipCount(clipCount) {}
+
+    [[nodiscard]] const std::string&  name()         const { return m_name; }
+    [[nodiscard]] SeqTrackType        trackType()    const { return m_trackType; }
+    [[nodiscard]] SeqPlaybackMode     playbackMode() const { return m_playbackMode; }
+    [[nodiscard]] SeqState            state()        const { return m_state; }
+    [[nodiscard]] uint32_t            trackCount()   const { return m_trackCount; }
+    [[nodiscard]] uint32_t            clipCount()    const { return m_clipCount; }
+    [[nodiscard]] float               duration()     const { return m_duration; }
+    [[nodiscard]] bool                isLocked()     const { return m_locked; }
+    [[nodiscard]] bool                isRealtime()   const { return m_realtime; }
+    [[nodiscard]] bool                isDirty()      const { return m_dirty; }
+
+    void setTrackType(SeqTrackType t)     { m_trackType    = t; }
+    void setPlaybackMode(SeqPlaybackMode m){ m_playbackMode = m; }
+    void setState(SeqState s)              { m_state        = s; }
+    void setTrackCount(uint32_t n)         { m_trackCount   = n; }
+    void setClipCount(uint32_t n)          { m_clipCount    = n; }
+    void setDuration(float d)              { m_duration     = d; }
+    void setLocked(bool v)                 { m_locked       = v; }
+    void setRealtime(bool v)               { m_realtime     = v; }
+    void setDirty(bool v)                  { m_dirty        = v; }
+
+    [[nodiscard]] bool isPlaying()    const { return m_state == SeqState::Playing; }
+    [[nodiscard]] bool isPaused()     const { return m_state == SeqState::Paused; }
+    [[nodiscard]] bool isRecording()  const { return m_state == SeqState::Recording; }
+    [[nodiscard]] bool isComplex()    const { return m_trackCount >= 8; }
+
+private:
+    std::string      m_name;
+    SeqTrackType     m_trackType    = SeqTrackType::Actor;
+    SeqPlaybackMode  m_playbackMode = SeqPlaybackMode::Once;
+    SeqState         m_state        = SeqState::Idle;
+    uint32_t         m_trackCount   = 0;
+    uint32_t         m_clipCount    = 0;
+    float            m_duration     = 0.0f;
+    bool             m_locked       = false;
+    bool             m_realtime     = false;
+    bool             m_dirty        = false;
+};
+
+class LevelSequenceEditor {
+public:
+    static constexpr size_t MAX_SEQUENCES = 128;
+
+    [[nodiscard]] bool addSequence(const LevelSequenceAsset& seq) {
+        if (m_sequences.size() >= MAX_SEQUENCES) return false;
+        for (auto& s : m_sequences) if (s.name() == seq.name()) return false;
+        m_sequences.push_back(seq);
+        return true;
+    }
+
+    [[nodiscard]] bool removeSequence(const std::string& name) {
+        for (auto it = m_sequences.begin(); it != m_sequences.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeSequence == name) m_activeSequence.clear();
+                m_sequences.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] LevelSequenceAsset* findSequence(const std::string& name) {
+        for (auto& s : m_sequences) if (s.name() == name) return &s;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveSequence(const std::string& name) {
+        for (auto& s : m_sequences)
+            if (s.name() == name) { m_activeSequence = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeSequence() const { return m_activeSequence; }
+    [[nodiscard]] size_t             sequenceCount()  const { return m_sequences.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isDirty())     ++n; return n;
+    }
+    [[nodiscard]] size_t playingCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isPlaying())   ++n; return n;
+    }
+    [[nodiscard]] size_t lockedCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isLocked())    ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isRealtime())  ++n; return n;
+    }
+    [[nodiscard]] size_t complexCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isComplex())   ++n; return n;
+    }
+    [[nodiscard]] size_t countByTrackType(SeqTrackType t) const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.trackType() == t) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(SeqState st) const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.state() == st) ++n; return n;
+    }
+
+private:
+    std::vector<LevelSequenceAsset> m_sequences;
+    std::string                     m_activeSequence;
+};
+
+// ── S46 — Decal Editor ───────────────────────────────────────────
+
+enum class DecalProjectionType : uint8_t {
+    Box, Sphere, Cylinder, Planar, Custom
+};
+inline const char* decalProjectionTypeName(DecalProjectionType t) {
+    switch (t) {
+        case DecalProjectionType::Box:      return "Box";
+        case DecalProjectionType::Sphere:   return "Sphere";
+        case DecalProjectionType::Cylinder: return "Cylinder";
+        case DecalProjectionType::Planar:   return "Planar";
+        case DecalProjectionType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class DecalBlendMode : uint8_t {
+    Translucent, Additive, Modulate, Stain, Emissive
+};
+inline const char* decalBlendModeName(DecalBlendMode m) {
+    switch (m) {
+        case DecalBlendMode::Translucent: return "Translucent";
+        case DecalBlendMode::Additive:    return "Additive";
+        case DecalBlendMode::Modulate:    return "Modulate";
+        case DecalBlendMode::Stain:       return "Stain";
+        case DecalBlendMode::Emissive:    return "Emissive";
+    }
+    return "Unknown";
+}
+
+enum class DecalState : uint8_t {
+    Inactive, Active, Fading, Baked, Error
+};
+inline const char* decalStateName(DecalState s) {
+    switch (s) {
+        case DecalState::Inactive: return "Inactive";
+        case DecalState::Active:   return "Active";
+        case DecalState::Fading:   return "Fading";
+        case DecalState::Baked:    return "Baked";
+        case DecalState::Error:    return "Error";
+    }
+    return "Unknown";
+}
+
+class DecalAsset {
+public:
+    explicit DecalAsset(const std::string& name,
+                        uint32_t layerCount = 0,
+                        uint32_t paramCount = 0)
+        : m_name(name), m_layerCount(layerCount), m_paramCount(paramCount) {}
+
+    [[nodiscard]] const std::string&    name()           const { return m_name; }
+    [[nodiscard]] DecalProjectionType   projectionType() const { return m_projectionType; }
+    [[nodiscard]] DecalBlendMode        blendMode()      const { return m_blendMode; }
+    [[nodiscard]] DecalState            state()          const { return m_state; }
+    [[nodiscard]] uint32_t              layerCount()     const { return m_layerCount; }
+    [[nodiscard]] uint32_t              paramCount()     const { return m_paramCount; }
+    [[nodiscard]] float                 opacity()        const { return m_opacity; }
+    [[nodiscard]] bool                  isReceivingLighting() const { return m_receiveLighting; }
+    [[nodiscard]] bool                  isRealtime()     const { return m_realtime; }
+    [[nodiscard]] bool                  isDirty()        const { return m_dirty; }
+
+    void setProjectionType(DecalProjectionType t) { m_projectionType = t; }
+    void setBlendMode(DecalBlendMode m)            { m_blendMode      = m; }
+    void setState(DecalState s)                    { m_state          = s; }
+    void setLayerCount(uint32_t n)                 { m_layerCount     = n; }
+    void setParamCount(uint32_t n)                 { m_paramCount     = n; }
+    void setOpacity(float v)                       { m_opacity        = v; }
+    void setReceiveLighting(bool v)                { m_receiveLighting = v; }
+    void setRealtime(bool v)                       { m_realtime       = v; }
+    void setDirty(bool v)                          { m_dirty          = v; }
+
+    [[nodiscard]] bool isActive()    const { return m_state == DecalState::Active; }
+    [[nodiscard]] bool isBaked()     const { return m_state == DecalState::Baked; }
+    [[nodiscard]] bool hasError()    const { return m_state == DecalState::Error; }
+    [[nodiscard]] bool isComplex()   const { return m_layerCount >= 4; }
+
+private:
+    std::string           m_name;
+    DecalProjectionType   m_projectionType = DecalProjectionType::Box;
+    DecalBlendMode        m_blendMode      = DecalBlendMode::Translucent;
+    DecalState            m_state          = DecalState::Inactive;
+    uint32_t              m_layerCount     = 0;
+    uint32_t              m_paramCount     = 0;
+    float                 m_opacity        = 1.0f;
+    bool                  m_receiveLighting = false;
+    bool                  m_realtime       = false;
+    bool                  m_dirty          = false;
+};
+
+class DecalEditor {
+public:
+    static constexpr size_t MAX_DECALS = 512;
+
+    [[nodiscard]] bool addDecal(const DecalAsset& decal) {
+        if (m_decals.size() >= MAX_DECALS) return false;
+        for (auto& d : m_decals) if (d.name() == decal.name()) return false;
+        m_decals.push_back(decal);
+        return true;
+    }
+
+    [[nodiscard]] bool removeDecal(const std::string& name) {
+        for (auto it = m_decals.begin(); it != m_decals.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeDecal == name) m_activeDecal.clear();
+                m_decals.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] DecalAsset* findDecal(const std::string& name) {
+        for (auto& d : m_decals) if (d.name() == name) return &d;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveDecal(const std::string& name) {
+        for (auto& d : m_decals)
+            if (d.name() == name) { m_activeDecal = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeDecal() const { return m_activeDecal; }
+    [[nodiscard]] size_t             decalCount()  const { return m_decals.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isDirty())            ++n; return n;
+    }
+    [[nodiscard]] size_t activeCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isActive())           ++n; return n;
+    }
+    [[nodiscard]] size_t bakedCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isBaked())            ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isRealtime())         ++n; return n;
+    }
+    [[nodiscard]] size_t complexCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isComplex())          ++n; return n;
+    }
+    [[nodiscard]] size_t countByProjectionType(DecalProjectionType t) const {
+        size_t n = 0; for (auto& d : m_decals) if (d.projectionType() == t) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(DecalState s) const {
+        size_t n = 0; for (auto& d : m_decals) if (d.state() == s) ++n; return n;
+    }
+
+private:
+    std::vector<DecalAsset> m_decals;
+    std::string             m_activeDecal;
+};
+
+// ── S47 — Environment Probe Editor ───────────────────────────────
+
+enum class EnvProbeShape : uint8_t {
+    Sphere, Box, Capsule, Cylinder, Custom
+};
+inline const char* envProbeShapeName(EnvProbeShape s) {
+    switch (s) {
+        case EnvProbeShape::Sphere:   return "Sphere";
+        case EnvProbeShape::Box:      return "Box";
+        case EnvProbeShape::Capsule:  return "Capsule";
+        case EnvProbeShape::Cylinder: return "Cylinder";
+        case EnvProbeShape::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class EnvProbeCaptureMode : uint8_t {
+    Realtime, Baked, Mixed, Once, OnDemand
+};
+inline const char* envProbeCaptureModeN(EnvProbeCaptureMode m) {
+    switch (m) {
+        case EnvProbeCaptureMode::Realtime:  return "Realtime";
+        case EnvProbeCaptureMode::Baked:     return "Baked";
+        case EnvProbeCaptureMode::Mixed:     return "Mixed";
+        case EnvProbeCaptureMode::Once:      return "Once";
+        case EnvProbeCaptureMode::OnDemand:  return "OnDemand";
+    }
+    return "Unknown";
+}
+
+enum class EnvProbeState : uint8_t {
+    Inactive, Active, Capturing, Invalidated, Error
+};
+inline const char* envProbeStateName(EnvProbeState s) {
+    switch (s) {
+        case EnvProbeState::Inactive:    return "Inactive";
+        case EnvProbeState::Active:      return "Active";
+        case EnvProbeState::Capturing:   return "Capturing";
+        case EnvProbeState::Invalidated: return "Invalidated";
+        case EnvProbeState::Error:       return "Error";
+    }
+    return "Unknown";
+}
+
+class EnvProbeAsset {
+public:
+    explicit EnvProbeAsset(const std::string& name,
+                           uint32_t resolution = 128,
+                           uint32_t layerCount = 0)
+        : m_name(name), m_resolution(resolution), m_layerCount(layerCount) {}
+
+    [[nodiscard]] const std::string&   name()         const { return m_name; }
+    [[nodiscard]] EnvProbeShape        shape()        const { return m_shape; }
+    [[nodiscard]] EnvProbeCaptureMode  captureMode()  const { return m_captureMode; }
+    [[nodiscard]] EnvProbeState        state()        const { return m_state; }
+    [[nodiscard]] uint32_t             resolution()   const { return m_resolution; }
+    [[nodiscard]] uint32_t             layerCount()   const { return m_layerCount; }
+    [[nodiscard]] float                influence()    const { return m_influence; }
+    [[nodiscard]] bool                 isRealtime()   const { return m_captureMode == EnvProbeCaptureMode::Realtime; }
+    [[nodiscard]] bool                 isBaked()      const { return m_captureMode == EnvProbeCaptureMode::Baked; }
+    [[nodiscard]] bool                 isDirty()      const { return m_dirty; }
+    [[nodiscard]] bool                 isLocked()     const { return m_locked; }
+
+    void setShape(EnvProbeShape s)              { m_shape       = s; }
+    void setCaptureMode(EnvProbeCaptureMode m)  { m_captureMode = m; }
+    void setState(EnvProbeState s)              { m_state       = s; }
+    void setResolution(uint32_t r)              { m_resolution  = r; }
+    void setLayerCount(uint32_t n)              { m_layerCount  = n; }
+    void setInfluence(float v)                  { m_influence   = v; }
+    void setDirty(bool v)                       { m_dirty       = v; }
+    void setLocked(bool v)                      { m_locked      = v; }
+
+    [[nodiscard]] bool isActive()      const { return m_state == EnvProbeState::Active; }
+    [[nodiscard]] bool isCapturing()   const { return m_state == EnvProbeState::Capturing; }
+    [[nodiscard]] bool hasError()      const { return m_state == EnvProbeState::Error; }
+    [[nodiscard]] bool isHighRes()     const { return m_resolution >= 512; }
+
+private:
+    std::string          m_name;
+    EnvProbeShape        m_shape       = EnvProbeShape::Sphere;
+    EnvProbeCaptureMode  m_captureMode = EnvProbeCaptureMode::Baked;
+    EnvProbeState        m_state       = EnvProbeState::Inactive;
+    uint32_t             m_resolution  = 128;
+    uint32_t             m_layerCount  = 0;
+    float                m_influence   = 1.0f;
+    bool                 m_dirty       = false;
+    bool                 m_locked      = false;
+};
+
+class EnvironmentProbeEditor {
+public:
+    static constexpr size_t MAX_PROBES = 256;
+
+    [[nodiscard]] bool addProbe(const EnvProbeAsset& probe) {
+        if (m_probes.size() >= MAX_PROBES) return false;
+        for (auto& p : m_probes) if (p.name() == probe.name()) return false;
+        m_probes.push_back(probe);
+        return true;
+    }
+
+    [[nodiscard]] bool removeProbe(const std::string& name) {
+        for (auto it = m_probes.begin(); it != m_probes.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeProbe == name) m_activeProbe.clear();
+                m_probes.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] EnvProbeAsset* findProbe(const std::string& name) {
+        for (auto& p : m_probes) if (p.name() == name) return &p;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveProbe(const std::string& name) {
+        for (auto& p : m_probes)
+            if (p.name() == name) { m_activeProbe = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeProbe() const { return m_activeProbe; }
+    [[nodiscard]] size_t             probeCount()  const { return m_probes.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isDirty())       ++n; return n;
+    }
+    [[nodiscard]] size_t lockedCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isLocked())      ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isRealtime())    ++n; return n;
+    }
+    [[nodiscard]] size_t bakedCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isBaked())       ++n; return n;
+    }
+    [[nodiscard]] size_t highResCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isHighRes())     ++n; return n;
+    }
+    [[nodiscard]] size_t countByShape(EnvProbeShape s) const {
+        size_t n = 0; for (auto& p : m_probes) if (p.shape() == s)    ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(EnvProbeState s) const {
+        size_t n = 0; for (auto& p : m_probes) if (p.state() == s)    ++n; return n;
+    }
+
+private:
+    std::vector<EnvProbeAsset> m_probes;
+    std::string                m_activeProbe;
+};
+
+// ── S48 — Landscape Editor ────────────────────────────────────────
+
+enum class LandscapeBrushType : uint8_t {
+    Circle, Square, Triangle, Gradient, Custom
+};
+inline const char* landscapeBrushTypeName(LandscapeBrushType t) {
+    switch (t) {
+        case LandscapeBrushType::Circle:   return "Circle";
+        case LandscapeBrushType::Square:   return "Square";
+        case LandscapeBrushType::Triangle: return "Triangle";
+        case LandscapeBrushType::Gradient: return "Gradient";
+        case LandscapeBrushType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class LandscapeLayerBlend : uint8_t {
+    Normal, Additive, Multiply, Overlay, Screen
+};
+inline const char* landscapeLayerBlendName(LandscapeLayerBlend b) {
+    switch (b) {
+        case LandscapeLayerBlend::Normal:   return "Normal";
+        case LandscapeLayerBlend::Additive: return "Additive";
+        case LandscapeLayerBlend::Multiply: return "Multiply";
+        case LandscapeLayerBlend::Overlay:  return "Overlay";
+        case LandscapeLayerBlend::Screen:   return "Screen";
+    }
+    return "Unknown";
+}
+
+enum class LandscapeState : uint8_t {
+    Unloaded, Loading, Idle, Editing, Error
+};
+inline const char* landscapeStateName(LandscapeState s) {
+    switch (s) {
+        case LandscapeState::Unloaded: return "Unloaded";
+        case LandscapeState::Loading:  return "Loading";
+        case LandscapeState::Idle:     return "Idle";
+        case LandscapeState::Editing:  return "Editing";
+        case LandscapeState::Error:    return "Error";
+    }
+    return "Unknown";
+}
+
+class LandscapeAsset {
+public:
+    explicit LandscapeAsset(const std::string& name,
+                            uint32_t resolutionX = 512,
+                            uint32_t resolutionY = 512)
+        : m_name(name), m_resolutionX(resolutionX), m_resolutionY(resolutionY) {}
+
+    [[nodiscard]] const std::string&   name()        const { return m_name; }
+    [[nodiscard]] LandscapeBrushType   brushType()   const { return m_brushType; }
+    [[nodiscard]] LandscapeLayerBlend  layerBlend()  const { return m_layerBlend; }
+    [[nodiscard]] LandscapeState       state()       const { return m_state; }
+    [[nodiscard]] uint32_t             resolutionX() const { return m_resolutionX; }
+    [[nodiscard]] uint32_t             resolutionY() const { return m_resolutionY; }
+    [[nodiscard]] uint32_t             layerCount()  const { return m_layerCount; }
+    [[nodiscard]] float                heightScale() const { return m_heightScale; }
+    [[nodiscard]] bool                 isDirty()     const { return m_dirty; }
+    [[nodiscard]] bool                 isLocked()    const { return m_locked; }
+
+    void setBrushType(LandscapeBrushType t)  { m_brushType  = t; }
+    void setLayerBlend(LandscapeLayerBlend b){ m_layerBlend  = b; }
+    void setState(LandscapeState s)          { m_state       = s; }
+    void setResolutionX(uint32_t r)          { m_resolutionX = r; }
+    void setResolutionY(uint32_t r)          { m_resolutionY = r; }
+    void setLayerCount(uint32_t n)           { m_layerCount  = n; }
+    void setHeightScale(float v)             { m_heightScale = v; }
+    void setDirty(bool v)                    { m_dirty       = v; }
+    void setLocked(bool v)                   { m_locked      = v; }
+
+    [[nodiscard]] bool isIdle()      const { return m_state == LandscapeState::Idle; }
+    [[nodiscard]] bool isEditing()   const { return m_state == LandscapeState::Editing; }
+    [[nodiscard]] bool hasError()    const { return m_state == LandscapeState::Error; }
+    [[nodiscard]] bool isHighRes()   const { return m_resolutionX >= 1024 || m_resolutionY >= 1024; }
+    [[nodiscard]] bool isMultiLayer()const { return m_layerCount > 1; }
+
+private:
+    std::string          m_name;
+    LandscapeBrushType   m_brushType  = LandscapeBrushType::Circle;
+    LandscapeLayerBlend  m_layerBlend = LandscapeLayerBlend::Normal;
+    LandscapeState       m_state      = LandscapeState::Unloaded;
+    uint32_t             m_resolutionX = 512;
+    uint32_t             m_resolutionY = 512;
+    uint32_t             m_layerCount  = 1;
+    float                m_heightScale = 1.0f;
+    bool                 m_dirty       = false;
+    bool                 m_locked      = false;
+};
+
+class LandscapeEditor {
+public:
+    static constexpr size_t MAX_LANDSCAPES = 128;
+
+    [[nodiscard]] bool addLandscape(const LandscapeAsset& asset) {
+        if (m_landscapes.size() >= MAX_LANDSCAPES) return false;
+        for (auto& l : m_landscapes) if (l.name() == asset.name()) return false;
+        m_landscapes.push_back(asset);
+        return true;
+    }
+
+    [[nodiscard]] bool removeLandscape(const std::string& name) {
+        for (auto it = m_landscapes.begin(); it != m_landscapes.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeLandscape == name) m_activeLandscape.clear();
+                m_landscapes.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] LandscapeAsset* findLandscape(const std::string& name) {
+        for (auto& l : m_landscapes) if (l.name() == name) return &l;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveLandscape(const std::string& name) {
+        for (auto& l : m_landscapes)
+            if (l.name() == name) { m_activeLandscape = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeLandscape() const { return m_activeLandscape; }
+    [[nodiscard]] size_t             landscapeCount()  const { return m_landscapes.size(); }
+
+    [[nodiscard]] size_t dirtyCount()      const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isDirty())      ++n; return n;
+    }
+    [[nodiscard]] size_t lockedCount()     const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isLocked())     ++n; return n;
+    }
+    [[nodiscard]] size_t editingCount()    const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isEditing())    ++n; return n;
+    }
+    [[nodiscard]] size_t highResCount()    const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isHighRes())    ++n; return n;
+    }
+    [[nodiscard]] size_t multiLayerCount() const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isMultiLayer()) ++n; return n;
+    }
+    [[nodiscard]] size_t countByBrush(LandscapeBrushType t) const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.brushType()  == t) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(LandscapeState s) const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.state()      == s) ++n; return n;
+    }
+
+private:
+    std::vector<LandscapeAsset> m_landscapes;
+    std::string                 m_activeLandscape;
+};
+
 } // namespace NF

@@ -3223,3 +3223,155 @@ Total: 2090 tests, 0 failures (2075 existing + 15 M1-D = 2090).
 ## Build Verification ✅
 
 Total: 2114 tests, 0 failures (2090 existing + 14 S44 + 10 G63 = 2114).
+
+## S45 — Level Sequence Editor ✅
+
+- [x] SeqTrackType enum ×5 (Actor, Camera, Audio, Event, Property) + seqTrackTypeName()
+- [x] SeqPlaybackMode enum ×5 (Once, Loop, PingPong, Hold, Custom) + seqPlaybackModeName()
+- [x] SeqState enum ×5 (Idle, Playing, Paused, Recording, Finished) + seqStateName()
+- [x] LevelSequenceAsset (name, trackType, playbackMode, state, trackCount, clipCount, duration, locked, realtime, dirty)
+  - isPlaying, isPaused, isRecording, isComplex (trackCount>=8)
+- [x] LevelSequenceEditor (max 128 sequences)
+  - addSequence (duplicate rejected), removeSequence (clears activeSequence), findSequence, setActiveSequence
+  - sequenceCount, dirtyCount, playingCount, lockedCount, realtimeCount, complexCount, countByTrackType, countByState
+- [x] 14 new editor tests (test_s45_editor.cpp), all passing
+
+## S45 Complete ✅
+
+---
+
+## G64 — Pulsar System ✅
+
+- [x] PulsarType enum ×5 (Millisecond, Recycled, Binary, Magnetar, Isolated) + pulsarTypeName()
+- [x] PulsarIntensity enum ×5 (Background, Detected, Active, Intense, Extreme) + pulsarIntensityName()
+- [x] PulsarEvent (id, type, intensity, period, coverage, active)
+  - activate, deactivate, isSevere (>= Intense), isMillisecond, isWidespread (>= 50%), hazardScore
+- [x] PulsarRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, millisecondCount, widespreadCount
+- [x] PulsarSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, millisecondEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G64 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2171 tests, 0 failures (2147 existing + 14 S45 + 10 G64 = 2171).
+
+## S46 — Decal Editor ✅
+
+- [x] DecalProjectionType enum ×5 (Box, Sphere, Cylinder, Planar, Custom) + decalProjectionTypeName()
+- [x] DecalBlendMode enum ×5 (Translucent, Additive, Modulate, Stain, Emissive) + decalBlendModeName()
+- [x] DecalState enum ×5 (Inactive, Active, Fading, Baked, Error) + decalStateName()
+- [x] DecalAsset (name, projectionType, blendMode, state, layerCount, paramCount, opacity, receiveLighting, realtime, dirty)
+  - isActive, isBaked, hasError, isComplex (layerCount>=4)
+- [x] DecalEditor (max 512 decals)
+  - addDecal (duplicate rejected), removeDecal (clears activeDecal), findDecal, setActiveDecal
+  - decalCount, dirtyCount, activeCount, bakedCount, realtimeCount, complexCount, countByProjectionType, countByState
+- [x] 14 new editor tests (test_s46_editor.cpp), all passing
+
+## S46 Complete ✅
+
+---
+
+## G65 — Nebula System ✅
+
+- [x] NebulaType enum ×5 (Emission, Reflection, DarkNebula, Supernova, Planetary) + nebulaTypeName()
+- [x] NebulaIntensity enum ×5 (Faint, Dim, Moderate, Bright, Brilliant) + nebulaIntensityName()
+- [x] NebulaEvent (id, type, intensity, sizeLY, coverage, active)
+  - activate, deactivate, isBright (>= Bright), isSupernova, isWidespread (>= 50%), luminosityScore
+- [x] NebulaRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, brightCount, supernovaCount, widespreadCount
+- [x] NebulaSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, brightEventCount, supernovaEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G65 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2195 tests, 0 failures (2171 existing + 14 S46 + 10 G65 = 2195).
+
+## S47 — Environment Probe Editor ✅
+
+- [x] EnvProbeShape enum ×5 (Sphere, Box, Capsule, Cylinder, Custom) + envProbeShapeName()
+- [x] EnvProbeCaptureMode enum ×5 (Realtime, Baked, Mixed, Once, OnDemand) + envProbeCaptureModeN()
+- [x] EnvProbeState enum ×5 (Inactive, Active, Capturing, Invalidated, Error) + envProbeStateName()
+- [x] EnvProbeAsset (name, shape, captureMode, state, resolution, layerCount, influence, locked, dirty)
+  - isRealtime, isBaked, isActive, isCapturing, hasError, isHighRes (resolution>=512)
+- [x] EnvironmentProbeEditor (max 256 probes)
+  - addProbe (duplicate rejected), removeProbe (clears activeProbe), findProbe, setActiveProbe
+  - probeCount, dirtyCount, lockedCount, realtimeCount, bakedCount, highResCount, countByShape, countByState
+- [x] 14 new editor tests (test_s47_editor.cpp), all passing
+
+## S47 Complete ✅
+
+---
+
+## G66 — Black Hole System ✅
+
+- [x] BlackHoleType enum ×5 (Stellar, Intermediate, Supermassive, Primordial, Micro) + blackHoleTypeName()
+- [x] BlackHoleIntensity enum ×5 (Dormant, Quiescent, Active, Violent, Catastrophic) + blackHoleIntensityName()
+- [x] BlackHoleEvent (id, type, intensity, massSolar, coverage, active)
+  - activate, deactivate, isViolent (>= Violent), isSupermassive, isWidespread (>= 50%), gravityScore
+- [x] BlackHoleRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, violentCount, supermassiveCount, widespreadCount
+- [x] BlackHoleSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, violentEventCount, supermassiveEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G66 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2219 tests, 0 failures (2195 existing + 14 S47 + 10 G66 = 2219).
+
+## S48 — Landscape Editor ✅
+
+- [x] LandscapeBrushType enum ×5 (Circle, Square, Triangle, Gradient, Custom) + landscapeBrushTypeName()
+- [x] LandscapeLayerBlend enum ×5 (Normal, Additive, Multiply, Overlay, Screen) + landscapeLayerBlendName()
+- [x] LandscapeState enum ×5 (Unloaded, Loading, Idle, Editing, Error) + landscapeStateName()
+- [x] LandscapeAsset (name, brushType, layerBlend, state, resolutionX/Y, layerCount, heightScale, locked, dirty)
+  - isIdle, isEditing, hasError, isHighRes (resX or resY >= 1024), isMultiLayer (layerCount > 1)
+- [x] LandscapeEditor (max 128 landscapes)
+  - addLandscape (duplicate rejected), removeLandscape (clears activeLandscape), findLandscape, setActiveLandscape
+  - landscapeCount, dirtyCount, lockedCount, editingCount, highResCount, multiLayerCount, countByBrush, countByState
+- [x] 15 new editor tests (test_s48_editor.cpp), all passing
+
+## S48 Complete ✅
+
+---
+
+## G67 — Quasar System ✅
+
+- [x] QuasarType enum ×5 (RadioLoud, RadioQuiet, BroadLine, NarrowLine, BlazarLike) + quasarTypeName()
+- [x] QuasarIntensity enum ×5 (Faint, Dim, Moderate, Luminous, HyperLuminous) + quasarIntensityName()
+- [x] QuasarEvent (id, type, intensity, redshift, coverage, active)
+  - activate, deactivate, isLuminous (>= Luminous), isBlazarLike, isWidespread (>= 50%), isHighRedshift (>= 2.0), luminosityScore
+- [x] QuasarRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, luminousCount, blazarLikeCount, widespreadCount
+- [x] QuasarSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, luminousEventCount, blazarEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G67 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2244 tests, 0 failures (2219 existing + 15 S48 + 10 G67 = 2244).

@@ -12442,4 +12442,537 @@ private:
     size_t                           m_tickCount = 0;
 };
 
+// ── G64 — Pulsar System ──────────────────────────────────────────
+
+enum class PulsarType : uint8_t {
+    Millisecond, Recycled, Binary, Magnetar, Isolated
+};
+inline const char* pulsarTypeName(PulsarType t) {
+    switch (t) {
+        case PulsarType::Millisecond: return "Millisecond";
+        case PulsarType::Recycled:    return "Recycled";
+        case PulsarType::Binary:      return "Binary";
+        case PulsarType::Magnetar:    return "Magnetar";
+        case PulsarType::Isolated:    return "Isolated";
+    }
+    return "Unknown";
+}
+
+enum class PulsarIntensity : uint8_t {
+    Background, Detected, Active, Intense, Extreme
+};
+inline const char* pulsarIntensityName(PulsarIntensity i) {
+    switch (i) {
+        case PulsarIntensity::Background: return "Background";
+        case PulsarIntensity::Detected:   return "Detected";
+        case PulsarIntensity::Active:     return "Active";
+        case PulsarIntensity::Intense:    return "Intense";
+        case PulsarIntensity::Extreme:    return "Extreme";
+    }
+    return "Unknown";
+}
+
+struct PulsarEvent {
+    std::string      id;
+    PulsarType       type      = PulsarType::Isolated;
+    PulsarIntensity  intensity = PulsarIntensity::Background;
+    float            period    = 1.0f;   // rotation period in seconds
+    float            coverage  = 0.0f;   // affected area percentage
+    bool             active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()       const { return intensity >= PulsarIntensity::Intense; }
+    [[nodiscard]] bool isMillisecond()  const { return type == PulsarType::Millisecond; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float hazardScore()   const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * coverage / 10.0f;
+    }
+};
+
+class PulsarRegion {
+public:
+    explicit PulsarRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const PulsarEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] PulsarEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()              const { return m_name; }
+    [[nodiscard]] size_t eventCount()       const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                       ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())       ++c; return c;
+    }
+    [[nodiscard]] size_t millisecondCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isMillisecond())  ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())   ++c; return c;
+    }
+
+private:
+    std::string                m_name;
+    std::vector<PulsarEvent>   m_events;
+    size_t                     m_tickCount = 0;
+};
+
+class PulsarSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    PulsarRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] PulsarRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()           const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()             const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()      const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();       return c;
+    }
+    [[nodiscard]] size_t severeEventCount()      const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();       return c;
+    }
+    [[nodiscard]] size_t millisecondEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.millisecondCount();  return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();   return c;
+    }
+
+private:
+    std::vector<PulsarRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
+// ── G65 — Nebula System ───────────────────────────────────────────
+
+enum class NebulaType : uint8_t {
+    Emission, Reflection, DarkNebula, Supernova, Planetary
+};
+inline const char* nebulaTypeName(NebulaType t) {
+    switch (t) {
+        case NebulaType::Emission:   return "Emission";
+        case NebulaType::Reflection: return "Reflection";
+        case NebulaType::DarkNebula: return "DarkNebula";
+        case NebulaType::Supernova:  return "Supernova";
+        case NebulaType::Planetary:  return "Planetary";
+    }
+    return "Unknown";
+}
+
+enum class NebulaIntensity : uint8_t {
+    Faint, Dim, Moderate, Bright, Brilliant
+};
+inline const char* nebulaIntensityName(NebulaIntensity i) {
+    switch (i) {
+        case NebulaIntensity::Faint:    return "Faint";
+        case NebulaIntensity::Dim:      return "Dim";
+        case NebulaIntensity::Moderate: return "Moderate";
+        case NebulaIntensity::Bright:   return "Bright";
+        case NebulaIntensity::Brilliant:return "Brilliant";
+    }
+    return "Unknown";
+}
+
+struct NebulaEvent {
+    std::string     id;
+    NebulaType      type      = NebulaType::Emission;
+    NebulaIntensity intensity = NebulaIntensity::Faint;
+    float           sizeLY    = 1.0f;   // extent in light-years
+    float           coverage  = 0.0f;   // affected area percentage
+    bool            active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isBright()       const { return intensity >= NebulaIntensity::Bright; }
+    [[nodiscard]] bool isSupernova()    const { return type == NebulaType::Supernova; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float luminosityScore() const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * sizeLY / 5.0f;
+    }
+};
+
+class NebulaRegion {
+public:
+    explicit NebulaRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const NebulaEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] NebulaEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()           const { return m_name; }
+    [[nodiscard]] size_t eventCount()      const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()       const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                      ++c; return c;
+    }
+    [[nodiscard]] size_t brightCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isBright())      ++c; return c;
+    }
+    [[nodiscard]] size_t supernovaCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSupernova())   ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())  ++c; return c;
+    }
+
+private:
+    std::string               m_name;
+    std::vector<NebulaEvent>  m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class NebulaSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    NebulaRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] NebulaRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();      return c;
+    }
+    [[nodiscard]] size_t brightEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.brightCount();      return c;
+    }
+    [[nodiscard]] size_t supernovaEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.supernovaCount();   return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();  return c;
+    }
+
+private:
+    std::vector<NebulaRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
+// ── G66 — Black Hole System ───────────────────────────────────────
+
+enum class BlackHoleType : uint8_t {
+    Stellar, Intermediate, Supermassive, Primordial, Micro
+};
+inline const char* blackHoleTypeName(BlackHoleType t) {
+    switch (t) {
+        case BlackHoleType::Stellar:       return "Stellar";
+        case BlackHoleType::Intermediate:  return "Intermediate";
+        case BlackHoleType::Supermassive:  return "Supermassive";
+        case BlackHoleType::Primordial:    return "Primordial";
+        case BlackHoleType::Micro:         return "Micro";
+    }
+    return "Unknown";
+}
+
+enum class BlackHoleIntensity : uint8_t {
+    Dormant, Quiescent, Active, Violent, Catastrophic
+};
+inline const char* blackHoleIntensityName(BlackHoleIntensity i) {
+    switch (i) {
+        case BlackHoleIntensity::Dormant:      return "Dormant";
+        case BlackHoleIntensity::Quiescent:    return "Quiescent";
+        case BlackHoleIntensity::Active:       return "Active";
+        case BlackHoleIntensity::Violent:      return "Violent";
+        case BlackHoleIntensity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct BlackHoleEvent {
+    std::string        id;
+    BlackHoleType      type      = BlackHoleType::Stellar;
+    BlackHoleIntensity intensity = BlackHoleIntensity::Dormant;
+    float              massSolar = 1.0f;   // in solar masses
+    float              coverage  = 0.0f;   // affected region percentage
+    bool               active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isViolent()      const { return intensity >= BlackHoleIntensity::Violent; }
+    [[nodiscard]] bool isSupermassive() const { return type == BlackHoleType::Supermassive; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float gravityScore()  const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * massSolar / 10.0f;
+    }
+};
+
+class BlackHoleRegion {
+public:
+    explicit BlackHoleRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const BlackHoleEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] BlackHoleEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()           const { return m_name; }
+    [[nodiscard]] size_t eventCount()       const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                       ++c; return c;
+    }
+    [[nodiscard]] size_t violentCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isViolent())      ++c; return c;
+    }
+    [[nodiscard]] size_t supermassiveCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSupermassive()) ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())   ++c; return c;
+    }
+
+private:
+    std::string                  m_name;
+    std::vector<BlackHoleEvent>  m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class BlackHoleSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    BlackHoleRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] BlackHoleRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()            const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()              const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()       const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();       return c;
+    }
+    [[nodiscard]] size_t violentEventCount()      const {
+        size_t c = 0; for (auto& r : m_regions) c += r.violentCount();      return c;
+    }
+    [[nodiscard]] size_t supermassiveEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.supermassiveCount(); return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();   return c;
+    }
+
+private:
+    std::vector<BlackHoleRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
+// ── G67 — Quasar System ───────────────────────────────────────────
+
+enum class QuasarType : uint8_t {
+    RadioLoud, RadioQuiet, BroadLine, NarrowLine, BlazarLike
+};
+inline const char* quasarTypeName(QuasarType t) {
+    switch (t) {
+        case QuasarType::RadioLoud:   return "RadioLoud";
+        case QuasarType::RadioQuiet:  return "RadioQuiet";
+        case QuasarType::BroadLine:   return "BroadLine";
+        case QuasarType::NarrowLine:  return "NarrowLine";
+        case QuasarType::BlazarLike:  return "BlazarLike";
+    }
+    return "Unknown";
+}
+
+enum class QuasarIntensity : uint8_t {
+    Faint, Dim, Moderate, Luminous, HyperLuminous
+};
+inline const char* quasarIntensityName(QuasarIntensity i) {
+    switch (i) {
+        case QuasarIntensity::Faint:          return "Faint";
+        case QuasarIntensity::Dim:            return "Dim";
+        case QuasarIntensity::Moderate:       return "Moderate";
+        case QuasarIntensity::Luminous:       return "Luminous";
+        case QuasarIntensity::HyperLuminous:  return "HyperLuminous";
+    }
+    return "Unknown";
+}
+
+struct QuasarEvent {
+    std::string      id;
+    QuasarType       type      = QuasarType::RadioLoud;
+    QuasarIntensity  intensity = QuasarIntensity::Faint;
+    float            redshift  = 0.0f;   // cosmological redshift z
+    float            coverage  = 0.0f;   // affected region percentage
+    bool             active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isLuminous()      const { return intensity >= QuasarIntensity::Luminous; }
+    [[nodiscard]] bool isBlazarLike()    const { return type == QuasarType::BlazarLike; }
+    [[nodiscard]] bool isWidespread()    const { return coverage >= 50.0f; }
+    [[nodiscard]] bool isHighRedshift()  const { return redshift >= 2.0f; }
+    [[nodiscard]] float luminosityScore()const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * (1.0f + redshift);
+    }
+};
+
+class QuasarRegion {
+public:
+    explicit QuasarRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const QuasarEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] QuasarEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()           const { return m_name; }
+    [[nodiscard]] size_t eventCount()       const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                      ++c; return c;
+    }
+    [[nodiscard]] size_t luminousCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isLuminous())    ++c; return c;
+    }
+    [[nodiscard]] size_t blazarLikeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isBlazarLike())  ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())  ++c; return c;
+    }
+
+private:
+    std::string               m_name;
+    std::vector<QuasarEvent>  m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class QuasarSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    QuasarRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] QuasarRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();    return c;
+    }
+    [[nodiscard]] size_t luminousEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.luminousCount();  return c;
+    }
+    [[nodiscard]] size_t blazarEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.blazarLikeCount();return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();return c;
+    }
+
+private:
+    std::vector<QuasarRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF

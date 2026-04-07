@@ -9928,3 +9928,520 @@ TEST_CASE("GammaRayBurstRegion findEvent and removeEvent", "[Game][G63][GRB]") {
     REQUIRE(region.eventCount() == 0);
     REQUIRE(region.findEvent("grb5") == nullptr);
 }
+
+// ── G64 — Pulsar System ──────────────────────────────────────────
+
+TEST_CASE("PulsarType names cover all 5 values", "[Game][G64][Pulsar]") {
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Millisecond)) == "Millisecond");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Recycled))    == "Recycled");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Binary))      == "Binary");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Magnetar))    == "Magnetar");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Isolated))    == "Isolated");
+}
+
+TEST_CASE("PulsarIntensity names cover all 5 values", "[Game][G64][Pulsar]") {
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Background)) == "Background");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Detected))   == "Detected");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Active))     == "Active");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Intense))    == "Intense");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Extreme))    == "Extreme");
+}
+
+TEST_CASE("PulsarEvent default values and activate/deactivate", "[Game][G64][Pulsar]") {
+    NF::PulsarEvent ev;
+    ev.id = "psr1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::PulsarType::Isolated);
+    REQUIRE(ev.intensity == NF::PulsarIntensity::Background);
+    REQUIRE_FALSE(ev.isSevere());
+    REQUIRE_FALSE(ev.isMillisecond());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("PulsarEvent predicates", "[Game][G64][Pulsar]") {
+    NF::PulsarEvent ev;
+    ev.id = "psr2";
+    ev.type      = NF::PulsarType::Millisecond;
+    ev.intensity = NF::PulsarIntensity::Intense;
+    ev.coverage  = 60.0f;
+    ev.activate();
+
+    REQUIRE(ev.isSevere());
+    REQUIRE(ev.isMillisecond());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.hazardScore() > 0.0f);
+}
+
+TEST_CASE("PulsarRegion addEvent and duplicate rejection", "[Game][G64][Pulsar]") {
+    NF::PulsarRegion region("sector_alpha");
+    NF::PulsarEvent a; a.id = "a"; a.activate();
+    NF::PulsarEvent b; b.id = "b"; b.activate();
+    NF::PulsarEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("PulsarRegion activateAll and deactivateAll", "[Game][G64][Pulsar]") {
+    NF::PulsarRegion region("sector_beta");
+    NF::PulsarEvent x; x.id = "x";
+    NF::PulsarEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("PulsarSystem createRegion and tick", "[Game][G64][Pulsar]") {
+    NF::PulsarSystem sys;
+    REQUIRE(sys.createRegion("milky_way") != nullptr);
+    REQUIRE(sys.createRegion("andromeda") != nullptr);
+    REQUIRE(sys.createRegion("milky_way") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("PulsarSystem aggregate counts across regions", "[Game][G64][Pulsar]") {
+    NF::PulsarSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::PulsarEvent x; x.id = "x"; x.type = NF::PulsarType::Millisecond; x.intensity = NF::PulsarIntensity::Extreme;  x.coverage = 80.0f; x.activate();
+    NF::PulsarEvent y; y.id = "y"; y.type = NF::PulsarType::Binary;       y.intensity = NF::PulsarIntensity::Detected; y.coverage = 5.0f;  y.activate();
+    NF::PulsarEvent z; z.id = "z"; z.type = NF::PulsarType::Magnetar;     z.intensity = NF::PulsarIntensity::Intense;  z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()      == 2);
+    REQUIRE(sys.severeEventCount()      == 1); // only x (y=Detected, z inactive)
+    REQUIRE(sys.millisecondEventCount() == 1); // only x
+    REQUIRE(sys.widespreadEventCount()  == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("PulsarRegion findEvent and removeEvent", "[Game][G64][Pulsar]") {
+    NF::PulsarRegion region("deep_space");
+    NF::PulsarEvent ev; ev.id = "psr9"; ev.type = NF::PulsarType::Recycled; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("psr9") != nullptr);
+    REQUIRE(region.findEvent("psr9")->type == NF::PulsarType::Recycled);
+
+    REQUIRE(region.removeEvent("psr9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("psr9") == nullptr);
+}
+
+TEST_CASE("PulsarSystem MAX_REGIONS limit enforced", "[Game][G64][Pulsar]") {
+    NF::PulsarSystem sys;
+    for (size_t i = 0; i < NF::PulsarSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("region_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::PulsarSystem::MAX_REGIONS);
+}
+
+// ── G65 — Nebula System ───────────────────────────────────────────
+
+TEST_CASE("NebulaType names cover all 5 values", "[Game][G65][Nebula]") {
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Emission))   == "Emission");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Reflection)) == "Reflection");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::DarkNebula)) == "DarkNebula");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Supernova))  == "Supernova");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Planetary))  == "Planetary");
+}
+
+TEST_CASE("NebulaIntensity names cover all 5 values", "[Game][G65][Nebula]") {
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Faint))    == "Faint");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Dim))      == "Dim");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Bright))   == "Bright");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Brilliant))== "Brilliant");
+}
+
+TEST_CASE("NebulaEvent default values and activate/deactivate", "[Game][G65][Nebula]") {
+    NF::NebulaEvent ev;
+    ev.id = "neb1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::NebulaType::Emission);
+    REQUIRE(ev.intensity == NF::NebulaIntensity::Faint);
+    REQUIRE_FALSE(ev.isBright());
+    REQUIRE_FALSE(ev.isSupernova());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("NebulaEvent predicates", "[Game][G65][Nebula]") {
+    NF::NebulaEvent ev;
+    ev.id        = "neb2";
+    ev.type      = NF::NebulaType::Supernova;
+    ev.intensity = NF::NebulaIntensity::Brilliant;
+    ev.coverage  = 60.0f;
+    ev.sizeLY    = 10.0f;
+    ev.activate();
+
+    REQUIRE(ev.isBright());
+    REQUIRE(ev.isSupernova());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.luminosityScore() > 0.0f);
+}
+
+TEST_CASE("NebulaRegion addEvent and duplicate rejection", "[Game][G65][Nebula]") {
+    NF::NebulaRegion region("orion_arm");
+    NF::NebulaEvent a; a.id = "a"; a.activate();
+    NF::NebulaEvent b; b.id = "b"; b.activate();
+    NF::NebulaEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount()  == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("NebulaRegion activateAll and deactivateAll", "[Game][G65][Nebula]") {
+    NF::NebulaRegion region("cygnus_arm");
+    NF::NebulaEvent x; x.id = "x";
+    NF::NebulaEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("NebulaSystem createRegion and tick", "[Game][G65][Nebula]") {
+    NF::NebulaSystem sys;
+    REQUIRE(sys.createRegion("milky_way") != nullptr);
+    REQUIRE(sys.createRegion("magellanic") != nullptr);
+    REQUIRE(sys.createRegion("milky_way") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("NebulaSystem aggregate counts across regions", "[Game][G65][Nebula]") {
+    NF::NebulaSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::NebulaEvent x; x.id = "x"; x.type = NF::NebulaType::Supernova;  x.intensity = NF::NebulaIntensity::Brilliant; x.coverage = 80.0f; x.activate();
+    NF::NebulaEvent y; y.id = "y"; y.type = NF::NebulaType::Emission;    y.intensity = NF::NebulaIntensity::Dim;       y.coverage = 5.0f;  y.activate();
+    NF::NebulaEvent z; z.id = "z"; z.type = NF::NebulaType::Reflection;  z.intensity = NF::NebulaIntensity::Bright;   z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.brightEventCount()     == 1); // only x (y=Dim, z inactive)
+    REQUIRE(sys.supernovaEventCount()  == 1); // only x
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("NebulaRegion findEvent and removeEvent", "[Game][G65][Nebula]") {
+    NF::NebulaRegion region("sagittarius");
+    NF::NebulaEvent ev; ev.id = "neb9"; ev.type = NF::NebulaType::Planetary; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("neb9") != nullptr);
+    REQUIRE(region.findEvent("neb9")->type == NF::NebulaType::Planetary);
+
+    REQUIRE(region.removeEvent("neb9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("neb9") == nullptr);
+}
+
+TEST_CASE("NebulaSystem MAX_REGIONS limit enforced", "[Game][G65][Nebula]") {
+    NF::NebulaSystem sys;
+    for (size_t i = 0; i < NF::NebulaSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("nebula_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::NebulaSystem::MAX_REGIONS);
+}
+
+// ── G66 — Black Hole System ───────────────────────────────────────
+
+TEST_CASE("BlackHoleType names cover all 5 values", "[Game][G66][BlackHole]") {
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Stellar))       == "Stellar");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Intermediate))  == "Intermediate");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Supermassive))  == "Supermassive");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Primordial))    == "Primordial");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Micro))         == "Micro");
+}
+
+TEST_CASE("BlackHoleIntensity names cover all 5 values", "[Game][G66][BlackHole]") {
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Dormant))      == "Dormant");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Quiescent))    == "Quiescent");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Active))       == "Active");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Violent))      == "Violent");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("BlackHoleEvent default values and activate/deactivate", "[Game][G66][BlackHole]") {
+    NF::BlackHoleEvent ev;
+    ev.id = "bh1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::BlackHoleType::Stellar);
+    REQUIRE(ev.intensity == NF::BlackHoleIntensity::Dormant);
+    REQUIRE_FALSE(ev.isViolent());
+    REQUIRE_FALSE(ev.isSupermassive());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("BlackHoleEvent predicates", "[Game][G66][BlackHole]") {
+    NF::BlackHoleEvent ev;
+    ev.id        = "bh2";
+    ev.type      = NF::BlackHoleType::Supermassive;
+    ev.intensity = NF::BlackHoleIntensity::Catastrophic;
+    ev.coverage  = 75.0f;
+    ev.massSolar = 1000000.0f;
+    ev.activate();
+
+    REQUIRE(ev.isViolent());
+    REQUIRE(ev.isSupermassive());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.gravityScore() > 0.0f);
+}
+
+TEST_CASE("BlackHoleRegion addEvent and duplicate rejection", "[Game][G66][BlackHole]") {
+    NF::BlackHoleRegion region("galactic_core");
+    NF::BlackHoleEvent a; a.id = "a"; a.activate();
+    NF::BlackHoleEvent b; b.id = "b"; b.activate();
+    NF::BlackHoleEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount()  == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("BlackHoleRegion activateAll and deactivateAll", "[Game][G66][BlackHole]") {
+    NF::BlackHoleRegion region("event_horizon");
+    NF::BlackHoleEvent x; x.id = "x";
+    NF::BlackHoleEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("BlackHoleSystem createRegion and tick", "[Game][G66][BlackHole]") {
+    NF::BlackHoleSystem sys;
+    REQUIRE(sys.createRegion("milky_way_center") != nullptr);
+    REQUIRE(sys.createRegion("andromeda_core")   != nullptr);
+    REQUIRE(sys.createRegion("milky_way_center") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("BlackHoleSystem aggregate counts across regions", "[Game][G66][BlackHole]") {
+    NF::BlackHoleSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::BlackHoleEvent x; x.id = "x"; x.type = NF::BlackHoleType::Supermassive; x.intensity = NF::BlackHoleIntensity::Catastrophic; x.coverage = 80.0f; x.activate();
+    NF::BlackHoleEvent y; y.id = "y"; y.type = NF::BlackHoleType::Stellar;       y.intensity = NF::BlackHoleIntensity::Dormant;       y.coverage = 5.0f;  y.activate();
+    NF::BlackHoleEvent z; z.id = "z"; z.type = NF::BlackHoleType::Stellar;       z.intensity = NF::BlackHoleIntensity::Violent;       z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()       == 2);
+    REQUIRE(sys.violentEventCount()      == 1); // only x (y=Dormant, z inactive)
+    REQUIRE(sys.supermassiveEventCount() == 1); // only x
+    REQUIRE(sys.widespreadEventCount()   == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("BlackHoleRegion findEvent and removeEvent", "[Game][G66][BlackHole]") {
+    NF::BlackHoleRegion region("quasar_field");
+    NF::BlackHoleEvent ev; ev.id = "bh9"; ev.type = NF::BlackHoleType::Intermediate; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("bh9") != nullptr);
+    REQUIRE(region.findEvent("bh9")->type == NF::BlackHoleType::Intermediate);
+
+    REQUIRE(region.removeEvent("bh9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("bh9") == nullptr);
+}
+
+TEST_CASE("BlackHoleSystem MAX_REGIONS limit enforced", "[Game][G66][BlackHole]") {
+    NF::BlackHoleSystem sys;
+    for (size_t i = 0; i < NF::BlackHoleSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("bh_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::BlackHoleSystem::MAX_REGIONS);
+}
+
+// ── G67 — Quasar System ───────────────────────────────────────────
+
+TEST_CASE("QuasarType names cover all 5 values", "[Game][G67][Quasar]") {
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::RadioLoud))  == "RadioLoud");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::RadioQuiet)) == "RadioQuiet");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::BroadLine))  == "BroadLine");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::NarrowLine)) == "NarrowLine");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::BlazarLike)) == "BlazarLike");
+}
+
+TEST_CASE("QuasarIntensity names cover all 5 values", "[Game][G67][Quasar]") {
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Faint))         == "Faint");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Dim))           == "Dim");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Moderate))      == "Moderate");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Luminous))      == "Luminous");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::HyperLuminous)) == "HyperLuminous");
+}
+
+TEST_CASE("QuasarEvent default values and activate/deactivate", "[Game][G67][Quasar]") {
+    NF::QuasarEvent ev;
+    ev.id = "q1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::QuasarType::RadioLoud);
+    REQUIRE(ev.intensity == NF::QuasarIntensity::Faint);
+    REQUIRE_FALSE(ev.isLuminous());
+    REQUIRE_FALSE(ev.isBlazarLike());
+    REQUIRE_FALSE(ev.isWidespread());
+    REQUIRE_FALSE(ev.isHighRedshift());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("QuasarEvent predicates", "[Game][G67][Quasar]") {
+    NF::QuasarEvent ev;
+    ev.id        = "q2";
+    ev.type      = NF::QuasarType::BlazarLike;
+    ev.intensity = NF::QuasarIntensity::HyperLuminous;
+    ev.redshift  = 3.5f;
+    ev.coverage  = 75.0f;
+    ev.activate();
+
+    REQUIRE(ev.isLuminous());
+    REQUIRE(ev.isBlazarLike());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.isHighRedshift());
+    REQUIRE(ev.luminosityScore() > 0.0f);
+}
+
+TEST_CASE("QuasarRegion addEvent and duplicate rejection", "[Game][G67][Quasar]") {
+    NF::QuasarRegion region("deep_field");
+    NF::QuasarEvent a; a.id = "a"; a.activate();
+    NF::QuasarEvent b; b.id = "b"; b.activate();
+    NF::QuasarEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount()  == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("QuasarRegion activateAll and deactivateAll", "[Game][G67][Quasar]") {
+    NF::QuasarRegion region("hubble_field");
+    NF::QuasarEvent x; x.id = "x";
+    NF::QuasarEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("QuasarSystem createRegion and tick", "[Game][G67][Quasar]") {
+    NF::QuasarSystem sys;
+    REQUIRE(sys.createRegion("zone_a") != nullptr);
+    REQUIRE(sys.createRegion("zone_b") != nullptr);
+    REQUIRE(sys.createRegion("zone_a") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("QuasarSystem aggregate counts across regions", "[Game][G67][Quasar]") {
+    NF::QuasarSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::QuasarEvent x; x.id = "x"; x.type = NF::QuasarType::BlazarLike; x.intensity = NF::QuasarIntensity::HyperLuminous; x.coverage = 80.0f; x.activate();
+    NF::QuasarEvent y; y.id = "y"; y.type = NF::QuasarType::RadioLoud;   y.intensity = NF::QuasarIntensity::Faint;         y.coverage = 5.0f;  y.activate();
+    NF::QuasarEvent z; z.id = "z"; z.type = NF::QuasarType::BroadLine;   z.intensity = NF::QuasarIntensity::Luminous;      z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.luminousEventCount()   == 1); // only x (y=Faint, z inactive)
+    REQUIRE(sys.blazarEventCount()     == 1); // only x
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("QuasarRegion findEvent and removeEvent", "[Game][G67][Quasar]") {
+    NF::QuasarRegion region("survey_zone");
+    NF::QuasarEvent ev; ev.id = "q9"; ev.type = NF::QuasarType::NarrowLine; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("q9") != nullptr);
+    REQUIRE(region.findEvent("q9")->type == NF::QuasarType::NarrowLine);
+
+    REQUIRE(region.removeEvent("q9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("q9") == nullptr);
+}
+
+TEST_CASE("QuasarSystem MAX_REGIONS limit enforced", "[Game][G67][Quasar]") {
+    NF::QuasarSystem sys;
+    for (size_t i = 0; i < NF::QuasarSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("q_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::QuasarSystem::MAX_REGIONS);
+}
