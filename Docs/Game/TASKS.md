@@ -513,6 +513,33 @@
 - [x] Write comprehensive tests for all migrated panels (40 new tests)
 - [x] All 8 AtlasUI panels register with PanelHost successfully
 
+## UI Migration — Phase U9 (Wire EditorApp to AtlasUI)
+
+- [x] Step 1: Implement GDIRenderBackend (DrawList → UIRenderer bridge) — GDIRenderBackend.h
+  - Converts AtlasUI ARGB (0xAARRGGBB) to UIRenderer RGBA (0xRRGGBBAA)
+  - Dispatches all 5 DrawCommand variants; PushClip/PopClip are no-ops on GDI
+- [x] Step 2: Add AtlasUI ProjectPickerPanel (Panels/ProjectPickerPanel.h + .cpp)
+  - Full modal overlay with paint() and handleInput() (click-to-select, Open, Cancel)
+  - Same scanDirectory/isLoaded/loadSelected interface as legacy NF::ProjectPickerPanel
+- [x] Step 3: Add AtlasUI host fields to EditorApp (PanelHost, GDIRenderBackend, BasicPaintContext, BasicInputContext)
+  - 8 typed AtlasUI panel pointers wired in init(); content browser pre-populated
+  - GDIRenderBackend wired to m_ui; atlasHost() accessor exposed for tests
+- [x] Step 4: Replace legacy render loop in renderAll() with AtlasUI paint loop
+  - Removes the render()+renderUI() dual-call that caused text-overlap artefact
+  - ProjectPickerPanel modal uses AtlasUI paint path instead of UIRenderer directly
+- [x] Step 5: Replace input routing in update() — dispatch handleInput() to all AtlasUI panels
+  - BasicInputContext populated from m_mouseState each frame
+  - AtlasUI InspectorPanel/ViewportPanel data synced from legacy selection/camera
+- [x] Step 6: Fix 3 immediate bugs
+  - Remove double input.update() from EditorApp::update() (was called in main loop too)
+  - Delete Project/project.atlas.json (duplicate causing two identical picker entries)
+  - Add inputAdapter.setWindowHandle(hwnd) in main.cpp for Win32 mouse capture
+- [x] Step 7: Log sink feeds both legacy ConsolePanel and AtlasUI ConsolePanel
+- [x] Step 8: Add test suite Tests/Editor/test_u9_atlasui_integration.cpp (17 tests)
+  - GDIRenderBackend: all 5 command types, null-safety, pointer accessor
+  - ProjectPickerPanel: default state, show/hide, scan, load, Cancel/Open/row click
+  - EditorApp: atlasHost panel count, renderAll smoke, update smoke
+
 ## Repo Consolidation — Phase 3 (Nova-Forge-Expeditions Extraction)
 
 - [x] Audit source repo contents via GitHub API (~5,900 files)

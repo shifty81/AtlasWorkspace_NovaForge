@@ -8,6 +8,20 @@
 #include "NF/GraphVM/GraphVM.h"
 #include "NF/Input/Input.h"
 #include "NF/UI/UIWidgets.h"
+// ── U9: AtlasUI wiring ───────────────────────────────────────────
+#include "NF/UI/AtlasUI/AtlasUI.h"
+#include "NF/UI/AtlasUI/Contexts.h"
+#include "NF/UI/AtlasUI/GDIRenderBackend.h"
+#include "NF/UI/AtlasUI/Panels/ConsolePanel.h"
+#include "NF/UI/AtlasUI/Panels/ContentBrowserPanel.h"
+#include "NF/UI/AtlasUI/Panels/GraphEditorPanel.h"
+#include "NF/UI/AtlasUI/Panels/HierarchyPanel.h"
+#include "NF/UI/AtlasUI/Panels/IDEPanel.h"
+#include "NF/UI/AtlasUI/Panels/InspectorPanel.h"
+#include "NF/UI/AtlasUI/Panels/PipelineMonitorPanel.h"
+#include "NF/UI/AtlasUI/Panels/ProjectPickerPanel.h"
+#include "NF/UI/AtlasUI/Panels/ViewportPanel.h"
+// ────────────────────────────────────────────────────────────────
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -3701,6 +3715,38 @@ public:
             m_editorPanels.push_back(std::move(pcg));
         }
 
+        // ── U9: Attach AtlasUI panels to the host ────────────────────
+        {
+            m_atlasViewport        = std::make_shared<NF::UI::AtlasUI::ViewportPanel>();
+            m_atlasInspector       = std::make_shared<NF::UI::AtlasUI::InspectorPanel>();
+            m_atlasHierarchy       = std::make_shared<NF::UI::AtlasUI::HierarchyPanel>();
+            m_atlasConsole         = std::make_shared<NF::UI::AtlasUI::ConsolePanel>();
+            m_atlasContentBrowser  = std::make_shared<NF::UI::AtlasUI::ContentBrowserPanel>();
+            m_atlasGraphEditor     = std::make_shared<NF::UI::AtlasUI::GraphEditorPanel>();
+            m_atlasIDE             = std::make_shared<NF::UI::AtlasUI::IDEPanel>();
+            m_atlasPipelineMonitor = std::make_shared<NF::UI::AtlasUI::PipelineMonitorPanel>();
+
+            m_atlasHost.attachPanel(m_atlasViewport);
+            m_atlasHost.attachPanel(m_atlasInspector);
+            m_atlasHost.attachPanel(m_atlasHierarchy);
+            m_atlasHost.attachPanel(m_atlasConsole);
+            m_atlasHost.attachPanel(m_atlasContentBrowser);
+            m_atlasHost.attachPanel(m_atlasGraphEditor);
+            m_atlasHost.attachPanel(m_atlasIDE);
+            m_atlasHost.attachPanel(m_atlasPipelineMonitor);
+
+            // Wire the GDI render backend to the UIRenderer
+            m_atlasRenderer.setUIRenderer(&m_ui);
+
+            // Pre-populate content browser from the scanned content directory
+            if (!m_projectPaths.contentPath().empty()) {
+                m_atlasContentBrowser->setCurrentPath(m_projectPaths.contentPath());
+                for (const auto& entry : m_contentBrowser.entries()) {
+                    m_atlasContentBrowser->addEntry(entry.name, entry.isDirectory);
+                }
+            }
+        }
+
         // M2/S1 undo system
         m_editorUndo = std::make_unique<EditorUndoSystem>(m_commandStack);
 
@@ -3846,15 +3892,24 @@ public:
         // Load default hotkeys from registered commands
         m_hotkeyDispatcher.loadDefaults(m_commands);
 
-        // ── Register log sink to feed ConsolePanel ──────────────────
+        // ── Register log sink to feed ConsolePanels ─────────────────
         m_logSinkId = Logger::instance().addSink(
             [this](LogLevel level, std::string_view category, std::string_view message) {
-                // Feed the console panel
+                // Feed the legacy ConsolePanel (kept for backward compatibility)
                 for (auto& p : m_editorPanels) {
                     if (auto* cp = dynamic_cast<ConsolePanel*>(p.get())) {
                         cp->addLogMessage(level, category, message);
                         break;
                     }
+                }
+                // Feed the AtlasUI ConsolePanel
+                if (m_atlasConsole) {
+                    NF::UI::AtlasUI::MessageLevel ml = NF::UI::AtlasUI::MessageLevel::Info;
+                    if (level == LogLevel::Warn)  ml = NF::UI::AtlasUI::MessageLevel::Warning;
+                    if (level == LogLevel::Error) ml = NF::UI::AtlasUI::MessageLevel::Error;
+                    const std::string text =
+                        "[" + std::string(category) + "] " + std::string(message);
+                    m_atlasConsole->addMessage(text, ml, 0.f);
                 }
                 // Write to log file (thread-safe)
                 {
@@ -3914,6 +3969,15 @@ public:
         }
 
         m_ideService.shutdown();
+        // Clear AtlasUI panels before destroying UIRenderer
+        m_atlasViewport.reset();
+        m_atlasInspector.reset();
+        m_atlasHierarchy.reset();
+        m_atlasConsole.reset();
+        m_atlasContentBrowser.reset();
+        m_atlasGraphEditor.reset();
+        m_atlasIDE.reset();
+        m_atlasPipelineMonitor.reset();
         m_editorPanels.clear();
         m_ui.shutdown();
         m_renderer.shutdown();
@@ -3950,20 +4014,21 @@ public:
             }
         }
 
-        // Panels — begin UIContext so renderUI() calls are wired to mouse input.
-        m_uiContext.begin(m_ui, m_mouseState, m_uiTheme, m_lastDt);
-        for (auto& panel : m_editorPanels) {
+        // Panels — AtlasUI single-pass paint path (replaces legacy render/renderUI dual-call).
+        // Each panel is arranged to its dock slot bounds and painted once via IPaintContext.
+        // The resulting DrawList is flushed through GDIRenderBackend → UIRenderer in one go,
+        // eliminating the text-overlap artefact caused by the old render()+renderUI() pattern.
+        m_paintCtx.drawList().clear();
+        for (auto& panel : m_atlasHost.panels()) {
             if (!panel->isVisible()) continue;
-            auto* dp = m_dockLayout.findPanel(panel->name());
+            const std::string dockName = atlasToDockName(panel->panelId());
+            if (dockName.empty()) continue;
+            auto* dp = m_dockLayout.findPanel(dockName);
             if (!dp || !dp->visible) continue;
-            // render() provides the visual (grid overlays, camera info, etc.).
-            // renderUI() draws the interactive widget layer on top.  For panels
-            // whose renderUI re-draws the full panel background via beginPanel(),
-            // it will naturally replace the static render() output.
-            panel->render(m_ui, dp->bounds, m_theme);
-            panel->renderUI(m_uiContext, dp->bounds);
+            panel->arrange(dp->bounds);
+            panel->paint(m_paintCtx);
         }
-        m_uiContext.end();
+        m_atlasRenderer.drawCommandBuffer(m_paintCtx.drawList());
 
         // Splitter dividers
         for (auto& dp : m_dockLayout.panels()) {
@@ -3991,9 +4056,14 @@ public:
             }
         }
 
-        // M1-D: Project picker modal overlay (rendered last so it appears on top)
-        if (m_projectPicker.isVisible())
-            m_projectPicker.render(m_ui, width, height);
+        // M1-D: Project picker modal overlay — rendered last so it floats above all panels.
+        // Uses the AtlasUI paint path so handleInput() correctly receives click events.
+        if (m_projectPicker.isVisible()) {
+            m_paintCtx.drawList().clear();
+            m_projectPicker.arrange({0.f, 0.f, width, height});
+            m_projectPicker.paint(m_paintCtx);
+            m_atlasRenderer.drawCommandBuffer(m_paintCtx.drawList());
+        }
 
         m_ui.endFrame();
     }
@@ -4001,7 +4071,9 @@ public:
     // Per-frame update with input: routes right-click WASD fly-cam to the viewport,
     // dispatches hotkeys, ticks notifications, updates status bar and frame stats.
     void update(float dt, InputSystem& input) {
-        input.update();
+        // NOTE: input.update() must NOT be called here — it is called once per frame
+        // by the main loop in main.cpp. Calling it a second time here caused every
+        // input event to be processed twice (double-update bug fixed in U9).
         if (auto* vp = viewportPanel())
             vp->updateCamera(dt, input);
 
@@ -4024,7 +4096,7 @@ public:
             static_cast<int>(m_selection.selectionCount()),
             m_frameStats.stats().fps);
 
-        // Sync mouse state for UIContext interactive widgets.
+        // Sync mouse state (used by legacy code paths and the new AtlasUI input context).
         bool curLeftDown          = input.isKeyDown(KeyCode::Mouse1);
         m_mouseState.x            = input.state().mouse.x;
         m_mouseState.y            = input.state().mouse.y;
@@ -4034,6 +4106,31 @@ public:
         m_mouseState.scrollDelta  = input.state().mouse.scrollDelta;
         m_prevLeftDown = curLeftDown;
         m_lastDt = dt;
+
+        // Sync AtlasUI input context and dispatch handleInput to all visible panels.
+        m_inputCtx.setMousePosition({m_mouseState.x, m_mouseState.y});
+        m_inputCtx.setPrimaryDown(m_mouseState.leftDown);
+        for (auto& panel : m_atlasHost.panels()) {
+            if (panel->isVisible())
+                panel->handleInput(m_inputCtx);
+        }
+        if (m_projectPicker.isVisible())
+            m_projectPicker.handleInput(m_inputCtx);
+
+        // Sync AtlasUI viewport camera overlay with the legacy viewport camera state.
+        if (m_atlasViewport) {
+            if (const auto* vp = viewportPanel()) {
+                const auto cam = vp->cameraPosition();
+                m_atlasViewport->setCameraPosition(cam.x, cam.y, cam.z);
+            }
+        }
+
+        // Sync AtlasUI inspector with the current selection.
+        if (m_atlasInspector) {
+            m_atlasInspector->setSelectedEntityId(
+                m_selection.hasSelection()
+                    ? static_cast<int>(m_selection.primarySelection()) : -1);
+        }
     }
 
     // Process a hotkey string and dispatch matching commands.
@@ -4086,6 +4183,10 @@ public:
     ToolWindowManager& toolManager() { return m_toolManager; }
     UIRenderer& uiRenderer() { return m_ui; }
 
+    // U9: AtlasUI host accessor (for tests and tooling)
+    NF::UI::AtlasUI::PanelHost&       atlasHost()       { return m_atlasHost; }
+    const NF::UI::AtlasUI::PanelHost& atlasHost() const { return m_atlasHost; }
+
     [[nodiscard]] const std::string& currentWorldPath() const { return m_currentWorldPath; }
     void setCurrentWorldPath(const std::string& path) {
         m_currentWorldPath = path;
@@ -4132,9 +4233,9 @@ public:
     BlenderAutoImporter& blenderAutoImporter() { return m_blenderImporter; }
     const BlenderAutoImporter& blenderAutoImporter() const { return m_blenderImporter; }
 
-    // M1-D accessors: Project Workspace & Selector
-    ProjectPickerPanel& projectPicker() { return m_projectPicker; }
-    const ProjectPickerPanel& projectPicker() const { return m_projectPicker; }
+    // M1-D accessors: Project Workspace & Selector (AtlasUI-backed since U9)
+    NF::UI::AtlasUI::ProjectPickerPanel& projectPicker() { return m_projectPicker; }
+    const NF::UI::AtlasUI::ProjectPickerPanel& projectPicker() const { return m_projectPicker; }
 
     void showProjectPicker() { m_projectPicker.show(); }
     void hideProjectPicker() { m_projectPicker.hide(); }
@@ -4148,6 +4249,18 @@ public:
     }
 
 private:
+    /// Map an AtlasUI panel ID to the DockLayout panel name used by the legacy layout.
+    /// Returns an empty string for panels that have no legacy dock slot (they are skipped).
+    static std::string atlasToDockName(std::string_view id) {
+        if (id == "atlas.viewport")         return "Viewport";
+        if (id == "atlas.inspector")        return "Inspector";
+        if (id == "atlas.hierarchy")        return "Hierarchy";
+        if (id == "atlas.console")          return "Console";
+        if (id == "atlas.content_browser")  return "ContentBrowser";
+        if (id == "atlas.graph_editor")     return "GraphEditor";
+        return {};  // atlas.ide and atlas.pipeline_monitor have no legacy dock entry
+    }
+
     void togglePanelVisibility(const std::string& name) {
         if (auto* p = m_dockLayout.findPanel(name)) {
             p->visible = !p->visible;
@@ -4289,8 +4402,23 @@ private:
     // S4 Blender Bridge
     BlenderAutoImporter m_blenderImporter;
 
-    // M1-D Project Workspace & Selector
-    ProjectPickerPanel m_projectPicker;
+    // M1-D Project Workspace & Selector (now backed by the AtlasUI implementation)
+    NF::UI::AtlasUI::ProjectPickerPanel m_projectPicker;
+
+    // ── U9: AtlasUI host + rendering ────────────────────────────
+    NF::UI::AtlasUI::PanelHost          m_atlasHost;
+    NF::UI::AtlasUI::GDIRenderBackend   m_atlasRenderer;
+    NF::UI::AtlasUI::BasicPaintContext  m_paintCtx;
+    NF::UI::AtlasUI::BasicInputContext  m_inputCtx;
+    // Typed panel pointers (owned by m_atlasHost, kept here for data-wiring)
+    std::shared_ptr<NF::UI::AtlasUI::ViewportPanel>        m_atlasViewport;
+    std::shared_ptr<NF::UI::AtlasUI::InspectorPanel>       m_atlasInspector;
+    std::shared_ptr<NF::UI::AtlasUI::HierarchyPanel>       m_atlasHierarchy;
+    std::shared_ptr<NF::UI::AtlasUI::ConsolePanel>         m_atlasConsole;
+    std::shared_ptr<NF::UI::AtlasUI::ContentBrowserPanel>  m_atlasContentBrowser;
+    std::shared_ptr<NF::UI::AtlasUI::GraphEditorPanel>     m_atlasGraphEditor;
+    std::shared_ptr<NF::UI::AtlasUI::IDEPanel>             m_atlasIDE;
+    std::shared_ptr<NF::UI::AtlasUI::PipelineMonitorPanel> m_atlasPipelineMonitor;
 
     // ── State persistence ───────────────────────────────────────
 

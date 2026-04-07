@@ -111,6 +111,7 @@ int main(int argc, char* argv[]) {
         nullptr, nullptr, wc.hInstance, nullptr);
 
     gdiBackend.setWindowHandle(hwnd);
+    inputAdapter.setWindowHandle(hwnd);  // enable Win32 mouse capture for drag operations
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     NF_LOG_INFO("Main", "Editor window created (1280x800)");

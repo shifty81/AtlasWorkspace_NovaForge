@@ -156,6 +156,7 @@ add_executable(NF_EditorTests
     Editor/test_s44_editor.cpp
     Editor/test_m1c_editor.cpp
     Editor/test_m1d_editor.cpp
+    Editor/test_u9_atlasui_integration.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE
