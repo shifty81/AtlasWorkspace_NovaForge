@@ -12649,4 +12649,157 @@ private:
     bool                       m_isolationMode = false;
 };
 
+// ── S44 — Post-Process Editor ─────────────────────────────────────
+
+enum class PostFXCategory : uint8_t {
+    Bloom, Vignette, ColorGrade, DepthOfField, AmbientOcclusion
+};
+
+inline const char* postFXCategoryName(PostFXCategory c) {
+    switch (c) {
+        case PostFXCategory::Bloom:            return "Bloom";
+        case PostFXCategory::Vignette:         return "Vignette";
+        case PostFXCategory::ColorGrade:       return "ColorGrade";
+        case PostFXCategory::DepthOfField:     return "DepthOfField";
+        case PostFXCategory::AmbientOcclusion: return "AmbientOcclusion";
+    }
+    return "Unknown";
+}
+
+enum class PostFXBlendMode : uint8_t {
+    Override, Additive, Multiply, Screen, Normal
+};
+
+inline const char* postFXBlendModeName(PostFXBlendMode m) {
+    switch (m) {
+        case PostFXBlendMode::Override: return "Override";
+        case PostFXBlendMode::Additive: return "Additive";
+        case PostFXBlendMode::Multiply: return "Multiply";
+        case PostFXBlendMode::Screen:   return "Screen";
+        case PostFXBlendMode::Normal:   return "Normal";
+    }
+    return "Unknown";
+}
+
+enum class PostFXState : uint8_t {
+    Inactive, Active, Previewing, Baking, Error
+};
+
+inline const char* postFXStateName(PostFXState s) {
+    switch (s) {
+        case PostFXState::Inactive:   return "Inactive";
+        case PostFXState::Active:     return "Active";
+        case PostFXState::Previewing: return "Previewing";
+        case PostFXState::Baking:     return "Baking";
+        case PostFXState::Error:      return "Error";
+    }
+    return "Unknown";
+}
+
+class PostFXAsset {
+public:
+    explicit PostFXAsset(const std::string& name,
+                         uint32_t layerCount = 0,
+                         uint32_t paramCount = 0)
+        : m_name(name), m_layerCount(layerCount), m_paramCount(paramCount) {}
+
+    [[nodiscard]] const std::string& name()       const { return m_name; }
+    [[nodiscard]] PostFXCategory     category()   const { return m_category; }
+    [[nodiscard]] PostFXBlendMode    blendMode()  const { return m_blendMode; }
+    [[nodiscard]] PostFXState        state()      const { return m_state; }
+    [[nodiscard]] uint32_t           layerCount() const { return m_layerCount; }
+    [[nodiscard]] uint32_t           paramCount() const { return m_paramCount; }
+    [[nodiscard]] bool               isEnabled()  const { return m_enabled; }
+    [[nodiscard]] bool               isRealtime() const { return m_realtime; }
+    [[nodiscard]] bool               isDirty()    const { return m_dirty; }
+
+    void setCategory(PostFXCategory c)  { m_category  = c; }
+    void setBlendMode(PostFXBlendMode m){ m_blendMode  = m; }
+    void setState(PostFXState s)        { m_state      = s; }
+    void setLayerCount(uint32_t n)      { m_layerCount = n; }
+    void setParamCount(uint32_t n)      { m_paramCount = n; }
+    void setEnabled(bool v)             { m_enabled    = v; }
+    void setRealtime(bool v)            { m_realtime   = v; }
+    void setDirty(bool v)               { m_dirty      = v; }
+
+    [[nodiscard]] bool isActive()    const { return m_state == PostFXState::Active; }
+    [[nodiscard]] bool isBaking()    const { return m_state == PostFXState::Baking; }
+    [[nodiscard]] bool hasError()    const { return m_state == PostFXState::Error; }
+    [[nodiscard]] bool isComplex()   const { return m_layerCount >= 5; }
+
+private:
+    std::string    m_name;
+    PostFXCategory m_category  = PostFXCategory::Bloom;
+    PostFXBlendMode m_blendMode = PostFXBlendMode::Override;
+    PostFXState    m_state     = PostFXState::Inactive;
+    uint32_t       m_layerCount = 0;
+    uint32_t       m_paramCount = 0;
+    bool           m_enabled   = false;
+    bool           m_realtime  = false;
+    bool           m_dirty     = false;
+};
+
+class PostProcessEditor {
+public:
+    static constexpr size_t MAX_ASSETS = 256;
+
+    [[nodiscard]] bool addAsset(const PostFXAsset& asset) {
+        if (m_assets.size() >= MAX_ASSETS) return false;
+        for (auto& a : m_assets) if (a.name() == asset.name()) return false;
+        m_assets.push_back(asset);
+        return true;
+    }
+
+    [[nodiscard]] bool removeAsset(const std::string& name) {
+        for (auto it = m_assets.begin(); it != m_assets.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeAsset == name) m_activeAsset.clear();
+                m_assets.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] PostFXAsset* findAsset(const std::string& name) {
+        for (auto& a : m_assets) if (a.name() == name) return &a;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveAsset(const std::string& name) {
+        for (auto& a : m_assets)
+            if (a.name() == name) { m_activeAsset = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeAsset()  const { return m_activeAsset; }
+    [[nodiscard]] size_t             assetCount()   const { return m_assets.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& a : m_assets) if (a.isDirty())    ++n; return n;
+    }
+    [[nodiscard]] size_t activeCount() const {
+        size_t n = 0; for (auto& a : m_assets) if (a.isActive())   ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& a : m_assets) if (a.isRealtime()) ++n; return n;
+    }
+    [[nodiscard]] size_t bakingCount() const {
+        size_t n = 0; for (auto& a : m_assets) if (a.isBaking())   ++n; return n;
+    }
+    [[nodiscard]] size_t complexCount() const {
+        size_t n = 0; for (auto& a : m_assets) if (a.isComplex())  ++n; return n;
+    }
+    [[nodiscard]] size_t countByCategory(PostFXCategory c) const {
+        size_t n = 0; for (auto& a : m_assets) if (a.category() == c) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(PostFXState s) const {
+        size_t n = 0; for (auto& a : m_assets) if (a.state() == s) ++n; return n;
+    }
+
+private:
+    std::vector<PostFXAsset> m_assets;
+    std::string              m_activeAsset;
+};
+
 } // namespace NF

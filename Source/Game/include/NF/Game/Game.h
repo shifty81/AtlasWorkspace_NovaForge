@@ -12307,4 +12307,139 @@ private:
     size_t                       m_tickCount = 0;
 };
 
+// ── G63 — Gamma Ray Burst System ─────────────────────────────────
+
+enum class GammaRayBurstType : uint8_t {
+    Short, Long, UltraLong, Magnetar, Kilonova
+};
+
+inline const char* gammaRayBurstTypeName(GammaRayBurstType t) {
+    switch (t) {
+        case GammaRayBurstType::Short:     return "Short";
+        case GammaRayBurstType::Long:      return "Long";
+        case GammaRayBurstType::UltraLong: return "UltraLong";
+        case GammaRayBurstType::Magnetar:  return "Magnetar";
+        case GammaRayBurstType::Kilonova:  return "Kilonova";
+    }
+    return "Unknown";
+}
+
+enum class GammaRayBurstIntensity : uint8_t {
+    Faint, Moderate, Bright, Intense, Catastrophic
+};
+
+inline const char* gammaRayBurstIntensityName(GammaRayBurstIntensity i) {
+    switch (i) {
+        case GammaRayBurstIntensity::Faint:        return "Faint";
+        case GammaRayBurstIntensity::Moderate:     return "Moderate";
+        case GammaRayBurstIntensity::Bright:       return "Bright";
+        case GammaRayBurstIntensity::Intense:      return "Intense";
+        case GammaRayBurstIntensity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct GammaRayBurstEvent {
+    std::string             id;
+    GammaRayBurstType       type      = GammaRayBurstType::Short;
+    GammaRayBurstIntensity  intensity = GammaRayBurstIntensity::Faint;
+    float                   flux      = 0.0f;
+    float                   coverage  = 0.0f;
+    bool                    active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()       const { return intensity >= GammaRayBurstIntensity::Intense; }
+    [[nodiscard]] bool isExtended()     const { return type == GammaRayBurstType::Long || type == GammaRayBurstType::UltraLong; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float hazardScore()   const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * coverage / 10.0f;
+    }
+};
+
+class GammaRayBurstRegion {
+public:
+    explicit GammaRayBurstRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const GammaRayBurstEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] GammaRayBurstEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()         const { return m_name; }
+    [[nodiscard]] size_t eventCount()      const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()       const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                      ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())      ++c; return c;
+    }
+    [[nodiscard]] size_t extendedCount()   const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isExtended())    ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())  ++c; return c;
+    }
+
+private:
+    std::string                      m_name;
+    std::vector<GammaRayBurstEvent>  m_events;
+    size_t                           m_tickCount = 0;
+};
+
+class GammaRayBurstSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    GammaRayBurstRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] GammaRayBurstRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();     return c;
+    }
+    [[nodiscard]] size_t severeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();     return c;
+    }
+    [[nodiscard]] size_t extendedEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.extendedCount();   return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount(); return c;
+    }
+
+private:
+    std::vector<GammaRayBurstRegion> m_regions;
+    size_t                           m_tickCount = 0;
+};
+
 } // namespace NF

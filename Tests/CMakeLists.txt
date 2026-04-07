@@ -153,6 +153,7 @@ add_executable(NF_EditorTests
     Editor/test_s41_editor.cpp
     Editor/test_s42_editor.cpp
     Editor/test_s43_editor.cpp
+    Editor/test_s44_editor.cpp
     Editor/test_m1c_editor.cpp
     Editor/test_m1d_editor.cpp
     catch_main.cpp
