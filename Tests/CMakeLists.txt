@@ -1,14 +1,20 @@
 # ── Test suite ────────────────────────────────────────────────────
 
-include(FetchContent)
-FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG        v3.5.2
-)
-FetchContent_MakeAvailable(Catch2)
-
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+# Try the system-installed Catch2 first so that builds without network access
+# (e.g. sandboxed CI) still work.  Fall back to FetchContent when not found.
+find_package(Catch2 3 QUIET)
+if(NOT Catch2_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG        v3.5.2
+    )
+    FetchContent_MakeAvailable(Catch2)
+    list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+else()
+    list(APPEND CMAKE_MODULE_PATH /usr/lib/cmake/Catch2)
+endif()
 include(CTest)
 include(Catch)
 
@@ -157,6 +163,7 @@ add_executable(NF_EditorTests
     Editor/test_m1c_editor.cpp
     Editor/test_m1d_editor.cpp
     Editor/test_u9_atlasui_integration.cpp
+    Editor/test_u10_panel_fixes.cpp
     catch_main.cpp
 )
 target_link_libraries(NF_EditorTests PRIVATE

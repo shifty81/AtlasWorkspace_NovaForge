@@ -9,7 +9,7 @@ void ConsolePanel::paint(IPaintContext& context) {
     context.fillRect(m_bounds, Theme::ColorToken::Surface);
     context.drawRect(m_bounds, Theme::ColorToken::Border);
 
-    // Title bar
+    // Title bar (outside clip so the header is never truncated)
     NF::Rect hdr = m_bounds;
     hdr.h = 22.f;
     context.fillRect(hdr, Theme::ColorToken::SurfaceAlt);
@@ -19,6 +19,9 @@ void ConsolePanel::paint(IPaintContext& context) {
     float y = m_bounds.y + 26.f;
     const float left = m_bounds.x + 8.f;
     const float contentW = m_bounds.w - 16.f;
+
+    // Clip content to panel bounds to prevent text overflow
+    context.pushClip(m_bounds);
 
     // Messages
     for (const auto& msg : m_messages) {
@@ -31,6 +34,8 @@ void ConsolePanel::paint(IPaintContext& context) {
         context.drawText({left, y, contentW, 14.f}, msg.text, 0, textColor);
         y += 16.f;
     }
+
+    context.popClip();
 }
 
 } // namespace NF::UI::AtlasUI
