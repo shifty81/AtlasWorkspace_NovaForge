@@ -10314,3 +10314,134 @@ TEST_CASE("BlackHoleSystem MAX_REGIONS limit enforced", "[Game][G66][BlackHole]"
     REQUIRE(sys.createRegion("overflow") == nullptr);
     REQUIRE(sys.regionCount() == NF::BlackHoleSystem::MAX_REGIONS);
 }
+
+// ── G67 — Quasar System ───────────────────────────────────────────
+
+TEST_CASE("QuasarType names cover all 5 values", "[Game][G67][Quasar]") {
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::RadioLoud))  == "RadioLoud");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::RadioQuiet)) == "RadioQuiet");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::BroadLine))  == "BroadLine");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::NarrowLine)) == "NarrowLine");
+    REQUIRE(std::string(NF::quasarTypeName(NF::QuasarType::BlazarLike)) == "BlazarLike");
+}
+
+TEST_CASE("QuasarIntensity names cover all 5 values", "[Game][G67][Quasar]") {
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Faint))         == "Faint");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Dim))           == "Dim");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Moderate))      == "Moderate");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::Luminous))      == "Luminous");
+    REQUIRE(std::string(NF::quasarIntensityName(NF::QuasarIntensity::HyperLuminous)) == "HyperLuminous");
+}
+
+TEST_CASE("QuasarEvent default values and activate/deactivate", "[Game][G67][Quasar]") {
+    NF::QuasarEvent ev;
+    ev.id = "q1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::QuasarType::RadioLoud);
+    REQUIRE(ev.intensity == NF::QuasarIntensity::Faint);
+    REQUIRE_FALSE(ev.isLuminous());
+    REQUIRE_FALSE(ev.isBlazarLike());
+    REQUIRE_FALSE(ev.isWidespread());
+    REQUIRE_FALSE(ev.isHighRedshift());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("QuasarEvent predicates", "[Game][G67][Quasar]") {
+    NF::QuasarEvent ev;
+    ev.id        = "q2";
+    ev.type      = NF::QuasarType::BlazarLike;
+    ev.intensity = NF::QuasarIntensity::HyperLuminous;
+    ev.redshift  = 3.5f;
+    ev.coverage  = 75.0f;
+    ev.activate();
+
+    REQUIRE(ev.isLuminous());
+    REQUIRE(ev.isBlazarLike());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.isHighRedshift());
+    REQUIRE(ev.luminosityScore() > 0.0f);
+}
+
+TEST_CASE("QuasarRegion addEvent and duplicate rejection", "[Game][G67][Quasar]") {
+    NF::QuasarRegion region("deep_field");
+    NF::QuasarEvent a; a.id = "a"; a.activate();
+    NF::QuasarEvent b; b.id = "b"; b.activate();
+    NF::QuasarEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount()  == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("QuasarRegion activateAll and deactivateAll", "[Game][G67][Quasar]") {
+    NF::QuasarRegion region("hubble_field");
+    NF::QuasarEvent x; x.id = "x";
+    NF::QuasarEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("QuasarSystem createRegion and tick", "[Game][G67][Quasar]") {
+    NF::QuasarSystem sys;
+    REQUIRE(sys.createRegion("zone_a") != nullptr);
+    REQUIRE(sys.createRegion("zone_b") != nullptr);
+    REQUIRE(sys.createRegion("zone_a") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("QuasarSystem aggregate counts across regions", "[Game][G67][Quasar]") {
+    NF::QuasarSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::QuasarEvent x; x.id = "x"; x.type = NF::QuasarType::BlazarLike; x.intensity = NF::QuasarIntensity::HyperLuminous; x.coverage = 80.0f; x.activate();
+    NF::QuasarEvent y; y.id = "y"; y.type = NF::QuasarType::RadioLoud;   y.intensity = NF::QuasarIntensity::Faint;         y.coverage = 5.0f;  y.activate();
+    NF::QuasarEvent z; z.id = "z"; z.type = NF::QuasarType::BroadLine;   z.intensity = NF::QuasarIntensity::Luminous;      z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.luminousEventCount()   == 1); // only x (y=Faint, z inactive)
+    REQUIRE(sys.blazarEventCount()     == 1); // only x
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("QuasarRegion findEvent and removeEvent", "[Game][G67][Quasar]") {
+    NF::QuasarRegion region("survey_zone");
+    NF::QuasarEvent ev; ev.id = "q9"; ev.type = NF::QuasarType::NarrowLine; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("q9") != nullptr);
+    REQUIRE(region.findEvent("q9")->type == NF::QuasarType::NarrowLine);
+
+    REQUIRE(region.removeEvent("q9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("q9") == nullptr);
+}
+
+TEST_CASE("QuasarSystem MAX_REGIONS limit enforced", "[Game][G67][Quasar]") {
+    NF::QuasarSystem sys;
+    for (size_t i = 0; i < NF::QuasarSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("q_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::QuasarSystem::MAX_REGIONS);
+}

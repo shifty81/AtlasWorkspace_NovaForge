@@ -3337,3 +3337,41 @@ Total: 2195 tests, 0 failures (2171 existing + 14 S46 + 10 G65 = 2195).
 ## Build Verification ✅
 
 Total: 2219 tests, 0 failures (2195 existing + 14 S47 + 10 G66 = 2219).
+
+## S48 — Landscape Editor ✅
+
+- [x] LandscapeBrushType enum ×5 (Circle, Square, Triangle, Gradient, Custom) + landscapeBrushTypeName()
+- [x] LandscapeLayerBlend enum ×5 (Normal, Additive, Multiply, Overlay, Screen) + landscapeLayerBlendName()
+- [x] LandscapeState enum ×5 (Unloaded, Loading, Idle, Editing, Error) + landscapeStateName()
+- [x] LandscapeAsset (name, brushType, layerBlend, state, resolutionX/Y, layerCount, heightScale, locked, dirty)
+  - isIdle, isEditing, hasError, isHighRes (resX or resY >= 1024), isMultiLayer (layerCount > 1)
+- [x] LandscapeEditor (max 128 landscapes)
+  - addLandscape (duplicate rejected), removeLandscape (clears activeLandscape), findLandscape, setActiveLandscape
+  - landscapeCount, dirtyCount, lockedCount, editingCount, highResCount, multiLayerCount, countByBrush, countByState
+- [x] 15 new editor tests (test_s48_editor.cpp), all passing
+
+## S48 Complete ✅
+
+---
+
+## G67 — Quasar System ✅
+
+- [x] QuasarType enum ×5 (RadioLoud, RadioQuiet, BroadLine, NarrowLine, BlazarLike) + quasarTypeName()
+- [x] QuasarIntensity enum ×5 (Faint, Dim, Moderate, Luminous, HyperLuminous) + quasarIntensityName()
+- [x] QuasarEvent (id, type, intensity, redshift, coverage, active)
+  - activate, deactivate, isLuminous (>= Luminous), isBlazarLike, isWidespread (>= 50%), isHighRedshift (>= 2.0), luminosityScore
+- [x] QuasarRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, luminousCount, blazarLikeCount, widespreadCount
+- [x] QuasarSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, luminousEventCount, blazarEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G67 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2244 tests, 0 failures (2219 existing + 15 S48 + 10 G67 = 2244).

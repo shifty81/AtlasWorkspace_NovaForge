@@ -12841,4 +12841,138 @@ private:
     size_t                       m_tickCount = 0;
 };
 
+// ── G67 — Quasar System ───────────────────────────────────────────
+
+enum class QuasarType : uint8_t {
+    RadioLoud, RadioQuiet, BroadLine, NarrowLine, BlazarLike
+};
+inline const char* quasarTypeName(QuasarType t) {
+    switch (t) {
+        case QuasarType::RadioLoud:   return "RadioLoud";
+        case QuasarType::RadioQuiet:  return "RadioQuiet";
+        case QuasarType::BroadLine:   return "BroadLine";
+        case QuasarType::NarrowLine:  return "NarrowLine";
+        case QuasarType::BlazarLike:  return "BlazarLike";
+    }
+    return "Unknown";
+}
+
+enum class QuasarIntensity : uint8_t {
+    Faint, Dim, Moderate, Luminous, HyperLuminous
+};
+inline const char* quasarIntensityName(QuasarIntensity i) {
+    switch (i) {
+        case QuasarIntensity::Faint:          return "Faint";
+        case QuasarIntensity::Dim:            return "Dim";
+        case QuasarIntensity::Moderate:       return "Moderate";
+        case QuasarIntensity::Luminous:       return "Luminous";
+        case QuasarIntensity::HyperLuminous:  return "HyperLuminous";
+    }
+    return "Unknown";
+}
+
+struct QuasarEvent {
+    std::string      id;
+    QuasarType       type      = QuasarType::RadioLoud;
+    QuasarIntensity  intensity = QuasarIntensity::Faint;
+    float            redshift  = 0.0f;   // cosmological redshift z
+    float            coverage  = 0.0f;   // affected region percentage
+    bool             active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isLuminous()      const { return intensity >= QuasarIntensity::Luminous; }
+    [[nodiscard]] bool isBlazarLike()    const { return type == QuasarType::BlazarLike; }
+    [[nodiscard]] bool isWidespread()    const { return coverage >= 50.0f; }
+    [[nodiscard]] bool isHighRedshift()  const { return redshift >= 2.0f; }
+    [[nodiscard]] float luminosityScore()const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * (1.0f + redshift);
+    }
+};
+
+class QuasarRegion {
+public:
+    explicit QuasarRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const QuasarEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] QuasarEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()           const { return m_name; }
+    [[nodiscard]] size_t eventCount()       const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                      ++c; return c;
+    }
+    [[nodiscard]] size_t luminousCount()    const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isLuminous())    ++c; return c;
+    }
+    [[nodiscard]] size_t blazarLikeCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isBlazarLike())  ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())  ++c; return c;
+    }
+
+private:
+    std::string               m_name;
+    std::vector<QuasarEvent>  m_events;
+    size_t                    m_tickCount = 0;
+};
+
+class QuasarSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    QuasarRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] QuasarRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()          const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()            const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();    return c;
+    }
+    [[nodiscard]] size_t luminousEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.luminousCount();  return c;
+    }
+    [[nodiscard]] size_t blazarEventCount()     const {
+        size_t c = 0; for (auto& r : m_regions) c += r.blazarLikeCount();return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();return c;
+    }
+
+private:
+    std::vector<QuasarRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF

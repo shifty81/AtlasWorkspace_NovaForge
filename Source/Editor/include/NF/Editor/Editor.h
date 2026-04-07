@@ -13388,4 +13388,158 @@ private:
     std::string                m_activeProbe;
 };
 
+// ── S48 — Landscape Editor ────────────────────────────────────────
+
+enum class LandscapeBrushType : uint8_t {
+    Circle, Square, Triangle, Gradient, Custom
+};
+inline const char* landscapeBrushTypeName(LandscapeBrushType t) {
+    switch (t) {
+        case LandscapeBrushType::Circle:   return "Circle";
+        case LandscapeBrushType::Square:   return "Square";
+        case LandscapeBrushType::Triangle: return "Triangle";
+        case LandscapeBrushType::Gradient: return "Gradient";
+        case LandscapeBrushType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class LandscapeLayerBlend : uint8_t {
+    Normal, Additive, Multiply, Overlay, Screen
+};
+inline const char* landscapeLayerBlendName(LandscapeLayerBlend b) {
+    switch (b) {
+        case LandscapeLayerBlend::Normal:   return "Normal";
+        case LandscapeLayerBlend::Additive: return "Additive";
+        case LandscapeLayerBlend::Multiply: return "Multiply";
+        case LandscapeLayerBlend::Overlay:  return "Overlay";
+        case LandscapeLayerBlend::Screen:   return "Screen";
+    }
+    return "Unknown";
+}
+
+enum class LandscapeState : uint8_t {
+    Unloaded, Loading, Idle, Editing, Error
+};
+inline const char* landscapeStateName(LandscapeState s) {
+    switch (s) {
+        case LandscapeState::Unloaded: return "Unloaded";
+        case LandscapeState::Loading:  return "Loading";
+        case LandscapeState::Idle:     return "Idle";
+        case LandscapeState::Editing:  return "Editing";
+        case LandscapeState::Error:    return "Error";
+    }
+    return "Unknown";
+}
+
+class LandscapeAsset {
+public:
+    explicit LandscapeAsset(const std::string& name,
+                            uint32_t resolutionX = 512,
+                            uint32_t resolutionY = 512)
+        : m_name(name), m_resolutionX(resolutionX), m_resolutionY(resolutionY) {}
+
+    [[nodiscard]] const std::string&   name()        const { return m_name; }
+    [[nodiscard]] LandscapeBrushType   brushType()   const { return m_brushType; }
+    [[nodiscard]] LandscapeLayerBlend  layerBlend()  const { return m_layerBlend; }
+    [[nodiscard]] LandscapeState       state()       const { return m_state; }
+    [[nodiscard]] uint32_t             resolutionX() const { return m_resolutionX; }
+    [[nodiscard]] uint32_t             resolutionY() const { return m_resolutionY; }
+    [[nodiscard]] uint32_t             layerCount()  const { return m_layerCount; }
+    [[nodiscard]] float                heightScale() const { return m_heightScale; }
+    [[nodiscard]] bool                 isDirty()     const { return m_dirty; }
+    [[nodiscard]] bool                 isLocked()    const { return m_locked; }
+
+    void setBrushType(LandscapeBrushType t)  { m_brushType  = t; }
+    void setLayerBlend(LandscapeLayerBlend b){ m_layerBlend  = b; }
+    void setState(LandscapeState s)          { m_state       = s; }
+    void setResolutionX(uint32_t r)          { m_resolutionX = r; }
+    void setResolutionY(uint32_t r)          { m_resolutionY = r; }
+    void setLayerCount(uint32_t n)           { m_layerCount  = n; }
+    void setHeightScale(float v)             { m_heightScale = v; }
+    void setDirty(bool v)                    { m_dirty       = v; }
+    void setLocked(bool v)                   { m_locked      = v; }
+
+    [[nodiscard]] bool isIdle()      const { return m_state == LandscapeState::Idle; }
+    [[nodiscard]] bool isEditing()   const { return m_state == LandscapeState::Editing; }
+    [[nodiscard]] bool hasError()    const { return m_state == LandscapeState::Error; }
+    [[nodiscard]] bool isHighRes()   const { return m_resolutionX >= 1024 || m_resolutionY >= 1024; }
+    [[nodiscard]] bool isMultiLayer()const { return m_layerCount > 1; }
+
+private:
+    std::string          m_name;
+    LandscapeBrushType   m_brushType  = LandscapeBrushType::Circle;
+    LandscapeLayerBlend  m_layerBlend = LandscapeLayerBlend::Normal;
+    LandscapeState       m_state      = LandscapeState::Unloaded;
+    uint32_t             m_resolutionX = 512;
+    uint32_t             m_resolutionY = 512;
+    uint32_t             m_layerCount  = 1;
+    float                m_heightScale = 1.0f;
+    bool                 m_dirty       = false;
+    bool                 m_locked      = false;
+};
+
+class LandscapeEditor {
+public:
+    static constexpr size_t MAX_LANDSCAPES = 128;
+
+    [[nodiscard]] bool addLandscape(const LandscapeAsset& asset) {
+        if (m_landscapes.size() >= MAX_LANDSCAPES) return false;
+        for (auto& l : m_landscapes) if (l.name() == asset.name()) return false;
+        m_landscapes.push_back(asset);
+        return true;
+    }
+
+    [[nodiscard]] bool removeLandscape(const std::string& name) {
+        for (auto it = m_landscapes.begin(); it != m_landscapes.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeLandscape == name) m_activeLandscape.clear();
+                m_landscapes.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] LandscapeAsset* findLandscape(const std::string& name) {
+        for (auto& l : m_landscapes) if (l.name() == name) return &l;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveLandscape(const std::string& name) {
+        for (auto& l : m_landscapes)
+            if (l.name() == name) { m_activeLandscape = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeLandscape() const { return m_activeLandscape; }
+    [[nodiscard]] size_t             landscapeCount()  const { return m_landscapes.size(); }
+
+    [[nodiscard]] size_t dirtyCount()      const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isDirty())      ++n; return n;
+    }
+    [[nodiscard]] size_t lockedCount()     const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isLocked())     ++n; return n;
+    }
+    [[nodiscard]] size_t editingCount()    const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isEditing())    ++n; return n;
+    }
+    [[nodiscard]] size_t highResCount()    const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isHighRes())    ++n; return n;
+    }
+    [[nodiscard]] size_t multiLayerCount() const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.isMultiLayer()) ++n; return n;
+    }
+    [[nodiscard]] size_t countByBrush(LandscapeBrushType t) const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.brushType()  == t) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(LandscapeState s) const {
+        size_t n = 0; for (auto& l : m_landscapes) if (l.state()      == s) ++n; return n;
+    }
+
+private:
+    std::vector<LandscapeAsset> m_landscapes;
+    std::string                 m_activeLandscape;
+};
+
 } // namespace NF
