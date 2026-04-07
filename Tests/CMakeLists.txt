@@ -162,6 +162,7 @@ add_executable(NF_EditorTests
     Editor/test_s44_editor.cpp
     Editor/test_s45_editor.cpp
     Editor/test_s46_editor.cpp
+    Editor/test_s47_editor.cpp
     Editor/test_m1c_editor.cpp
     Editor/test_m1d_editor.cpp
     Editor/test_u9_atlasui_integration.cpp

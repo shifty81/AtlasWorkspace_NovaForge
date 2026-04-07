@@ -12708,4 +12708,137 @@ private:
     size_t                    m_tickCount = 0;
 };
 
+// ── G66 — Black Hole System ───────────────────────────────────────
+
+enum class BlackHoleType : uint8_t {
+    Stellar, Intermediate, Supermassive, Primordial, Micro
+};
+inline const char* blackHoleTypeName(BlackHoleType t) {
+    switch (t) {
+        case BlackHoleType::Stellar:       return "Stellar";
+        case BlackHoleType::Intermediate:  return "Intermediate";
+        case BlackHoleType::Supermassive:  return "Supermassive";
+        case BlackHoleType::Primordial:    return "Primordial";
+        case BlackHoleType::Micro:         return "Micro";
+    }
+    return "Unknown";
+}
+
+enum class BlackHoleIntensity : uint8_t {
+    Dormant, Quiescent, Active, Violent, Catastrophic
+};
+inline const char* blackHoleIntensityName(BlackHoleIntensity i) {
+    switch (i) {
+        case BlackHoleIntensity::Dormant:      return "Dormant";
+        case BlackHoleIntensity::Quiescent:    return "Quiescent";
+        case BlackHoleIntensity::Active:       return "Active";
+        case BlackHoleIntensity::Violent:      return "Violent";
+        case BlackHoleIntensity::Catastrophic: return "Catastrophic";
+    }
+    return "Unknown";
+}
+
+struct BlackHoleEvent {
+    std::string        id;
+    BlackHoleType      type      = BlackHoleType::Stellar;
+    BlackHoleIntensity intensity = BlackHoleIntensity::Dormant;
+    float              massSolar = 1.0f;   // in solar masses
+    float              coverage  = 0.0f;   // affected region percentage
+    bool               active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isViolent()      const { return intensity >= BlackHoleIntensity::Violent; }
+    [[nodiscard]] bool isSupermassive() const { return type == BlackHoleType::Supermassive; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float gravityScore()  const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * massSolar / 10.0f;
+    }
+};
+
+class BlackHoleRegion {
+public:
+    explicit BlackHoleRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const BlackHoleEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] BlackHoleEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()           const { return m_name; }
+    [[nodiscard]] size_t eventCount()       const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                       ++c; return c;
+    }
+    [[nodiscard]] size_t violentCount()     const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isViolent())      ++c; return c;
+    }
+    [[nodiscard]] size_t supermassiveCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSupermassive()) ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())   ++c; return c;
+    }
+
+private:
+    std::string                  m_name;
+    std::vector<BlackHoleEvent>  m_events;
+    size_t                       m_tickCount = 0;
+};
+
+class BlackHoleSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    BlackHoleRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] BlackHoleRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()            const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()              const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()       const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();       return c;
+    }
+    [[nodiscard]] size_t violentEventCount()      const {
+        size_t c = 0; for (auto& r : m_regions) c += r.violentCount();      return c;
+    }
+    [[nodiscard]] size_t supermassiveEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.supermassiveCount(); return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount()   const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();   return c;
+    }
+
+private:
+    std::vector<BlackHoleRegion> m_regions;
+    size_t                       m_tickCount = 0;
+};
+
 } // namespace NF

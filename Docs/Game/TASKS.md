@@ -3299,3 +3299,41 @@ Total: 2171 tests, 0 failures (2147 existing + 14 S45 + 10 G64 = 2171).
 ## Build Verification ✅
 
 Total: 2195 tests, 0 failures (2171 existing + 14 S46 + 10 G65 = 2195).
+
+## S47 — Environment Probe Editor ✅
+
+- [x] EnvProbeShape enum ×5 (Sphere, Box, Capsule, Cylinder, Custom) + envProbeShapeName()
+- [x] EnvProbeCaptureMode enum ×5 (Realtime, Baked, Mixed, Once, OnDemand) + envProbeCaptureModeN()
+- [x] EnvProbeState enum ×5 (Inactive, Active, Capturing, Invalidated, Error) + envProbeStateName()
+- [x] EnvProbeAsset (name, shape, captureMode, state, resolution, layerCount, influence, locked, dirty)
+  - isRealtime, isBaked, isActive, isCapturing, hasError, isHighRes (resolution>=512)
+- [x] EnvironmentProbeEditor (max 256 probes)
+  - addProbe (duplicate rejected), removeProbe (clears activeProbe), findProbe, setActiveProbe
+  - probeCount, dirtyCount, lockedCount, realtimeCount, bakedCount, highResCount, countByShape, countByState
+- [x] 14 new editor tests (test_s47_editor.cpp), all passing
+
+## S47 Complete ✅
+
+---
+
+## G66 — Black Hole System ✅
+
+- [x] BlackHoleType enum ×5 (Stellar, Intermediate, Supermassive, Primordial, Micro) + blackHoleTypeName()
+- [x] BlackHoleIntensity enum ×5 (Dormant, Quiescent, Active, Violent, Catastrophic) + blackHoleIntensityName()
+- [x] BlackHoleEvent (id, type, intensity, massSolar, coverage, active)
+  - activate, deactivate, isViolent (>= Violent), isSupermassive, isWidespread (>= 50%), gravityScore
+- [x] BlackHoleRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, violentCount, supermassiveCount, widespreadCount
+- [x] BlackHoleSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, violentEventCount, supermassiveEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G66 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2219 tests, 0 failures (2195 existing + 14 S47 + 10 G66 = 2219).

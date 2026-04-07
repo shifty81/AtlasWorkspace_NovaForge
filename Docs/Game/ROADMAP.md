@@ -95,6 +95,7 @@
 | **G63** — Gamma Ray Burst System | GammaRayBurstType×5, GammaRayBurstIntensity×5, GammaRayBurstEvent, GammaRayBurstRegion, GammaRayBurstSystem | ✅ Done |
 | **G64** — Pulsar System | PulsarType×5, PulsarIntensity×5, PulsarEvent, PulsarRegion, PulsarSystem | ✅ Done |
 | **G65** — Nebula System | NebulaType×5, NebulaIntensity×5, NebulaEvent, NebulaRegion, NebulaSystem | ✅ Done |
+| **G66** — Black Hole System | BlackHoleType×5, BlackHoleIntensity×5, BlackHoleEvent, BlackHoleRegion, BlackHoleSystem | ✅ Done |
 
 ---
 
@@ -171,6 +172,7 @@
 | **S44** — Post-Process Editor | PostFXCategory×5, PostFXBlendMode×5, PostFXState×5, PostFXAsset, PostProcessEditor | ✅ Done |
 | **S45** — Level Sequence Editor | SeqTrackType×5, SeqPlaybackMode×5, SeqState×5, LevelSequenceAsset, LevelSequenceEditor | ✅ Done |
 | **S46** — Decal Editor | DecalProjectionType×5, DecalBlendMode×5, DecalState×5, DecalAsset, DecalEditor | ✅ Done |
+| **S47** — Environment Probe Editor | EnvProbeShape×5, EnvProbeCaptureMode×5, EnvProbeState×5, EnvProbeAsset, EnvironmentProbeEditor | ✅ Done |
 
 ## Status Key
 

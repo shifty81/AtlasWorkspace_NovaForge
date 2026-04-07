@@ -13236,4 +13236,156 @@ private:
     std::string             m_activeDecal;
 };
 
+// ── S47 — Environment Probe Editor ───────────────────────────────
+
+enum class EnvProbeShape : uint8_t {
+    Sphere, Box, Capsule, Cylinder, Custom
+};
+inline const char* envProbeShapeName(EnvProbeShape s) {
+    switch (s) {
+        case EnvProbeShape::Sphere:   return "Sphere";
+        case EnvProbeShape::Box:      return "Box";
+        case EnvProbeShape::Capsule:  return "Capsule";
+        case EnvProbeShape::Cylinder: return "Cylinder";
+        case EnvProbeShape::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class EnvProbeCaptureMode : uint8_t {
+    Realtime, Baked, Mixed, Once, OnDemand
+};
+inline const char* envProbeCaptureModeN(EnvProbeCaptureMode m) {
+    switch (m) {
+        case EnvProbeCaptureMode::Realtime:  return "Realtime";
+        case EnvProbeCaptureMode::Baked:     return "Baked";
+        case EnvProbeCaptureMode::Mixed:     return "Mixed";
+        case EnvProbeCaptureMode::Once:      return "Once";
+        case EnvProbeCaptureMode::OnDemand:  return "OnDemand";
+    }
+    return "Unknown";
+}
+
+enum class EnvProbeState : uint8_t {
+    Inactive, Active, Capturing, Invalidated, Error
+};
+inline const char* envProbeStateName(EnvProbeState s) {
+    switch (s) {
+        case EnvProbeState::Inactive:    return "Inactive";
+        case EnvProbeState::Active:      return "Active";
+        case EnvProbeState::Capturing:   return "Capturing";
+        case EnvProbeState::Invalidated: return "Invalidated";
+        case EnvProbeState::Error:       return "Error";
+    }
+    return "Unknown";
+}
+
+class EnvProbeAsset {
+public:
+    explicit EnvProbeAsset(const std::string& name,
+                           uint32_t resolution = 128,
+                           uint32_t layerCount = 0)
+        : m_name(name), m_resolution(resolution), m_layerCount(layerCount) {}
+
+    [[nodiscard]] const std::string&   name()         const { return m_name; }
+    [[nodiscard]] EnvProbeShape        shape()        const { return m_shape; }
+    [[nodiscard]] EnvProbeCaptureMode  captureMode()  const { return m_captureMode; }
+    [[nodiscard]] EnvProbeState        state()        const { return m_state; }
+    [[nodiscard]] uint32_t             resolution()   const { return m_resolution; }
+    [[nodiscard]] uint32_t             layerCount()   const { return m_layerCount; }
+    [[nodiscard]] float                influence()    const { return m_influence; }
+    [[nodiscard]] bool                 isRealtime()   const { return m_captureMode == EnvProbeCaptureMode::Realtime; }
+    [[nodiscard]] bool                 isBaked()      const { return m_captureMode == EnvProbeCaptureMode::Baked; }
+    [[nodiscard]] bool                 isDirty()      const { return m_dirty; }
+    [[nodiscard]] bool                 isLocked()     const { return m_locked; }
+
+    void setShape(EnvProbeShape s)              { m_shape       = s; }
+    void setCaptureMode(EnvProbeCaptureMode m)  { m_captureMode = m; }
+    void setState(EnvProbeState s)              { m_state       = s; }
+    void setResolution(uint32_t r)              { m_resolution  = r; }
+    void setLayerCount(uint32_t n)              { m_layerCount  = n; }
+    void setInfluence(float v)                  { m_influence   = v; }
+    void setDirty(bool v)                       { m_dirty       = v; }
+    void setLocked(bool v)                      { m_locked      = v; }
+
+    [[nodiscard]] bool isActive()      const { return m_state == EnvProbeState::Active; }
+    [[nodiscard]] bool isCapturing()   const { return m_state == EnvProbeState::Capturing; }
+    [[nodiscard]] bool hasError()      const { return m_state == EnvProbeState::Error; }
+    [[nodiscard]] bool isHighRes()     const { return m_resolution >= 512; }
+
+private:
+    std::string          m_name;
+    EnvProbeShape        m_shape       = EnvProbeShape::Sphere;
+    EnvProbeCaptureMode  m_captureMode = EnvProbeCaptureMode::Baked;
+    EnvProbeState        m_state       = EnvProbeState::Inactive;
+    uint32_t             m_resolution  = 128;
+    uint32_t             m_layerCount  = 0;
+    float                m_influence   = 1.0f;
+    bool                 m_dirty       = false;
+    bool                 m_locked      = false;
+};
+
+class EnvironmentProbeEditor {
+public:
+    static constexpr size_t MAX_PROBES = 256;
+
+    [[nodiscard]] bool addProbe(const EnvProbeAsset& probe) {
+        if (m_probes.size() >= MAX_PROBES) return false;
+        for (auto& p : m_probes) if (p.name() == probe.name()) return false;
+        m_probes.push_back(probe);
+        return true;
+    }
+
+    [[nodiscard]] bool removeProbe(const std::string& name) {
+        for (auto it = m_probes.begin(); it != m_probes.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeProbe == name) m_activeProbe.clear();
+                m_probes.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] EnvProbeAsset* findProbe(const std::string& name) {
+        for (auto& p : m_probes) if (p.name() == name) return &p;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveProbe(const std::string& name) {
+        for (auto& p : m_probes)
+            if (p.name() == name) { m_activeProbe = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeProbe() const { return m_activeProbe; }
+    [[nodiscard]] size_t             probeCount()  const { return m_probes.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isDirty())       ++n; return n;
+    }
+    [[nodiscard]] size_t lockedCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isLocked())      ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isRealtime())    ++n; return n;
+    }
+    [[nodiscard]] size_t bakedCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isBaked())       ++n; return n;
+    }
+    [[nodiscard]] size_t highResCount() const {
+        size_t n = 0; for (auto& p : m_probes) if (p.isHighRes())     ++n; return n;
+    }
+    [[nodiscard]] size_t countByShape(EnvProbeShape s) const {
+        size_t n = 0; for (auto& p : m_probes) if (p.shape() == s)    ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(EnvProbeState s) const {
+        size_t n = 0; for (auto& p : m_probes) if (p.state() == s)    ++n; return n;
+    }
+
+private:
+    std::vector<EnvProbeAsset> m_probes;
+    std::string                m_activeProbe;
+};
+
 } // namespace NF

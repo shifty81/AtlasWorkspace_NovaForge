@@ -10185,3 +10185,132 @@ TEST_CASE("NebulaSystem MAX_REGIONS limit enforced", "[Game][G65][Nebula]") {
     REQUIRE(sys.createRegion("overflow") == nullptr);
     REQUIRE(sys.regionCount() == NF::NebulaSystem::MAX_REGIONS);
 }
+
+// ── G66 — Black Hole System ───────────────────────────────────────
+
+TEST_CASE("BlackHoleType names cover all 5 values", "[Game][G66][BlackHole]") {
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Stellar))       == "Stellar");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Intermediate))  == "Intermediate");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Supermassive))  == "Supermassive");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Primordial))    == "Primordial");
+    REQUIRE(std::string(NF::blackHoleTypeName(NF::BlackHoleType::Micro))         == "Micro");
+}
+
+TEST_CASE("BlackHoleIntensity names cover all 5 values", "[Game][G66][BlackHole]") {
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Dormant))      == "Dormant");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Quiescent))    == "Quiescent");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Active))       == "Active");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Violent))      == "Violent");
+    REQUIRE(std::string(NF::blackHoleIntensityName(NF::BlackHoleIntensity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("BlackHoleEvent default values and activate/deactivate", "[Game][G66][BlackHole]") {
+    NF::BlackHoleEvent ev;
+    ev.id = "bh1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::BlackHoleType::Stellar);
+    REQUIRE(ev.intensity == NF::BlackHoleIntensity::Dormant);
+    REQUIRE_FALSE(ev.isViolent());
+    REQUIRE_FALSE(ev.isSupermassive());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("BlackHoleEvent predicates", "[Game][G66][BlackHole]") {
+    NF::BlackHoleEvent ev;
+    ev.id        = "bh2";
+    ev.type      = NF::BlackHoleType::Supermassive;
+    ev.intensity = NF::BlackHoleIntensity::Catastrophic;
+    ev.coverage  = 75.0f;
+    ev.massSolar = 1000000.0f;
+    ev.activate();
+
+    REQUIRE(ev.isViolent());
+    REQUIRE(ev.isSupermassive());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.gravityScore() > 0.0f);
+}
+
+TEST_CASE("BlackHoleRegion addEvent and duplicate rejection", "[Game][G66][BlackHole]") {
+    NF::BlackHoleRegion region("galactic_core");
+    NF::BlackHoleEvent a; a.id = "a"; a.activate();
+    NF::BlackHoleEvent b; b.id = "b"; b.activate();
+    NF::BlackHoleEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount()  == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("BlackHoleRegion activateAll and deactivateAll", "[Game][G66][BlackHole]") {
+    NF::BlackHoleRegion region("event_horizon");
+    NF::BlackHoleEvent x; x.id = "x";
+    NF::BlackHoleEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("BlackHoleSystem createRegion and tick", "[Game][G66][BlackHole]") {
+    NF::BlackHoleSystem sys;
+    REQUIRE(sys.createRegion("milky_way_center") != nullptr);
+    REQUIRE(sys.createRegion("andromeda_core")   != nullptr);
+    REQUIRE(sys.createRegion("milky_way_center") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("BlackHoleSystem aggregate counts across regions", "[Game][G66][BlackHole]") {
+    NF::BlackHoleSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::BlackHoleEvent x; x.id = "x"; x.type = NF::BlackHoleType::Supermassive; x.intensity = NF::BlackHoleIntensity::Catastrophic; x.coverage = 80.0f; x.activate();
+    NF::BlackHoleEvent y; y.id = "y"; y.type = NF::BlackHoleType::Stellar;       y.intensity = NF::BlackHoleIntensity::Dormant;       y.coverage = 5.0f;  y.activate();
+    NF::BlackHoleEvent z; z.id = "z"; z.type = NF::BlackHoleType::Stellar;       z.intensity = NF::BlackHoleIntensity::Violent;       z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()       == 2);
+    REQUIRE(sys.violentEventCount()      == 1); // only x (y=Dormant, z inactive)
+    REQUIRE(sys.supermassiveEventCount() == 1); // only x
+    REQUIRE(sys.widespreadEventCount()   == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("BlackHoleRegion findEvent and removeEvent", "[Game][G66][BlackHole]") {
+    NF::BlackHoleRegion region("quasar_field");
+    NF::BlackHoleEvent ev; ev.id = "bh9"; ev.type = NF::BlackHoleType::Intermediate; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("bh9") != nullptr);
+    REQUIRE(region.findEvent("bh9")->type == NF::BlackHoleType::Intermediate);
+
+    REQUIRE(region.removeEvent("bh9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("bh9") == nullptr);
+}
+
+TEST_CASE("BlackHoleSystem MAX_REGIONS limit enforced", "[Game][G66][BlackHole]") {
+    NF::BlackHoleSystem sys;
+    for (size_t i = 0; i < NF::BlackHoleSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("bh_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::BlackHoleSystem::MAX_REGIONS);
+}
