@@ -3261,3 +3261,41 @@ Total: 2114 tests, 0 failures (2090 existing + 14 S44 + 10 G63 = 2114).
 ## Build Verification ✅
 
 Total: 2171 tests, 0 failures (2147 existing + 14 S45 + 10 G64 = 2171).
+
+## S46 — Decal Editor ✅
+
+- [x] DecalProjectionType enum ×5 (Box, Sphere, Cylinder, Planar, Custom) + decalProjectionTypeName()
+- [x] DecalBlendMode enum ×5 (Translucent, Additive, Modulate, Stain, Emissive) + decalBlendModeName()
+- [x] DecalState enum ×5 (Inactive, Active, Fading, Baked, Error) + decalStateName()
+- [x] DecalAsset (name, projectionType, blendMode, state, layerCount, paramCount, opacity, receiveLighting, realtime, dirty)
+  - isActive, isBaked, hasError, isComplex (layerCount>=4)
+- [x] DecalEditor (max 512 decals)
+  - addDecal (duplicate rejected), removeDecal (clears activeDecal), findDecal, setActiveDecal
+  - decalCount, dirtyCount, activeCount, bakedCount, realtimeCount, complexCount, countByProjectionType, countByState
+- [x] 14 new editor tests (test_s46_editor.cpp), all passing
+
+## S46 Complete ✅
+
+---
+
+## G65 — Nebula System ✅
+
+- [x] NebulaType enum ×5 (Emission, Reflection, DarkNebula, Supernova, Planetary) + nebulaTypeName()
+- [x] NebulaIntensity enum ×5 (Faint, Dim, Moderate, Bright, Brilliant) + nebulaIntensityName()
+- [x] NebulaEvent (id, type, intensity, sizeLY, coverage, active)
+  - activate, deactivate, isBright (>= Bright), isSupernova, isWidespread (>= 50%), luminosityScore
+- [x] NebulaRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, brightCount, supernovaCount, widespreadCount
+- [x] NebulaSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, brightEventCount, supernovaEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G65 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2195 tests, 0 failures (2171 existing + 14 S46 + 10 G65 = 2195).

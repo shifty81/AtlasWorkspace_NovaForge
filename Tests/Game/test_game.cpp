@@ -10056,3 +10056,132 @@ TEST_CASE("PulsarSystem MAX_REGIONS limit enforced", "[Game][G64][Pulsar]") {
     REQUIRE(sys.createRegion("overflow") == nullptr);
     REQUIRE(sys.regionCount() == NF::PulsarSystem::MAX_REGIONS);
 }
+
+// ── G65 — Nebula System ───────────────────────────────────────────
+
+TEST_CASE("NebulaType names cover all 5 values", "[Game][G65][Nebula]") {
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Emission))   == "Emission");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Reflection)) == "Reflection");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::DarkNebula)) == "DarkNebula");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Supernova))  == "Supernova");
+    REQUIRE(std::string(NF::nebulaTypeName(NF::NebulaType::Planetary))  == "Planetary");
+}
+
+TEST_CASE("NebulaIntensity names cover all 5 values", "[Game][G65][Nebula]") {
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Faint))    == "Faint");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Dim))      == "Dim");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Moderate)) == "Moderate");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Bright))   == "Bright");
+    REQUIRE(std::string(NF::nebulaIntensityName(NF::NebulaIntensity::Brilliant))== "Brilliant");
+}
+
+TEST_CASE("NebulaEvent default values and activate/deactivate", "[Game][G65][Nebula]") {
+    NF::NebulaEvent ev;
+    ev.id = "neb1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::NebulaType::Emission);
+    REQUIRE(ev.intensity == NF::NebulaIntensity::Faint);
+    REQUIRE_FALSE(ev.isBright());
+    REQUIRE_FALSE(ev.isSupernova());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("NebulaEvent predicates", "[Game][G65][Nebula]") {
+    NF::NebulaEvent ev;
+    ev.id        = "neb2";
+    ev.type      = NF::NebulaType::Supernova;
+    ev.intensity = NF::NebulaIntensity::Brilliant;
+    ev.coverage  = 60.0f;
+    ev.sizeLY    = 10.0f;
+    ev.activate();
+
+    REQUIRE(ev.isBright());
+    REQUIRE(ev.isSupernova());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.luminosityScore() > 0.0f);
+}
+
+TEST_CASE("NebulaRegion addEvent and duplicate rejection", "[Game][G65][Nebula]") {
+    NF::NebulaRegion region("orion_arm");
+    NF::NebulaEvent a; a.id = "a"; a.activate();
+    NF::NebulaEvent b; b.id = "b"; b.activate();
+    NF::NebulaEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount()  == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("NebulaRegion activateAll and deactivateAll", "[Game][G65][Nebula]") {
+    NF::NebulaRegion region("cygnus_arm");
+    NF::NebulaEvent x; x.id = "x";
+    NF::NebulaEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("NebulaSystem createRegion and tick", "[Game][G65][Nebula]") {
+    NF::NebulaSystem sys;
+    REQUIRE(sys.createRegion("milky_way") != nullptr);
+    REQUIRE(sys.createRegion("magellanic") != nullptr);
+    REQUIRE(sys.createRegion("milky_way") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("NebulaSystem aggregate counts across regions", "[Game][G65][Nebula]") {
+    NF::NebulaSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::NebulaEvent x; x.id = "x"; x.type = NF::NebulaType::Supernova;  x.intensity = NF::NebulaIntensity::Brilliant; x.coverage = 80.0f; x.activate();
+    NF::NebulaEvent y; y.id = "y"; y.type = NF::NebulaType::Emission;    y.intensity = NF::NebulaIntensity::Dim;       y.coverage = 5.0f;  y.activate();
+    NF::NebulaEvent z; z.id = "z"; z.type = NF::NebulaType::Reflection;  z.intensity = NF::NebulaIntensity::Bright;   z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.brightEventCount()     == 1); // only x (y=Dim, z inactive)
+    REQUIRE(sys.supernovaEventCount()  == 1); // only x
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("NebulaRegion findEvent and removeEvent", "[Game][G65][Nebula]") {
+    NF::NebulaRegion region("sagittarius");
+    NF::NebulaEvent ev; ev.id = "neb9"; ev.type = NF::NebulaType::Planetary; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("neb9") != nullptr);
+    REQUIRE(region.findEvent("neb9")->type == NF::NebulaType::Planetary);
+
+    REQUIRE(region.removeEvent("neb9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("neb9") == nullptr);
+}
+
+TEST_CASE("NebulaSystem MAX_REGIONS limit enforced", "[Game][G65][Nebula]") {
+    NF::NebulaSystem sys;
+    for (size_t i = 0; i < NF::NebulaSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("nebula_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::NebulaSystem::MAX_REGIONS);
+}

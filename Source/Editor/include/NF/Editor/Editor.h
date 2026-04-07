@@ -13083,4 +13083,157 @@ private:
     std::string                     m_activeSequence;
 };
 
+// ── S46 — Decal Editor ───────────────────────────────────────────
+
+enum class DecalProjectionType : uint8_t {
+    Box, Sphere, Cylinder, Planar, Custom
+};
+inline const char* decalProjectionTypeName(DecalProjectionType t) {
+    switch (t) {
+        case DecalProjectionType::Box:      return "Box";
+        case DecalProjectionType::Sphere:   return "Sphere";
+        case DecalProjectionType::Cylinder: return "Cylinder";
+        case DecalProjectionType::Planar:   return "Planar";
+        case DecalProjectionType::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class DecalBlendMode : uint8_t {
+    Translucent, Additive, Modulate, Stain, Emissive
+};
+inline const char* decalBlendModeName(DecalBlendMode m) {
+    switch (m) {
+        case DecalBlendMode::Translucent: return "Translucent";
+        case DecalBlendMode::Additive:    return "Additive";
+        case DecalBlendMode::Modulate:    return "Modulate";
+        case DecalBlendMode::Stain:       return "Stain";
+        case DecalBlendMode::Emissive:    return "Emissive";
+    }
+    return "Unknown";
+}
+
+enum class DecalState : uint8_t {
+    Inactive, Active, Fading, Baked, Error
+};
+inline const char* decalStateName(DecalState s) {
+    switch (s) {
+        case DecalState::Inactive: return "Inactive";
+        case DecalState::Active:   return "Active";
+        case DecalState::Fading:   return "Fading";
+        case DecalState::Baked:    return "Baked";
+        case DecalState::Error:    return "Error";
+    }
+    return "Unknown";
+}
+
+class DecalAsset {
+public:
+    explicit DecalAsset(const std::string& name,
+                        uint32_t layerCount = 0,
+                        uint32_t paramCount = 0)
+        : m_name(name), m_layerCount(layerCount), m_paramCount(paramCount) {}
+
+    [[nodiscard]] const std::string&    name()           const { return m_name; }
+    [[nodiscard]] DecalProjectionType   projectionType() const { return m_projectionType; }
+    [[nodiscard]] DecalBlendMode        blendMode()      const { return m_blendMode; }
+    [[nodiscard]] DecalState            state()          const { return m_state; }
+    [[nodiscard]] uint32_t              layerCount()     const { return m_layerCount; }
+    [[nodiscard]] uint32_t              paramCount()     const { return m_paramCount; }
+    [[nodiscard]] float                 opacity()        const { return m_opacity; }
+    [[nodiscard]] bool                  isReceivingLighting() const { return m_receiveLighting; }
+    [[nodiscard]] bool                  isRealtime()     const { return m_realtime; }
+    [[nodiscard]] bool                  isDirty()        const { return m_dirty; }
+
+    void setProjectionType(DecalProjectionType t) { m_projectionType = t; }
+    void setBlendMode(DecalBlendMode m)            { m_blendMode      = m; }
+    void setState(DecalState s)                    { m_state          = s; }
+    void setLayerCount(uint32_t n)                 { m_layerCount     = n; }
+    void setParamCount(uint32_t n)                 { m_paramCount     = n; }
+    void setOpacity(float v)                       { m_opacity        = v; }
+    void setReceiveLighting(bool v)                { m_receiveLighting = v; }
+    void setRealtime(bool v)                       { m_realtime       = v; }
+    void setDirty(bool v)                          { m_dirty          = v; }
+
+    [[nodiscard]] bool isActive()    const { return m_state == DecalState::Active; }
+    [[nodiscard]] bool isBaked()     const { return m_state == DecalState::Baked; }
+    [[nodiscard]] bool hasError()    const { return m_state == DecalState::Error; }
+    [[nodiscard]] bool isComplex()   const { return m_layerCount >= 4; }
+
+private:
+    std::string           m_name;
+    DecalProjectionType   m_projectionType = DecalProjectionType::Box;
+    DecalBlendMode        m_blendMode      = DecalBlendMode::Translucent;
+    DecalState            m_state          = DecalState::Inactive;
+    uint32_t              m_layerCount     = 0;
+    uint32_t              m_paramCount     = 0;
+    float                 m_opacity        = 1.0f;
+    bool                  m_receiveLighting = false;
+    bool                  m_realtime       = false;
+    bool                  m_dirty          = false;
+};
+
+class DecalEditor {
+public:
+    static constexpr size_t MAX_DECALS = 512;
+
+    [[nodiscard]] bool addDecal(const DecalAsset& decal) {
+        if (m_decals.size() >= MAX_DECALS) return false;
+        for (auto& d : m_decals) if (d.name() == decal.name()) return false;
+        m_decals.push_back(decal);
+        return true;
+    }
+
+    [[nodiscard]] bool removeDecal(const std::string& name) {
+        for (auto it = m_decals.begin(); it != m_decals.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeDecal == name) m_activeDecal.clear();
+                m_decals.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] DecalAsset* findDecal(const std::string& name) {
+        for (auto& d : m_decals) if (d.name() == name) return &d;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveDecal(const std::string& name) {
+        for (auto& d : m_decals)
+            if (d.name() == name) { m_activeDecal = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeDecal() const { return m_activeDecal; }
+    [[nodiscard]] size_t             decalCount()  const { return m_decals.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isDirty())            ++n; return n;
+    }
+    [[nodiscard]] size_t activeCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isActive())           ++n; return n;
+    }
+    [[nodiscard]] size_t bakedCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isBaked())            ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isRealtime())         ++n; return n;
+    }
+    [[nodiscard]] size_t complexCount() const {
+        size_t n = 0; for (auto& d : m_decals) if (d.isComplex())          ++n; return n;
+    }
+    [[nodiscard]] size_t countByProjectionType(DecalProjectionType t) const {
+        size_t n = 0; for (auto& d : m_decals) if (d.projectionType() == t) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(DecalState s) const {
+        size_t n = 0; for (auto& d : m_decals) if (d.state() == s) ++n; return n;
+    }
+
+private:
+    std::vector<DecalAsset> m_decals;
+    std::string             m_activeDecal;
+};
+
 } // namespace NF
