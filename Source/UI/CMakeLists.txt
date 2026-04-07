@@ -39,6 +39,7 @@ add_library(NF_UI STATIC
     src/AtlasUI/Panels/GraphEditorPanel.cpp
     src/AtlasUI/Panels/ViewportPanel.cpp
     src/AtlasUI/Panels/PipelineMonitorPanel.cpp
+    src/AtlasUI/Panels/ProjectPickerPanel.cpp
 
     # AtlasUI — Services
     src/AtlasUI/Services/FocusService.cpp
