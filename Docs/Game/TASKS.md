@@ -3158,3 +3158,41 @@ Total: 2075 tests, 0 failures (2037 existing + 38 M1-C = 2075).
 ## Build Verification ✅
 
 Total: 2090 tests, 0 failures (2075 existing + 15 M1-D = 2090).
+
+## S44 — Post-Process Editor ✅
+
+- [x] PostFXCategory enum ×5 (Bloom, Vignette, ColorGrade, DepthOfField, AmbientOcclusion) + postFXCategoryName()
+- [x] PostFXBlendMode enum ×5 (Override, Additive, Multiply, Screen, Normal) + postFXBlendModeName()
+- [x] PostFXState enum ×5 (Inactive, Active, Previewing, Baking, Error) + postFXStateName()
+- [x] PostFXAsset (name, category, blendMode, state, layerCount, paramCount, enabled, realtime, dirty)
+  - isActive, isBaking, hasError, isComplex (layerCount>=5)
+- [x] PostProcessEditor (max 256 assets)
+  - addAsset, removeAsset (clears activeAsset), findAsset, setActiveAsset
+  - assetCount, dirtyCount, activeCount, realtimeCount, bakingCount, complexCount, countByCategory, countByState
+- [x] 14 new editor tests (test_s44_editor.cpp), all passing
+
+## S44 Complete ✅
+
+---
+
+## G63 — Gamma Ray Burst System ✅
+
+- [x] GammaRayBurstType enum ×5 (Short, Long, UltraLong, Magnetar, Kilonova) + gammaRayBurstTypeName()
+- [x] GammaRayBurstIntensity enum ×5 (Faint, Moderate, Bright, Intense, Catastrophic) + gammaRayBurstIntensityName()
+- [x] GammaRayBurstEvent (id, type, intensity, flux, coverage, active)
+  - activate, deactivate, isSevere (>= Intense), isExtended (Long|UltraLong), isWidespread (>= 50%), hazardScore
+- [x] GammaRayBurstRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, extendedCount, widespreadCount
+- [x] GammaRayBurstSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, extendedEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G63 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2114 tests, 0 failures (2090 existing + 14 S44 + 10 G63 = 2114).

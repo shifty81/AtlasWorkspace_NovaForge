@@ -9812,3 +9812,119 @@ TEST_CASE("SolarWindSystem aggregate event counts", "[Game][G62][SolarWind]") {
     REQUIRE(sys.fastStreamEventCount() == 1); // only x (y=Coronal not fast/transient, z inactive)
     REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
 }
+
+TEST_CASE("GammaRayBurstType names cover all 5 values", "[Game][G63][GRB]") {
+    REQUIRE(std::string(NF::gammaRayBurstTypeName(NF::GammaRayBurstType::Short))     == "Short");
+    REQUIRE(std::string(NF::gammaRayBurstTypeName(NF::GammaRayBurstType::Long))      == "Long");
+    REQUIRE(std::string(NF::gammaRayBurstTypeName(NF::GammaRayBurstType::UltraLong)) == "UltraLong");
+    REQUIRE(std::string(NF::gammaRayBurstTypeName(NF::GammaRayBurstType::Magnetar))  == "Magnetar");
+    REQUIRE(std::string(NF::gammaRayBurstTypeName(NF::GammaRayBurstType::Kilonova))  == "Kilonova");
+}
+
+TEST_CASE("GammaRayBurstIntensity names cover all 5 values", "[Game][G63][GRB]") {
+    REQUIRE(std::string(NF::gammaRayBurstIntensityName(NF::GammaRayBurstIntensity::Faint))        == "Faint");
+    REQUIRE(std::string(NF::gammaRayBurstIntensityName(NF::GammaRayBurstIntensity::Moderate))     == "Moderate");
+    REQUIRE(std::string(NF::gammaRayBurstIntensityName(NF::GammaRayBurstIntensity::Bright))       == "Bright");
+    REQUIRE(std::string(NF::gammaRayBurstIntensityName(NF::GammaRayBurstIntensity::Intense))      == "Intense");
+    REQUIRE(std::string(NF::gammaRayBurstIntensityName(NF::GammaRayBurstIntensity::Catastrophic)) == "Catastrophic");
+}
+
+TEST_CASE("GammaRayBurstEvent isSevere threshold is Intense+", "[Game][G63][GRB]") {
+    NF::GammaRayBurstEvent ev; ev.id = "grb1";
+    ev.intensity = NF::GammaRayBurstIntensity::Bright;
+    REQUIRE_FALSE(ev.isSevere());
+
+    ev.intensity = NF::GammaRayBurstIntensity::Intense;
+    REQUIRE(ev.isSevere());
+
+    ev.intensity = NF::GammaRayBurstIntensity::Catastrophic;
+    REQUIRE(ev.isSevere());
+}
+
+TEST_CASE("GammaRayBurstEvent isExtended and isWidespread", "[Game][G63][GRB]") {
+    NF::GammaRayBurstEvent ev; ev.id = "grb2";
+    ev.type     = NF::GammaRayBurstType::Short;
+    ev.coverage = 20.0f;
+    REQUIRE_FALSE(ev.isExtended());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.type     = NF::GammaRayBurstType::Long;
+    ev.coverage = 60.0f;
+    REQUIRE(ev.isExtended());
+    REQUIRE(ev.isWidespread());
+}
+
+TEST_CASE("GammaRayBurstEvent hazardScore calculation", "[Game][G63][GRB]") {
+    NF::GammaRayBurstEvent ev; ev.id = "grb3";
+    // Intense (uint8=3): (3+1) * 50 / 10 = 20.0
+    ev.intensity = NF::GammaRayBurstIntensity::Intense;
+    ev.coverage  = 50.0f;
+    REQUIRE(ev.hazardScore() == Catch::Approx(20.0f));
+}
+
+TEST_CASE("GammaRayBurstEvent activate and deactivate", "[Game][G63][GRB]") {
+    NF::GammaRayBurstEvent ev; ev.id = "grb4";
+    REQUIRE_FALSE(ev.active);
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("GammaRayBurstRegion severeCount, extendedCount, widespreadCount", "[Game][G63][GRB]") {
+    NF::GammaRayBurstRegion region("galaxy_core");
+
+    NF::GammaRayBurstEvent a; a.id = "a"; a.type = NF::GammaRayBurstType::Long;      a.intensity = NF::GammaRayBurstIntensity::Catastrophic; a.coverage = 80.0f; a.activate();
+    NF::GammaRayBurstEvent b; b.id = "b"; b.type = NF::GammaRayBurstType::Short;     b.intensity = NF::GammaRayBurstIntensity::Moderate;      b.coverage = 10.0f; b.activate();
+    NF::GammaRayBurstEvent c; c.id = "c"; c.type = NF::GammaRayBurstType::UltraLong; c.intensity = NF::GammaRayBurstIntensity::Intense;       c.coverage = 60.0f; // inactive
+
+    region.addEvent(a); region.addEvent(b); region.addEvent(c);
+
+    REQUIRE(region.severeCount()     == 1); // only a (b=Moderate, c inactive)
+    REQUIRE(region.extendedCount()   == 1); // only a (b=Short, c inactive)
+    REQUIRE(region.widespreadCount() == 1); // only a (b=10%, c inactive)
+}
+
+TEST_CASE("GammaRayBurstSystem createRegion and tick propagation", "[Game][G63][GRB]") {
+    NF::GammaRayBurstSystem sys;
+    REQUIRE(sys.createRegion("r1") != nullptr);
+    REQUIRE(sys.createRegion("r2") != nullptr);
+    REQUIRE(sys.createRegion("r1") == nullptr); // duplicate
+    REQUIRE(sys.regionCount() == 2);
+
+    sys.tick(); sys.tick();
+    REQUIRE(sys.tickCount()               == 2);
+    REQUIRE(sys.byName("r1")->tickCount() == 2);
+}
+
+TEST_CASE("GammaRayBurstSystem aggregate event counts", "[Game][G63][GRB]") {
+    NF::GammaRayBurstSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::GammaRayBurstEvent x; x.id = "x"; x.type = NF::GammaRayBurstType::UltraLong; x.intensity = NF::GammaRayBurstIntensity::Catastrophic; x.coverage = 75.0f; x.activate();
+    NF::GammaRayBurstEvent y; y.id = "y"; y.type = NF::GammaRayBurstType::Short;      y.intensity = NF::GammaRayBurstIntensity::Moderate;      y.coverage = 5.0f;  y.activate();
+    NF::GammaRayBurstEvent z; z.id = "z"; z.type = NF::GammaRayBurstType::Long;       z.intensity = NF::GammaRayBurstIntensity::Intense;        z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()     == 2);
+    REQUIRE(sys.severeEventCount()     == 1); // only x (y=Moderate, z inactive)
+    REQUIRE(sys.extendedEventCount()   == 1); // only x (y=Short, z inactive)
+    REQUIRE(sys.widespreadEventCount() == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("GammaRayBurstRegion findEvent and removeEvent", "[Game][G63][GRB]") {
+    NF::GammaRayBurstRegion region("outer_rim");
+    NF::GammaRayBurstEvent ev; ev.id = "grb5"; ev.type = NF::GammaRayBurstType::Magnetar; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("grb5") != nullptr);
+    REQUIRE(region.findEvent("grb5")->type == NF::GammaRayBurstType::Magnetar);
+
+    REQUIRE(region.removeEvent("grb5"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("grb5") == nullptr);
+}
