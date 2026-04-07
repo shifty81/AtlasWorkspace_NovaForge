@@ -12442,4 +12442,137 @@ private:
     size_t                           m_tickCount = 0;
 };
 
+// ── G64 — Pulsar System ──────────────────────────────────────────
+
+enum class PulsarType : uint8_t {
+    Millisecond, Recycled, Binary, Magnetar, Isolated
+};
+inline const char* pulsarTypeName(PulsarType t) {
+    switch (t) {
+        case PulsarType::Millisecond: return "Millisecond";
+        case PulsarType::Recycled:    return "Recycled";
+        case PulsarType::Binary:      return "Binary";
+        case PulsarType::Magnetar:    return "Magnetar";
+        case PulsarType::Isolated:    return "Isolated";
+    }
+    return "Unknown";
+}
+
+enum class PulsarIntensity : uint8_t {
+    Background, Detected, Active, Intense, Extreme
+};
+inline const char* pulsarIntensityName(PulsarIntensity i) {
+    switch (i) {
+        case PulsarIntensity::Background: return "Background";
+        case PulsarIntensity::Detected:   return "Detected";
+        case PulsarIntensity::Active:     return "Active";
+        case PulsarIntensity::Intense:    return "Intense";
+        case PulsarIntensity::Extreme:    return "Extreme";
+    }
+    return "Unknown";
+}
+
+struct PulsarEvent {
+    std::string      id;
+    PulsarType       type      = PulsarType::Isolated;
+    PulsarIntensity  intensity = PulsarIntensity::Background;
+    float            period    = 1.0f;   // rotation period in seconds
+    float            coverage  = 0.0f;   // affected area percentage
+    bool             active    = false;
+
+    void activate()   { active = true;  }
+    void deactivate() { active = false; }
+
+    [[nodiscard]] bool isSevere()       const { return intensity >= PulsarIntensity::Intense; }
+    [[nodiscard]] bool isMillisecond()  const { return type == PulsarType::Millisecond; }
+    [[nodiscard]] bool isWidespread()   const { return coverage >= 50.0f; }
+    [[nodiscard]] float hazardScore()   const {
+        return (static_cast<float>(static_cast<uint8_t>(intensity)) + 1.0f) * coverage / 10.0f;
+    }
+};
+
+class PulsarRegion {
+public:
+    explicit PulsarRegion(const std::string& name) : m_name(name) {}
+
+    [[nodiscard]] bool addEvent(const PulsarEvent& ev) {
+        for (auto& e : m_events) if (e.id == ev.id) return false;
+        m_events.push_back(ev);
+        return true;
+    }
+    [[nodiscard]] bool removeEvent(const std::string& id) {
+        for (auto it = m_events.begin(); it != m_events.end(); ++it) {
+            if (it->id == id) { m_events.erase(it); return true; }
+        }
+        return false;
+    }
+    [[nodiscard]] PulsarEvent* findEvent(const std::string& id) {
+        for (auto& e : m_events) if (e.id == id) return &e;
+        return nullptr;
+    }
+    void activateAll()   { for (auto& e : m_events) e.activate();   }
+    void deactivateAll() { for (auto& e : m_events) e.deactivate(); }
+
+    void tick() { ++m_tickCount; }
+    [[nodiscard]] const std::string& name()              const { return m_name; }
+    [[nodiscard]] size_t eventCount()       const { return m_events.size(); }
+    [[nodiscard]] size_t tickCount()        const { return m_tickCount; }
+    [[nodiscard]] size_t activeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active)                       ++c; return c;
+    }
+    [[nodiscard]] size_t severeCount()      const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isSevere())       ++c; return c;
+    }
+    [[nodiscard]] size_t millisecondCount() const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isMillisecond())  ++c; return c;
+    }
+    [[nodiscard]] size_t widespreadCount()  const {
+        size_t c = 0; for (auto& e : m_events) if (e.active && e.isWidespread())   ++c; return c;
+    }
+
+private:
+    std::string                m_name;
+    std::vector<PulsarEvent>   m_events;
+    size_t                     m_tickCount = 0;
+};
+
+class PulsarSystem {
+public:
+    static constexpr size_t MAX_REGIONS = 32;
+
+    PulsarRegion* createRegion(const std::string& name) {
+        if (m_regions.size() >= MAX_REGIONS) return nullptr;
+        for (auto& r : m_regions) if (r.name() == name) return nullptr;
+        m_regions.emplace_back(name);
+        return &m_regions.back();
+    }
+    [[nodiscard]] PulsarRegion* byName(const std::string& name) {
+        for (auto& r : m_regions) if (r.name() == name) return &r;
+        return nullptr;
+    }
+    void tick() {
+        ++m_tickCount;
+        for (auto& r : m_regions) r.tick();
+    }
+
+    [[nodiscard]] size_t regionCount()           const { return m_regions.size(); }
+    [[nodiscard]] size_t tickCount()             const { return m_tickCount; }
+    [[nodiscard]] size_t activeEventCount()      const {
+        size_t c = 0; for (auto& r : m_regions) c += r.activeCount();       return c;
+    }
+    [[nodiscard]] size_t severeEventCount()      const {
+        size_t c = 0; for (auto& r : m_regions) c += r.severeCount();       return c;
+    }
+    [[nodiscard]] size_t millisecondEventCount() const {
+        size_t c = 0; for (auto& r : m_regions) c += r.millisecondCount();  return c;
+    }
+    [[nodiscard]] size_t widespreadEventCount()  const {
+        size_t c = 0; for (auto& r : m_regions) c += r.widespreadCount();   return c;
+    }
+
+private:
+    std::vector<PulsarRegion> m_regions;
+    size_t                    m_tickCount = 0;
+};
+
 } // namespace NF

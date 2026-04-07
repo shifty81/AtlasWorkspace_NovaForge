@@ -9928,3 +9928,131 @@ TEST_CASE("GammaRayBurstRegion findEvent and removeEvent", "[Game][G63][GRB]") {
     REQUIRE(region.eventCount() == 0);
     REQUIRE(region.findEvent("grb5") == nullptr);
 }
+
+// ── G64 — Pulsar System ──────────────────────────────────────────
+
+TEST_CASE("PulsarType names cover all 5 values", "[Game][G64][Pulsar]") {
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Millisecond)) == "Millisecond");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Recycled))    == "Recycled");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Binary))      == "Binary");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Magnetar))    == "Magnetar");
+    REQUIRE(std::string(NF::pulsarTypeName(NF::PulsarType::Isolated))    == "Isolated");
+}
+
+TEST_CASE("PulsarIntensity names cover all 5 values", "[Game][G64][Pulsar]") {
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Background)) == "Background");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Detected))   == "Detected");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Active))     == "Active");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Intense))    == "Intense");
+    REQUIRE(std::string(NF::pulsarIntensityName(NF::PulsarIntensity::Extreme))    == "Extreme");
+}
+
+TEST_CASE("PulsarEvent default values and activate/deactivate", "[Game][G64][Pulsar]") {
+    NF::PulsarEvent ev;
+    ev.id = "psr1";
+    REQUIRE_FALSE(ev.active);
+    REQUIRE(ev.type      == NF::PulsarType::Isolated);
+    REQUIRE(ev.intensity == NF::PulsarIntensity::Background);
+    REQUIRE_FALSE(ev.isSevere());
+    REQUIRE_FALSE(ev.isMillisecond());
+    REQUIRE_FALSE(ev.isWidespread());
+
+    ev.activate();
+    REQUIRE(ev.active);
+    ev.deactivate();
+    REQUIRE_FALSE(ev.active);
+}
+
+TEST_CASE("PulsarEvent predicates", "[Game][G64][Pulsar]") {
+    NF::PulsarEvent ev;
+    ev.id = "psr2";
+    ev.type      = NF::PulsarType::Millisecond;
+    ev.intensity = NF::PulsarIntensity::Intense;
+    ev.coverage  = 60.0f;
+    ev.activate();
+
+    REQUIRE(ev.isSevere());
+    REQUIRE(ev.isMillisecond());
+    REQUIRE(ev.isWidespread());
+    REQUIRE(ev.hazardScore() > 0.0f);
+}
+
+TEST_CASE("PulsarRegion addEvent and duplicate rejection", "[Game][G64][Pulsar]") {
+    NF::PulsarRegion region("sector_alpha");
+    NF::PulsarEvent a; a.id = "a"; a.activate();
+    NF::PulsarEvent b; b.id = "b"; b.activate();
+    NF::PulsarEvent dup; dup.id = "a";
+
+    REQUIRE(region.addEvent(a));
+    REQUIRE(region.addEvent(b));
+    REQUIRE_FALSE(region.addEvent(dup));
+    REQUIRE(region.eventCount() == 2);
+    REQUIRE(region.activeCount() == 2);
+}
+
+TEST_CASE("PulsarRegion activateAll and deactivateAll", "[Game][G64][Pulsar]") {
+    NF::PulsarRegion region("sector_beta");
+    NF::PulsarEvent x; x.id = "x";
+    NF::PulsarEvent y; y.id = "y";
+    region.addEvent(x);
+    region.addEvent(y);
+
+    REQUIRE(region.activeCount() == 0);
+    region.activateAll();
+    REQUIRE(region.activeCount() == 2);
+    region.deactivateAll();
+    REQUIRE(region.activeCount() == 0);
+}
+
+TEST_CASE("PulsarSystem createRegion and tick", "[Game][G64][Pulsar]") {
+    NF::PulsarSystem sys;
+    REQUIRE(sys.createRegion("milky_way") != nullptr);
+    REQUIRE(sys.createRegion("andromeda") != nullptr);
+    REQUIRE(sys.createRegion("milky_way") == nullptr); // duplicate
+
+    REQUIRE(sys.regionCount() == 2);
+    REQUIRE(sys.tickCount()   == 0);
+    sys.tick();
+    REQUIRE(sys.tickCount()   == 1);
+}
+
+TEST_CASE("PulsarSystem aggregate counts across regions", "[Game][G64][Pulsar]") {
+    NF::PulsarSystem sys;
+    sys.createRegion("ra"); sys.createRegion("rb");
+
+    NF::PulsarEvent x; x.id = "x"; x.type = NF::PulsarType::Millisecond; x.intensity = NF::PulsarIntensity::Extreme;  x.coverage = 80.0f; x.activate();
+    NF::PulsarEvent y; y.id = "y"; y.type = NF::PulsarType::Binary;       y.intensity = NF::PulsarIntensity::Detected; y.coverage = 5.0f;  y.activate();
+    NF::PulsarEvent z; z.id = "z"; z.type = NF::PulsarType::Magnetar;     z.intensity = NF::PulsarIntensity::Intense;  z.coverage = 60.0f; // inactive
+
+    sys.byName("ra")->addEvent(x);
+    sys.byName("ra")->addEvent(y);
+    sys.byName("rb")->addEvent(z);
+
+    REQUIRE(sys.activeEventCount()      == 2);
+    REQUIRE(sys.severeEventCount()      == 1); // only x (y=Detected, z inactive)
+    REQUIRE(sys.millisecondEventCount() == 1); // only x
+    REQUIRE(sys.widespreadEventCount()  == 1); // only x (y=5%, z inactive)
+}
+
+TEST_CASE("PulsarRegion findEvent and removeEvent", "[Game][G64][Pulsar]") {
+    NF::PulsarRegion region("deep_space");
+    NF::PulsarEvent ev; ev.id = "psr9"; ev.type = NF::PulsarType::Recycled; ev.activate();
+    region.addEvent(ev);
+
+    REQUIRE(region.eventCount() == 1);
+    REQUIRE(region.findEvent("psr9") != nullptr);
+    REQUIRE(region.findEvent("psr9")->type == NF::PulsarType::Recycled);
+
+    REQUIRE(region.removeEvent("psr9"));
+    REQUIRE(region.eventCount() == 0);
+    REQUIRE(region.findEvent("psr9") == nullptr);
+}
+
+TEST_CASE("PulsarSystem MAX_REGIONS limit enforced", "[Game][G64][Pulsar]") {
+    NF::PulsarSystem sys;
+    for (size_t i = 0; i < NF::PulsarSystem::MAX_REGIONS; ++i) {
+        REQUIRE(sys.createRegion("region_" + std::to_string(i)) != nullptr);
+    }
+    REQUIRE(sys.createRegion("overflow") == nullptr);
+    REQUIRE(sys.regionCount() == NF::PulsarSystem::MAX_REGIONS);
+}

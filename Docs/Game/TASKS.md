@@ -3223,3 +3223,41 @@ Total: 2090 tests, 0 failures (2075 existing + 15 M1-D = 2090).
 ## Build Verification ✅
 
 Total: 2114 tests, 0 failures (2090 existing + 14 S44 + 10 G63 = 2114).
+
+## S45 — Level Sequence Editor ✅
+
+- [x] SeqTrackType enum ×5 (Actor, Camera, Audio, Event, Property) + seqTrackTypeName()
+- [x] SeqPlaybackMode enum ×5 (Once, Loop, PingPong, Hold, Custom) + seqPlaybackModeName()
+- [x] SeqState enum ×5 (Idle, Playing, Paused, Recording, Finished) + seqStateName()
+- [x] LevelSequenceAsset (name, trackType, playbackMode, state, trackCount, clipCount, duration, locked, realtime, dirty)
+  - isPlaying, isPaused, isRecording, isComplex (trackCount>=8)
+- [x] LevelSequenceEditor (max 128 sequences)
+  - addSequence (duplicate rejected), removeSequence (clears activeSequence), findSequence, setActiveSequence
+  - sequenceCount, dirtyCount, playingCount, lockedCount, realtimeCount, complexCount, countByTrackType, countByState
+- [x] 14 new editor tests (test_s45_editor.cpp), all passing
+
+## S45 Complete ✅
+
+---
+
+## G64 — Pulsar System ✅
+
+- [x] PulsarType enum ×5 (Millisecond, Recycled, Binary, Magnetar, Isolated) + pulsarTypeName()
+- [x] PulsarIntensity enum ×5 (Background, Detected, Active, Intense, Extreme) + pulsarIntensityName()
+- [x] PulsarEvent (id, type, intensity, period, coverage, active)
+  - activate, deactivate, isSevere (>= Intense), isMillisecond, isWidespread (>= 50%), hazardScore
+- [x] PulsarRegion — per-region event list
+  - addEvent, removeEvent, findEvent, activateAll, deactivateAll
+  - eventCount, activeCount, severeCount, millisecondCount, widespreadCount
+- [x] PulsarSystem — multi-region coordinator (max 32)
+  - createRegion, byName, tick propagation
+  - regionCount, tickCount, activeEventCount, severeEventCount, millisecondEventCount, widespreadEventCount
+- [x] 10 new game tests (in test_game.cpp), all passing
+
+## G64 Complete ✅
+
+---
+
+## Build Verification ✅
+
+Total: 2171 tests, 0 failures (2147 existing + 14 S45 + 10 G64 = 2171).

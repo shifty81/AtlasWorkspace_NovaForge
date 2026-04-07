@@ -12930,4 +12930,157 @@ private:
     std::string              m_activeAsset;
 };
 
+// ── S45 — Level Sequence Editor ──────────────────────────────────
+
+enum class SeqTrackType : uint8_t {
+    Actor, Camera, Audio, Event, Property
+};
+inline const char* seqTrackTypeName(SeqTrackType t) {
+    switch (t) {
+        case SeqTrackType::Actor:    return "Actor";
+        case SeqTrackType::Camera:   return "Camera";
+        case SeqTrackType::Audio:    return "Audio";
+        case SeqTrackType::Event:    return "Event";
+        case SeqTrackType::Property: return "Property";
+    }
+    return "Unknown";
+}
+
+enum class SeqPlaybackMode : uint8_t {
+    Once, Loop, PingPong, Hold, Custom
+};
+inline const char* seqPlaybackModeName(SeqPlaybackMode m) {
+    switch (m) {
+        case SeqPlaybackMode::Once:     return "Once";
+        case SeqPlaybackMode::Loop:     return "Loop";
+        case SeqPlaybackMode::PingPong: return "PingPong";
+        case SeqPlaybackMode::Hold:     return "Hold";
+        case SeqPlaybackMode::Custom:   return "Custom";
+    }
+    return "Unknown";
+}
+
+enum class SeqState : uint8_t {
+    Idle, Playing, Paused, Recording, Finished
+};
+inline const char* seqStateName(SeqState s) {
+    switch (s) {
+        case SeqState::Idle:      return "Idle";
+        case SeqState::Playing:   return "Playing";
+        case SeqState::Paused:    return "Paused";
+        case SeqState::Recording: return "Recording";
+        case SeqState::Finished:  return "Finished";
+    }
+    return "Unknown";
+}
+
+class LevelSequenceAsset {
+public:
+    explicit LevelSequenceAsset(const std::string& name,
+                                 uint32_t trackCount = 0,
+                                 uint32_t clipCount  = 0)
+        : m_name(name), m_trackCount(trackCount), m_clipCount(clipCount) {}
+
+    [[nodiscard]] const std::string&  name()         const { return m_name; }
+    [[nodiscard]] SeqTrackType        trackType()    const { return m_trackType; }
+    [[nodiscard]] SeqPlaybackMode     playbackMode() const { return m_playbackMode; }
+    [[nodiscard]] SeqState            state()        const { return m_state; }
+    [[nodiscard]] uint32_t            trackCount()   const { return m_trackCount; }
+    [[nodiscard]] uint32_t            clipCount()    const { return m_clipCount; }
+    [[nodiscard]] float               duration()     const { return m_duration; }
+    [[nodiscard]] bool                isLocked()     const { return m_locked; }
+    [[nodiscard]] bool                isRealtime()   const { return m_realtime; }
+    [[nodiscard]] bool                isDirty()      const { return m_dirty; }
+
+    void setTrackType(SeqTrackType t)     { m_trackType    = t; }
+    void setPlaybackMode(SeqPlaybackMode m){ m_playbackMode = m; }
+    void setState(SeqState s)              { m_state        = s; }
+    void setTrackCount(uint32_t n)         { m_trackCount   = n; }
+    void setClipCount(uint32_t n)          { m_clipCount    = n; }
+    void setDuration(float d)              { m_duration     = d; }
+    void setLocked(bool v)                 { m_locked       = v; }
+    void setRealtime(bool v)               { m_realtime     = v; }
+    void setDirty(bool v)                  { m_dirty        = v; }
+
+    [[nodiscard]] bool isPlaying()    const { return m_state == SeqState::Playing; }
+    [[nodiscard]] bool isPaused()     const { return m_state == SeqState::Paused; }
+    [[nodiscard]] bool isRecording()  const { return m_state == SeqState::Recording; }
+    [[nodiscard]] bool isComplex()    const { return m_trackCount >= 8; }
+
+private:
+    std::string      m_name;
+    SeqTrackType     m_trackType    = SeqTrackType::Actor;
+    SeqPlaybackMode  m_playbackMode = SeqPlaybackMode::Once;
+    SeqState         m_state        = SeqState::Idle;
+    uint32_t         m_trackCount   = 0;
+    uint32_t         m_clipCount    = 0;
+    float            m_duration     = 0.0f;
+    bool             m_locked       = false;
+    bool             m_realtime     = false;
+    bool             m_dirty        = false;
+};
+
+class LevelSequenceEditor {
+public:
+    static constexpr size_t MAX_SEQUENCES = 128;
+
+    [[nodiscard]] bool addSequence(const LevelSequenceAsset& seq) {
+        if (m_sequences.size() >= MAX_SEQUENCES) return false;
+        for (auto& s : m_sequences) if (s.name() == seq.name()) return false;
+        m_sequences.push_back(seq);
+        return true;
+    }
+
+    [[nodiscard]] bool removeSequence(const std::string& name) {
+        for (auto it = m_sequences.begin(); it != m_sequences.end(); ++it) {
+            if (it->name() == name) {
+                if (m_activeSequence == name) m_activeSequence.clear();
+                m_sequences.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] LevelSequenceAsset* findSequence(const std::string& name) {
+        for (auto& s : m_sequences) if (s.name() == name) return &s;
+        return nullptr;
+    }
+
+    [[nodiscard]] bool setActiveSequence(const std::string& name) {
+        for (auto& s : m_sequences)
+            if (s.name() == name) { m_activeSequence = name; return true; }
+        return false;
+    }
+
+    [[nodiscard]] const std::string& activeSequence() const { return m_activeSequence; }
+    [[nodiscard]] size_t             sequenceCount()  const { return m_sequences.size(); }
+
+    [[nodiscard]] size_t dirtyCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isDirty())     ++n; return n;
+    }
+    [[nodiscard]] size_t playingCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isPlaying())   ++n; return n;
+    }
+    [[nodiscard]] size_t lockedCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isLocked())    ++n; return n;
+    }
+    [[nodiscard]] size_t realtimeCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isRealtime())  ++n; return n;
+    }
+    [[nodiscard]] size_t complexCount() const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.isComplex())   ++n; return n;
+    }
+    [[nodiscard]] size_t countByTrackType(SeqTrackType t) const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.trackType() == t) ++n; return n;
+    }
+    [[nodiscard]] size_t countByState(SeqState st) const {
+        size_t n = 0; for (auto& s : m_sequences) if (s.state() == st) ++n; return n;
+    }
+
+private:
+    std::vector<LevelSequenceAsset> m_sequences;
+    std::string                     m_activeSequence;
+};
+
 } // namespace NF

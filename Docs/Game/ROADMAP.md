@@ -93,6 +93,7 @@
 | **G61** — Cosmic Ray System | CosmicRayType×5, CosmicRayIntensity×5, CosmicRayEvent, CosmicRayRegion, CosmicRaySystem | ✅ Done |
 | **G62** — Solar Wind System | SolarWindType×5, SolarWindIntensity×5, SolarWindEvent, SolarWindRegion, SolarWindSystem | ✅ Done |
 | **G63** — Gamma Ray Burst System | GammaRayBurstType×5, GammaRayBurstIntensity×5, GammaRayBurstEvent, GammaRayBurstRegion, GammaRayBurstSystem | ✅ Done |
+| **G64** — Pulsar System | PulsarType×5, PulsarIntensity×5, PulsarEvent, PulsarRegion, PulsarSystem | ✅ Done |
 
 ---
 
@@ -167,6 +168,7 @@
 | **S42** — Scene Prefab Editor | PrefabCategory×5, PrefabState×5, PrefabLOD×5, PrefabAsset, ScenePrefabEditor | ✅ Done |
 | **S43** — Animation Blueprint Editor | AnimBPNodeType×5, AnimBPState×5, AnimBPBlendMode×5, AnimBlueprintAsset, AnimBlueprintEditor | ✅ Done |
 | **S44** — Post-Process Editor | PostFXCategory×5, PostFXBlendMode×5, PostFXState×5, PostFXAsset, PostProcessEditor | ✅ Done |
+| **S45** — Level Sequence Editor | SeqTrackType×5, SeqPlaybackMode×5, SeqState×5, LevelSequenceAsset, LevelSequenceEditor | ✅ Done |
 
 ## Status Key
 
